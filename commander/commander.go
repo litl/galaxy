@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/coreos/go-etcd/etcd"
 	"github.com/jwilder/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
 	"os"
@@ -12,11 +13,22 @@ import (
 )
 
 var (
-	client     *docker.Client
-	stopCutoff = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
-	image      = flag.String("t", "", "Image to start")
-	authConfig *auth.ConfigFile
+	client         *docker.Client
+	ectdClient     *etcd.Client
+	stopCutoff     = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
+	image          = flag.String("t", "", "Image to start")
+	etcdHosts      = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
+	env            = flag.String("env", "dev", "Environment namespace")
+	pool           = flag.String("pool", "web", "Pool namespace")
+	authConfig     *auth.ConfigFile
+	serviceConfigs []*ServiceConfig
 )
+
+type ServiceConfig struct {
+	Name    string
+	Version string
+	Env     map[string]string
+}
 
 func splitDockerImage(img string) (string, string, string) {
 	if !strings.Contains(img, "/") {
@@ -171,11 +183,54 @@ func stopAllButLatest(img string, latest *docker.Container) error {
 
 }
 
+func buildServiceConfigs() []*ServiceConfig {
+	var serviceConfigs []*ServiceConfig
+
+	machines := strings.Split(*etcdHosts, ",")
+	ectdClient = etcd.NewClient(machines)
+
+	resp, err := ectdClient.Get("/"+*env+"/"+*pool, false, true)
+	if err != nil {
+		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
+		return serviceConfigs
+	}
+	for _, node := range resp.Node.Nodes {
+		service := node.Key[strings.LastIndex(node.Key, "/")+1:]
+
+		if service == "hosts" {
+			continue
+		}
+
+		serviceConfig := &ServiceConfig{
+			Name: service,
+			Env:  make(map[string]string),
+		}
+		fmt.Printf("Detected service %s\n", service)
+		for _, configKey := range node.Nodes {
+			if strings.HasSuffix(configKey.Key, "/VERSION") {
+				*image = configKey.Value
+				serviceConfig.Version = configKey.Value
+			} else {
+				envVar := configKey.Key[strings.LastIndex(configKey.Key, "/")+1:]
+				serviceConfig.Env[envVar] = configKey.Value
+			}
+		}
+		serviceConfigs = append(serviceConfigs, serviceConfig)
+	}
+	return serviceConfigs
+}
+
 func main() {
 	flag.Parse()
 
-	if *image == "" {
-		fmt.Println("Need an image to start")
+	if *env == "" {
+		fmt.Println("Need an env")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if *pool == "" {
+		fmt.Println("Need a pool")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -200,13 +255,32 @@ func main() {
 		panic(err)
 	}
 
-	container, err := startIfNotRunning(*image)
-	if err != nil {
-		fmt.Printf("ERROR: Could not determine if %s is running: %s\n", *image, err)
-		os.Exit(1)
+	if *image == "" && *etcdHosts != "" {
+		serviceConfigs = buildServiceConfigs()
 	}
 
-	fmt.Printf("%s running as %s\n", *image, container.ID)
+	if len(serviceConfigs) == 0 {
+		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
+		os.Exit(0)
+	}
 
-	stopAllButLatest(*image, container)
+	for _, serviceConfig := range serviceConfigs {
+		if serviceConfig.Version == "" {
+			fmt.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
+			continue
+		}
+
+		container, err := startIfNotRunning(serviceConfig.Version)
+		if err != nil {
+			fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
+				serviceConfig.Version, err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
+
+		stopAllButLatest(serviceConfig.Version, container)
+
+	}
+
 }
