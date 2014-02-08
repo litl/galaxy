@@ -75,6 +75,29 @@ func isRunning(img string) (string, error) {
 	return "", nil
 }
 
+func pullImage(registry, repository string) error {
+	// No, pull it down locally
+	pullOpts := docker.PullImageOptions{
+		Repository:   repository,
+		Registry:     registry,
+		OutputStream: os.Stdout}
+
+	// use .dockercfg if available
+	auth := docker.AuthConfiguration{}
+	if registry != "" {
+		pullOpts.Registry = registry
+		authCreds := authConfig.ResolveAuthConfig(registry)
+
+		auth.Username = authCreds.Username
+		auth.Password = authCreds.Password
+		auth.Email = authCreds.Email
+
+	}
+
+	return client.PullImage(pullOpts, auth)
+
+}
+
 func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version
 	containerId, err := isRunning(img)
@@ -93,26 +116,7 @@ func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) 
 	_, err = client.InspectImage(img)
 
 	if err == docker.ErrNoSuchImage {
-		// No, pull it down locally
-		pullOpts := docker.PullImageOptions{
-			Repository:   repository,
-			Registry:     registry,
-			OutputStream: os.Stdout}
-
-		// use .dockercfg if available
-		auth := docker.AuthConfiguration{}
-		if registry != "" {
-			pullOpts.Registry = registry
-			authCreds := authConfig.ResolveAuthConfig(registry)
-
-			auth.Username = authCreds.Username
-			auth.Password = authCreds.Password
-			auth.Email = authCreds.Email
-
-		}
-
-		err = client.PullImage(pullOpts, auth)
-
+		err := pullImage(registry, repository)
 		if err != nil {
 			return nil, err
 		}
