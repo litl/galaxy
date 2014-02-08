@@ -274,23 +274,8 @@ func registerService(container *docker.Container, serviceConfig *ServiceConfig) 
 	return nil
 }
 
-func main() {
-	flag.Parse()
-
-	if *env == "" {
-		fmt.Println("Need an env")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if *pool == "" {
-		fmt.Println("Need a pool")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
+func initOrDie() {
 	var err error
-
 	endpoint := "unix:///var/run/docker.sock"
 	client, err = docker.NewClient(endpoint)
 
@@ -313,6 +298,24 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func main() {
+	flag.Parse()
+
+	if *env == "" {
+		fmt.Println("Need an env")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if *pool == "" {
+		fmt.Println("Need a pool")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	initOrDie()
 
 	if *image == "" && *etcdHosts != "" {
 		machines := strings.Split(*etcdHosts, ",")
