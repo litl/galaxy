@@ -253,23 +253,16 @@ func registerService(container *docker.Container, serviceConfig *ServiceConfig) 
 		break
 	}
 
-	err = setHostValue(serviceConfig.Name, "EXTERNAL_IP", *hostIp)
-	if err != nil {
-		return err
-	}
-	err = setHostValue(serviceConfig.Name, "EXTERNAL_PORT", externalPort)
-	if err != nil {
-		return err
-	}
-
-	err = setHostValue(serviceConfig.Name, "INTERNAL_IP", container.NetworkSettings.IPAddress)
-	if err != nil {
-		return err
-	}
-
-	err = setHostValue(serviceConfig.Name, "INTERNAL_PORT", internalPort)
-	if err != nil {
-		return err
+	for _, v := range [][]string{
+		[]string{"EXTERNAL_IP", *hostIp},
+		[]string{"EXTERNAL_PORT", externalPort},
+		[]string{"INTERNAL_IP", container.NetworkSettings.IPAddress},
+		[]string{"INTERNAL_PORT", internalPort},
+	} {
+		err = setHostValue(serviceConfig.Name, v[0], v[1])
+		if err != nil {
+			return err
+		}
 	}
 
 	for k, v := range serviceConfig.Env {
