@@ -20,8 +20,10 @@ var (
 	etcdHosts      = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
 	env            = flag.String("env", "dev", "Environment namespace")
 	pool           = flag.String("pool", "web", "Pool namespace")
+	hostIp         = flag.String("hostIp", "127.0.0.1", "Hosts external IP")
 	authConfig     *auth.ConfigFile
 	serviceConfigs []*ServiceConfig
+	hostname       string
 )
 
 type ServiceConfig struct {
@@ -131,9 +133,7 @@ func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) 
 	}
 
 	err = client.StartContainer(container.ID,
-		&docker.HostConfig{
-			PublishAllPorts: true,
-		})
+		&docker.HostConfig{})
 	return container, err
 
 }
@@ -194,9 +194,6 @@ func stopAllButLatest(img string, latest *docker.Container) error {
 func buildServiceConfigs() []*ServiceConfig {
 	var serviceConfigs []*ServiceConfig
 
-	machines := strings.Split(*etcdHosts, ",")
-	ectdClient = etcd.NewClient(machines)
-
 	resp, err := ectdClient.Get("/"+*env+"/"+*pool, false, true)
 	if err != nil {
 		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
@@ -228,6 +225,61 @@ func buildServiceConfigs() []*ServiceConfig {
 	return serviceConfigs
 }
 
+func setHostValue(service string, key string, value string) error {
+	_, err := ectdClient.Set("/"+*env+"/"+*pool+"/hosts/"+hostname+"/"+
+		service+"/"+key, value, 0)
+	return err
+}
+
+func registerService(container *docker.Container, serviceConfig *ServiceConfig) error {
+	_, err := ectdClient.CreateDir("/"+*env+"/"+*pool+"/hosts", 0)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != 105 {
+		return err
+	}
+
+	_, err = ectdClient.CreateDir("/"+*env+"/"+*pool+"/hosts/"+hostname+"/"+serviceConfig.Name, 60)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != 105 {
+		return err
+	}
+
+	//FIXME: We're using the first found port and assuming it's tcp.
+	//How should we handle a service that exposes multiple ports
+	//as well as tcp vs udp ports.
+	var externalPort, internalPort string
+	for k, _ := range container.NetworkSettings.Ports {
+		externalPort = k.Port()
+		internalPort = externalPort
+		break
+	}
+
+	err = setHostValue(serviceConfig.Name, "EXTERNAL_IP", *hostIp)
+	if err != nil {
+		return err
+	}
+	err = setHostValue(serviceConfig.Name, "EXTERNAL_PORT", externalPort)
+	if err != nil {
+		return err
+	}
+
+	err = setHostValue(serviceConfig.Name, "INTERNAL_IP", container.NetworkSettings.IPAddress)
+	if err != nil {
+		return err
+	}
+
+	err = setHostValue(serviceConfig.Name, "INTERNAL_PORT", internalPort)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range serviceConfig.Env {
+		err := setHostValue(serviceConfig.Name, k, v)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -257,6 +309,11 @@ func main() {
 		panic(err)
 	}
 
+	hostname, err = os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+
 	// use ~/.dockercfg
 	authConfig, err = auth.LoadConfig(currentUser.HomeDir)
 	if err != nil {
@@ -264,6 +321,9 @@ func main() {
 	}
 
 	if *image == "" && *etcdHosts != "" {
+		machines := strings.Split(*etcdHosts, ",")
+		ectdClient = etcd.NewClient(machines)
+
 		serviceConfigs = buildServiceConfigs()
 	}
 
@@ -286,6 +346,16 @@ func main() {
 		}
 
 		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
+
+		if *etcdHosts != "" {
+			err := registerService(container, serviceConfig)
+			if err != nil {
+				fmt.Printf("ERROR: Could not register service %s is running: %s\n",
+					serviceConfig.Version, err)
+				os.Exit(1)
+
+			}
+		}
 
 		stopAllButLatest(serviceConfig.Version, container)
 
