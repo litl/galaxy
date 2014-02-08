@@ -8,6 +8,7 @@ import (
 	"github.com/litl/galaxy/commander/auth"
 	"os"
 	"os/user"
+	"path"
 	"strings"
 	"time"
 )
@@ -200,7 +201,7 @@ func buildServiceConfigs() []*ServiceConfig {
 		return serviceConfigs
 	}
 	for _, node := range resp.Node.Nodes {
-		service := node.Key[strings.LastIndex(node.Key, "/")+1:]
+		service := path.Base(node.Key)
 
 		if service == "hosts" {
 			continue
@@ -216,7 +217,7 @@ func buildServiceConfigs() []*ServiceConfig {
 				*image = configKey.Value
 				serviceConfig.Version = configKey.Value
 			} else {
-				envVar := configKey.Key[strings.LastIndex(configKey.Key, "/")+1:]
+				envVar := path.Base(configKey.Key)
 				serviceConfig.Env[envVar] = configKey.Value
 			}
 		}
