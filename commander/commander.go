@@ -72,7 +72,8 @@ func isRunning(img string) (string, error) {
 	return "", nil
 }
 
-func startIfNotRunning(img string) (*docker.Container, error) {
+func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) {
+	img := serviceConfig.Version
 	containerId, err := isRunning(img)
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
@@ -114,14 +115,21 @@ func startIfNotRunning(img string) (*docker.Container, error) {
 		}
 	}
 
+	// setup env vars from etcd
+	var envVars []string
+	for key, value := range serviceConfig.Env {
+		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+	}
 	container, err := client.CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
 			Image: img,
+			Env:   envVars,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	err = client.StartContainer(container.ID,
 		&docker.HostConfig{
 			PublishAllPorts: true,
@@ -270,7 +278,7 @@ func main() {
 			continue
 		}
 
-		container, err := startIfNotRunning(serviceConfig.Version)
+		container, err := startIfNotRunning(serviceConfig)
 		if err != nil {
 			fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version, err)
