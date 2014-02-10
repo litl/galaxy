@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/coreos/go-etcd/etcd"
@@ -31,6 +32,13 @@ type ServiceConfig struct {
 	Name    string
 	Version string
 	Env     map[string]string
+}
+
+type ServiceRegistration struct {
+	ExternalIp   string `json:"EXTERNAL_IP"`
+	ExternalPort string `json:"EXTERNAL_PORT"`
+	InternalIp   string `json:"INTERNAL_IP"`
+	InternalPort string `json:"INTERNAL_PORT"`
 }
 
 func splitDockerImage(img string) (string, string, string) {
@@ -216,13 +224,19 @@ func buildServiceConfigs() []*ServiceConfig {
 			Env:  make(map[string]string),
 		}
 		fmt.Printf("Detected service %s\n", service)
+
 		for _, configKey := range node.Nodes {
-			if strings.HasSuffix(configKey.Key, "/VERSION") {
+			if strings.HasSuffix(configKey.Key, "/version") {
 				*image = configKey.Value
 				serviceConfig.Version = configKey.Value
+			} else if strings.HasSuffix(configKey.Key, "/config") {
+				err := json.Unmarshal([]byte(configKey.Value), &serviceConfig.Env)
+				if err != nil {
+					fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
+					return serviceConfigs
+				}
 			} else {
-				envVar := path.Base(configKey.Key)
-				serviceConfig.Env[envVar] = configKey.Value
+				fmt.Printf("WARN: Unknown entry %s. Ignoring", configKey.Key)
 			}
 		}
 		serviceConfigs = append(serviceConfigs, serviceConfig)
@@ -257,23 +271,31 @@ func registerService(container *docker.Container, serviceConfig *ServiceConfig) 
 		break
 	}
 
-	for _, v := range [][]string{
-		[]string{"EXTERNAL_IP", *hostIp},
-		[]string{"EXTERNAL_PORT", externalPort},
-		[]string{"INTERNAL_IP", container.NetworkSettings.IPAddress},
-		[]string{"INTERNAL_PORT", internalPort},
-	} {
-		err = setHostValue(serviceConfig.Name, v[0], v[1])
-		if err != nil {
-			return err
-		}
+	serviceRegistration := ServiceRegistration{
+		ExternalIp:   *hostIp,
+		ExternalPort: externalPort,
+		InternalIp:   container.NetworkSettings.IPAddress,
+		InternalPort: internalPort,
 	}
 
-	for k, v := range serviceConfig.Env {
-		err := setHostValue(serviceConfig.Name, k, v)
-		if err != nil {
-			return err
-		}
+	jsonReg, err := json.Marshal(serviceRegistration)
+	if err != nil {
+		return err
+	}
+
+	err = setHostValue(serviceConfig.Name, "location", string(jsonReg))
+	if err != nil {
+		return err
+	}
+
+	jsonReg, err = json.Marshal(serviceConfig.Env)
+	if err != nil {
+		return err
+	}
+
+	err = setHostValue(serviceConfig.Name, "config", string(jsonReg))
+	if err != nil {
+		return err
 	}
 	return nil
 }
