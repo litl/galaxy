@@ -229,7 +229,7 @@ func buildServiceConfigs() []*ServiceConfig {
 			if strings.HasSuffix(configKey.Key, "/version") {
 				*image = configKey.Value
 				serviceConfig.Version = configKey.Value
-			} else if strings.HasSuffix(configKey.Key, "/config") {
+			} else if strings.HasSuffix(configKey.Key, "/environment") {
 				err := json.Unmarshal([]byte(configKey.Value), &serviceConfig.Env)
 				if err != nil {
 					fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
@@ -293,7 +293,7 @@ func registerService(container *docker.Container, serviceConfig *ServiceConfig) 
 		return err
 	}
 
-	err = setHostValue(serviceConfig.Name, "config", string(jsonReg))
+	err = setHostValue(serviceConfig.Name, "environment", string(jsonReg))
 	if err != nil {
 		return err
 	}
