@@ -146,7 +146,9 @@ REDO:
 }
 
 func main() {
-	// TODO check for running haproxy instead of restarating every time.
-	restartHaproxy()
+	if !haproxyRunning() {
+		restartHaproxy()
+	}
+
 	watchConfig()
 }

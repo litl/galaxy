@@ -227,8 +227,9 @@ func restartHaproxy() error {
 	// although haproxy can use multiple pids, we are only ever using a single
 	// process.
 	pid, err := ioutil.ReadFile(haproxyPid)
-	if pe, ok := err.(*os.PathError); err != nil && !ok {
-		log.Println("error checking pid file:", pe)
+	if err != nil {
+		log.Println("error checking pid file:", err)
+		pid = []byte{}
 	}
 
 	opts := make([]string, len(haproxyOpts))
@@ -236,7 +237,7 @@ func restartHaproxy() error {
 
 	running := string(bytes.Trim(pid, " \n"))
 	if running != "" {
-		opts = append(opts, []string{"-sf", running}...)
+		opts = append(opts, "-sf", running)
 	}
 
 	cmd := exec.Command(haproxy, opts...)
@@ -252,4 +253,26 @@ func restartHaproxy() error {
 	}
 	log.Println("haproxy started")
 	return nil
+}
+
+func haproxyRunning() bool {
+	pid, err := ioutil.ReadFile(haproxyPid)
+	if err != nil {
+		pid = []byte{}
+	}
+
+	pid = bytes.Trim(pid, " \n")
+	if len(pid) == 0 {
+		return false
+	}
+
+	ps := exec.Command("ps", "-p", string(pid), "-o", "comm=")
+	output, err := ps.CombinedOutput()
+	if err != nil || !bytes.Contains(output, []byte("haproxy")) {
+		os.Remove(haproxyPid)
+		return false
+	}
+
+	log.Println("haproxy already running")
+	return true
 }
