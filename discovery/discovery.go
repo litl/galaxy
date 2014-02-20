@@ -13,6 +13,10 @@ import (
 	"strings"
 )
 
+const (
+	ETCD_ENTRY_ALREADY_EXISTS = 105
+)
+
 var (
 	client         *docker.Client
 	ectdClient     *etcd.Client
@@ -113,14 +117,22 @@ func setHostValue(service string, key string, value string) error {
 
 func registerService(container *docker.Container, serviceConfig *ServiceConfig) error {
 	_, err := ectdClient.CreateDir("/"+*env+"/"+*pool+"/hosts", 0)
-	if err != nil && err.(*etcd.EtcdError).ErrorCode != 105 {
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
 		return err
 	}
 
 	registrationPath := "/" + *env + "/" + *pool + "/hosts/" + hostname + "/" + serviceConfig.Name
 	registration, err := ectdClient.CreateDir(registrationPath, 60)
-	if err != nil && err.(*etcd.EtcdError).ErrorCode != 105 {
-		return err
+	if err != nil {
+
+		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
+			return err
+		}
+
+		registration, err = ectdClient.UpdateDir(registrationPath, 60)
+		if err != nil {
+			return err
+		}
 	}
 
 	//FIXME: We're using the first found port and assuming it's tcp.
