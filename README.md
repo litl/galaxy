@@ -10,8 +10,9 @@ galaxy
 The project handles deployment of services in docker containers, registration of those
 services w/ etcd, discovery and proxying of registered services through etcd and haproxy.
 
-There will be two sub-projects tentatively named: commander and shuttle.  Commander deploys and
-registers service containers and shuttle discovers and proxies connections to containers.
+There will be three sub-projects tentatively named: commander, discovery and shuttle.  Commander
+deploys service containers.  Discovery registers services contianers in etcd.
+Shuttle discovers and proxies connections to containers.
 
 === Dev Setup
 
