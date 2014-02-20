@@ -147,8 +147,12 @@ func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) 
 
 	err = client.StartContainer(container.ID,
 		&docker.HostConfig{})
-	return container, err
 
+	if err != nil {
+		return container, err
+	}
+
+	return client.InspectContainer(containerId)
 }
 
 func getImageByName(img string) (*docker.APIImages, error) {
