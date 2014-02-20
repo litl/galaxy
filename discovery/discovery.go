@@ -7,6 +7,7 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/jwilder/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
+	"github.com/ryanuber/columnize"
 	"os"
 	"os/user"
 	"strings"
@@ -22,6 +23,7 @@ var (
 	authConfig     *auth.ConfigFile
 	serviceConfigs []*ServiceConfig
 	hostname       string
+	output         []string
 )
 
 type ServiceConfig struct {
@@ -116,7 +118,7 @@ func registerService(container *docker.Container, serviceConfig *ServiceConfig) 
 	}
 
 	registrationPath := "/" + *env + "/" + *pool + "/hosts/" + hostname + "/" + serviceConfig.Name
-	_, err = ectdClient.CreateDir(registrationPath, 60)
+	registration, err := ectdClient.CreateDir(registrationPath, 60)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != 105 {
 		return err
 	}
@@ -158,9 +160,15 @@ func registerService(container *docker.Container, serviceConfig *ServiceConfig) 
 		return err
 	}
 
-	fmt.Printf("Registered %s %s on ports:\n", registrationPath, container.Config.Image)
-	fmt.Printf("  %s:%s -> %s:%s\n", serviceRegistration.ExternalIp, serviceRegistration.ExternalPort,
-		serviceRegistration.InternalIp, serviceRegistration.InternalPort)
+	statusLine := strings.Join([]string{registrationPath,
+		container.Config.Image,
+		serviceRegistration.ExternalIp + ":" + serviceRegistration.ExternalPort,
+		serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
+		registration.Node.Expiration.String(),
+	}, " | ")
+
+	output = append(output, statusLine)
+
 	return nil
 }
 
@@ -219,6 +227,9 @@ func main() {
 		panic(err)
 	}
 
+	output = append(output, strings.Join([]string{
+		"Registration", "Service", "External Addr", "Internal Addr", "Expires",
+	}, " | "))
 	for _, container := range containers {
 		dockerContainer, err := client.InspectContainer(container.ID)
 		if err != nil {
@@ -248,9 +259,11 @@ func main() {
 				fmt.Printf("ERROR: Could not register service %s is running: %s\n",
 					serviceConfig.Version, err)
 				os.Exit(1)
-
 			}
 		}
 	}
+
+	result, _ := columnize.SimpleFormat(output)
+	fmt.Println(result)
 
 }
