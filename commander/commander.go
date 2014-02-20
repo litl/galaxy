@@ -236,7 +236,7 @@ func buildServiceConfigs() []*ServiceConfig {
 					return serviceConfigs
 				}
 			} else {
-				fmt.Printf("WARN: Unknown entry %s. Ignoring", configKey.Key)
+				fmt.Printf("WARN: Unknown entry %s. Ignoring\n", configKey.Key)
 			}
 		}
 		serviceConfigs = append(serviceConfigs, serviceConfig)
