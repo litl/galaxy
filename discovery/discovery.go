@@ -7,10 +7,12 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/jwilder/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
+	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 	"os"
 	"os/user"
 	"strings"
+	"time"
 )
 
 const (
@@ -172,11 +174,14 @@ func registerService(container *docker.Container, serviceConfig *ServiceConfig) 
 		return err
 	}
 
-	statusLine := strings.Join([]string{registrationPath,
+	statusLine := strings.Join([]string{
+		container.ID[0:12],
+		registrationPath,
 		container.Config.Image,
 		serviceRegistration.ExternalIp + ":" + serviceRegistration.ExternalPort,
 		serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
-		registration.Node.Expiration.String(),
+		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+		utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
 	}, " | ")
 
 	output = append(output, statusLine)
@@ -240,7 +245,8 @@ func main() {
 	}
 
 	output = append(output, strings.Join([]string{
-		"Registration", "Service", "External Addr", "Internal Addr", "Expires",
+		"CONTAINER ID", "REGISTRATION", "IMAGE",
+		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 	for _, container := range containers {
 		dockerContainer, err := client.InspectContainer(container.ID)
