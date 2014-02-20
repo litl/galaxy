@@ -2,8 +2,17 @@ package utils
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
+
+type OutputBuffer struct {
+	Output []string
+}
+
+func (o *OutputBuffer) Log(msg string) {
+	o.Output = append(o.Output, msg)
+}
 
 // HumanDuration returns a human-readable approximation of a duration
 // (eg. "About a minute", "4 hours ago", etc.)
@@ -28,4 +37,19 @@ func HumanDuration(d time.Duration) string {
 		return fmt.Sprintf("%d months", hours/24/30)
 	}
 	return fmt.Sprintf("%f years", d.Hours()/24/365)
+}
+
+func SplitDockerImage(img string) (string, string, string) {
+	if !strings.Contains(img, "/") {
+		return "", img, ""
+	}
+	parts := strings.Split(img, "/")
+
+	if !strings.Contains(parts[1], ":") {
+		return parts[0], parts[1], ""
+	}
+
+	imageParts := strings.Split(parts[1], ":")
+	// registry, repository, tag
+	return parts[0], imageParts[0], imageParts[1]
 }
