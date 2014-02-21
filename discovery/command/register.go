@@ -34,6 +34,7 @@ Options:
   -env=dev                           Host's environment
   -pool=web                          Host's deployment pool
   -hostIp=127.0.0.1                  Host's external IP
+  -ttl=60                            TTL (s) for service registrations
 `
 	return strings.TrimSpace(helpText)
 }
@@ -92,6 +93,7 @@ func (c *RegisterCommand) Run(args []string) int {
 		env       string
 		pool      string
 		hostIp    string
+		ttl       int
 	)
 
 	cmdFlags := flag.NewFlagSet("discovery", flag.ContinueOnError)
@@ -100,6 +102,7 @@ func (c *RegisterCommand) Run(args []string) int {
 	cmdFlags.StringVar(&env, "env", "dev", "Environment namespace")
 	cmdFlags.StringVar(&pool, "pool", "web", "Pool namespace")
 	cmdFlags.StringVar(&hostIp, "hostIp", "127.0.0.1", "Hosts external IP")
+	cmdFlags.IntVar(&ttl, "ttl", 60, "TTL (s) for service registrations")
 
 	if err := cmdFlags.Parse(args); err != nil {
 		return 1
@@ -119,6 +122,7 @@ func (c *RegisterCommand) Run(args []string) int {
 		Env:          env,
 		Pool:         pool,
 		HostIp:       hostIp,
+		TTL:          uint64(ttl),
 		Hostname:     c.Hostname,
 		OutputBuffer: c.OutputBuffer,
 	}

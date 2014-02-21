@@ -2,7 +2,6 @@ package registry
 
 import (
 	"encoding/json"
-
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/jwilder/go-dockerclient"
 	"github.com/litl/galaxy/utils"
@@ -13,6 +12,7 @@ import (
 
 const (
 	ETCD_ENTRY_ALREADY_EXISTS = 105
+	ETCD_ENTRY_NOT_EXISTS     = 100
 )
 
 type ServiceConfig struct {
@@ -29,6 +29,7 @@ type ServiceRegistry struct {
 	Pool         string
 	HostIp       string
 	Hostname     string
+	TTL          uint64
 	OutputBuffer *utils.OutputBuffer
 }
 
@@ -37,6 +38,8 @@ type ServiceRegistration struct {
 	ExternalPort string    `json:"EXTERNAL_PORT"`
 	InternalIp   string    `json:"INTERNAL_IP"`
 	InternalPort string    `json:"INTERNAL_PORT"`
+	ContainerID  string    `json:"CONTAINER_ID"`
+	StartedAt    time.Time `json:"STARTED_AT"`
 	Expires      time.Time `json:"-"`
 	Path         string    `json:"-"`
 }
@@ -70,6 +73,8 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 		ExternalPort: externalPort,
 		InternalIp:   container.NetworkSettings.IPAddress,
 		InternalPort: internalPort,
+		ContainerID:  container.ID,
+		StartedAt:    container.Created,
 	}
 	return &serviceRegistration
 }
@@ -85,16 +90,33 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	}
 
 	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
-	registration, err := r.EctdClient.CreateDir(registrationPath, 60)
+	registration, err := r.EctdClient.CreateDir(registrationPath, r.TTL)
 	if err != nil {
 
 		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
 			return err
 		}
 
-		registration, err = r.EctdClient.UpdateDir(registrationPath, 60)
+		registration, err = r.EctdClient.UpdateDir(registrationPath, r.TTL)
 		if err != nil {
 			return err
+		}
+	}
+
+	var existingRegistration ServiceRegistration
+	existingJson, err := r.EctdClient.Get(registrationPath+"/location", false, false)
+	if err != nil {
+		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
+			return err
+		}
+	} else {
+		err = json.Unmarshal([]byte(existingJson.Node.Value), &existingRegistration)
+		if err != nil {
+			return err
+		}
+
+		if existingRegistration.StartedAt.After(container.Created) {
+			return nil
 		}
 	}
 
