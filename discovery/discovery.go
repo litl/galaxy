@@ -54,6 +54,7 @@ func main() {
 	cli := &cli.CLI{
 		Args:     os.Args[1:],
 		Commands: Commands,
+		HelpFunc: cli.BasicHelpFunc("discovery"),
 	}
 
 	exitCode, err := cli.Run()

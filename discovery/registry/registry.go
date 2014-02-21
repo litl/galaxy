@@ -2,9 +2,11 @@ package registry
 
 import (
 	"encoding/json"
+
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/jwilder/go-dockerclient"
 	"github.com/litl/galaxy/utils"
+	"path"
 	"strings"
 	"time"
 )
@@ -31,16 +33,45 @@ type ServiceRegistry struct {
 }
 
 type ServiceRegistration struct {
-	ExternalIp   string `json:"EXTERNAL_IP"`
-	ExternalPort string `json:"EXTERNAL_PORT"`
-	InternalIp   string `json:"INTERNAL_IP"`
-	InternalPort string `json:"INTERNAL_PORT"`
+	ExternalIp   string    `json:"EXTERNAL_IP"`
+	ExternalPort string    `json:"EXTERNAL_PORT"`
+	InternalIp   string    `json:"INTERNAL_IP"`
+	InternalPort string    `json:"INTERNAL_PORT"`
+	Expires      time.Time `json:"-"`
+	Path         string    `json:"-"`
+}
+
+func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
+	return s.ExternalIp == other.ExternalIp &&
+		s.ExternalPort == other.ExternalPort &&
+		s.InternalIp == other.InternalIp &&
+		s.InternalPort == other.InternalPort
 }
 
 func (r *ServiceRegistry) setHostValue(service string, key string, value string) error {
 	_, err := r.EctdClient.Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.Hostname+"/"+
 		service+"/"+key, value, 0)
 	return err
+}
+
+func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *ServiceRegistration {
+	//FIXME: We're using the first found port and assuming it's tcp.
+	//How should we handle a service that exposes multiple ports
+	//as well as tcp vs udp ports.
+	var externalPort, internalPort string
+	for k, _ := range container.NetworkSettings.Ports {
+		externalPort = k.Port()
+		internalPort = externalPort
+		break
+	}
+
+	serviceRegistration := ServiceRegistration{
+		ExternalIp:   r.HostIp,
+		ExternalPort: externalPort,
+		InternalIp:   container.NetworkSettings.IPAddress,
+		InternalPort: internalPort,
+	}
+	return &serviceRegistration
 }
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
@@ -67,22 +98,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		}
 	}
 
-	//FIXME: We're using the first found port and assuming it's tcp.
-	//How should we handle a service that exposes multiple ports
-	//as well as tcp vs udp ports.
-	var externalPort, internalPort string
-	for k, _ := range container.NetworkSettings.Ports {
-		externalPort = k.Port()
-		internalPort = externalPort
-		break
-	}
-
-	serviceRegistration := ServiceRegistration{
-		ExternalIp:   r.HostIp,
-		ExternalPort: externalPort,
-		InternalIp:   container.NetworkSettings.IPAddress,
-		InternalPort: internalPort,
-	}
+	serviceRegistration := r.makeServiceRegistration(container)
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
@@ -117,4 +133,56 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	r.OutputBuffer.Log(statusLine)
 
 	return nil
+}
+
+func (r *ServiceRegistry) findRegistration(node *etcd.Node, criteria *ServiceRegistration) (*ServiceRegistration, error) {
+
+	var serviceRegistration ServiceRegistration
+
+	if strings.HasSuffix(node.Key, "location") {
+		err := json.Unmarshal([]byte(node.Value), &serviceRegistration)
+		if err != nil {
+			return nil, err
+		}
+
+		if serviceRegistration.Equals(*criteria) {
+			serviceRegistration.Path = path.Dir(node.Key)
+			return &serviceRegistration, nil
+		}
+	}
+
+	for _, child := range node.Nodes {
+		serviceRegistration, err := r.findRegistration(&child, criteria)
+		if err != nil {
+			return nil, err
+		}
+
+		if serviceRegistration != nil {
+			// This is ugly.  We don't have the TTL on the "location" entry since it is
+			// set on the parent node so after the first match, set the parents expiration
+			// (based on TTL) for the registration if it's not alreayd set.
+			if serviceRegistration.Expires.IsZero() {
+				serviceRegistration.Expires = time.Now().Add(time.Duration(node.TTL) * time.Second)
+			}
+			return serviceRegistration, err
+		}
+	}
+
+	return nil, nil
+
+}
+
+func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
+
+	machines := strings.Split(r.EtcdHosts, ",")
+	r.EctdClient = etcd.NewClient(machines)
+
+	registrations, err := r.EctdClient.Get("/", true, true)
+	if err != nil {
+		return nil, err
+	}
+
+	desiredServiceRegistration := r.makeServiceRegistration(container)
+	return r.findRegistration(registrations.Node, desiredServiceRegistration)
+
 }

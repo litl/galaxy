@@ -22,5 +22,13 @@ func init() {
 				OutputBuffer: &utils.OutputBuffer{},
 			}, nil
 		},
+		"status": func() (cli.Command, error) {
+			return &command.StatusCommand{
+				Ui:           ui,
+				Client:       client,
+				Hostname:     hostname,
+				OutputBuffer: &utils.OutputBuffer{},
+			}, nil
+		},
 	}
 }
