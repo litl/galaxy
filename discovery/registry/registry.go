@@ -121,6 +121,9 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	}
 
 	serviceRegistration := r.makeServiceRegistration(container)
+	if serviceRegistration.Equals(existingRegistration) {
+		return nil
+	}
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
