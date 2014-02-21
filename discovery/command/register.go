@@ -11,6 +11,7 @@ import (
 	"github.com/ryanuber/columnize"
 	"os"
 	"strings"
+	"time"
 )
 
 type RegisterCommand struct {
@@ -35,6 +36,7 @@ Options:
   -pool=web                          Host's deployment pool
   -hostIp=127.0.0.1                  Host's external IP
   -ttl=60                            TTL (s) for service registrations
+  -loop=false                        Continously registers containers
 `
 	return strings.TrimSpace(helpText)
 }
@@ -94,6 +96,7 @@ func (c *RegisterCommand) Run(args []string) int {
 		pool      string
 		hostIp    string
 		ttl       int
+		loop      bool
 	)
 
 	cmdFlags := flag.NewFlagSet("discovery", flag.ContinueOnError)
@@ -103,6 +106,7 @@ func (c *RegisterCommand) Run(args []string) int {
 	cmdFlags.StringVar(&pool, "pool", "web", "Pool namespace")
 	cmdFlags.StringVar(&hostIp, "hostIp", "127.0.0.1", "Hosts external IP")
 	cmdFlags.IntVar(&ttl, "ttl", 60, "TTL (s) for service registrations")
+	cmdFlags.BoolVar(&loop, "loop", false, "Continuously register containers")
 
 	if err := cmdFlags.Parse(args); err != nil {
 		return 1
@@ -116,18 +120,26 @@ func (c *RegisterCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.ServiceRegistry = &registry.ServiceRegistry{
-		Client:       c.Client,
-		EtcdHosts:    etcdHosts,
-		Env:          env,
-		Pool:         pool,
-		HostIp:       hostIp,
-		TTL:          uint64(ttl),
-		Hostname:     c.Hostname,
-		OutputBuffer: c.OutputBuffer,
+	for {
+		c.ServiceRegistry = &registry.ServiceRegistry{
+			Client:       c.Client,
+			EtcdHosts:    etcdHosts,
+			Env:          env,
+			Pool:         pool,
+			HostIp:       hostIp,
+			TTL:          uint64(ttl),
+			Hostname:     c.Hostname,
+			OutputBuffer: c.OutputBuffer,
+		}
+
+		c.DiscoverContainers()
+		if !loop {
+			break
+		}
+		time.Sleep(10 * time.Second)
+
 	}
 
-	c.DiscoverContainers()
 	result, _ := columnize.SimpleFormat(c.OutputBuffer.Output)
 	c.Ui.Output(result)
 	return 0
