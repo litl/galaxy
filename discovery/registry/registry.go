@@ -160,6 +160,36 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	return nil
 }
 
+func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
+
+	machines := strings.Split(r.EtcdHosts, ",")
+	r.EctdClient = etcd.NewClient(machines)
+
+	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
+
+	for _, entry := range []string{"location", "environment"} {
+		_, err := r.EctdClient.Delete(registrationPath+"/"+entry, true)
+		if err != nil {
+			return err
+		}
+
+	}
+
+	statusLine := strings.Join([]string{
+		container.ID[0:12],
+		"",
+		container.Config.Image,
+		"",
+		"",
+		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+		"",
+	}, " | ")
+
+	r.OutputBuffer.Log(statusLine)
+
+	return nil
+}
+
 func (r *ServiceRegistry) findRegistration(node *etcd.Node, criteria *ServiceRegistration) (*ServiceRegistration, error) {
 
 	var serviceRegistration ServiceRegistration
