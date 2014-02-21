@@ -33,13 +33,6 @@ type ServiceConfig struct {
 	Env     map[string]string
 }
 
-type ServiceRegistration struct {
-	ExternalIp   string `json:"EXTERNAL_IP"`
-	ExternalPort string `json:"EXTERNAL_PORT"`
-	InternalIp   string `json:"INTERNAL_IP"`
-	InternalPort string `json:"INTERNAL_PORT"`
-}
-
 func splitDockerImage(img string) (string, string, string) {
 	if !strings.Contains(img, "/") {
 		return "", img, ""
@@ -245,12 +238,6 @@ func buildServiceConfigs() []*ServiceConfig {
 		serviceConfigs = append(serviceConfigs, serviceConfig)
 	}
 	return serviceConfigs
-}
-
-func setHostValue(service string, key string, value string) error {
-	_, err := ectdClient.Set("/"+*env+"/"+*pool+"/hosts/"+hostname+"/"+
-		service+"/"+key, value, 0)
-	return err
 }
 
 func initOrDie() {
