@@ -22,7 +22,6 @@ var (
 	etcdHosts      = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
 	env            = flag.String("env", "dev", "Environment namespace")
 	pool           = flag.String("pool", "web", "Pool namespace")
-	hostIp         = flag.String("hostIp", "127.0.0.1", "Hosts external IP")
 	authConfig     *auth.ConfigFile
 	serviceConfigs []*ServiceConfig
 	hostname       string
@@ -147,8 +146,12 @@ func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) 
 
 	err = client.StartContainer(container.ID,
 		&docker.HostConfig{})
-	return container, err
 
+	if err != nil {
+		return container, err
+	}
+
+	return client.InspectContainer(containerId)
 }
 
 func getImageByName(img string) (*docker.APIImages, error) {
@@ -236,7 +239,7 @@ func buildServiceConfigs() []*ServiceConfig {
 					return serviceConfigs
 				}
 			} else {
-				fmt.Printf("WARN: Unknown entry %s. Ignoring", configKey.Key)
+				fmt.Printf("WARN: Unknown entry %s. Ignoring\n", configKey.Key)
 			}
 		}
 		serviceConfigs = append(serviceConfigs, serviceConfig)
@@ -248,56 +251,6 @@ func setHostValue(service string, key string, value string) error {
 	_, err := ectdClient.Set("/"+*env+"/"+*pool+"/hosts/"+hostname+"/"+
 		service+"/"+key, value, 0)
 	return err
-}
-
-func registerService(container *docker.Container, serviceConfig *ServiceConfig) error {
-	_, err := ectdClient.CreateDir("/"+*env+"/"+*pool+"/hosts", 0)
-	if err != nil && err.(*etcd.EtcdError).ErrorCode != 105 {
-		return err
-	}
-
-	_, err = ectdClient.CreateDir("/"+*env+"/"+*pool+"/hosts/"+hostname+"/"+serviceConfig.Name, 60)
-	if err != nil && err.(*etcd.EtcdError).ErrorCode != 105 {
-		return err
-	}
-
-	//FIXME: We're using the first found port and assuming it's tcp.
-	//How should we handle a service that exposes multiple ports
-	//as well as tcp vs udp ports.
-	var externalPort, internalPort string
-	for k, _ := range container.NetworkSettings.Ports {
-		externalPort = k.Port()
-		internalPort = externalPort
-		break
-	}
-
-	serviceRegistration := ServiceRegistration{
-		ExternalIp:   *hostIp,
-		ExternalPort: externalPort,
-		InternalIp:   container.NetworkSettings.IPAddress,
-		InternalPort: internalPort,
-	}
-
-	jsonReg, err := json.Marshal(serviceRegistration)
-	if err != nil {
-		return err
-	}
-
-	err = setHostValue(serviceConfig.Name, "location", string(jsonReg))
-	if err != nil {
-		return err
-	}
-
-	jsonReg, err = json.Marshal(serviceConfig.Env)
-	if err != nil {
-		return err
-	}
-
-	err = setHostValue(serviceConfig.Name, "environment", string(jsonReg))
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func initOrDie() {
@@ -369,16 +322,6 @@ func main() {
 		}
 
 		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
-
-		if *etcdHosts != "" {
-			err := registerService(container, serviceConfig)
-			if err != nil {
-				fmt.Printf("ERROR: Could not register service %s is running: %s\n",
-					serviceConfig.Version, err)
-				os.Exit(1)
-
-			}
-		}
 
 		stopAllButLatest(serviceConfig.Version, container)
 
