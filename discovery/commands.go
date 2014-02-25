@@ -22,6 +22,16 @@ func init() {
 				OutputBuffer: &utils.OutputBuffer{},
 			}, nil
 		},
+
+		"unregister": func() (cli.Command, error) {
+			return &command.UnregisterCommand{
+				Ui:           ui,
+				Client:       client,
+				Hostname:     hostname,
+				OutputBuffer: &utils.OutputBuffer{},
+			}, nil
+		},
+
 		"status": func() (cli.Command, error) {
 			return &command.StatusCommand{
 				Ui:           ui,

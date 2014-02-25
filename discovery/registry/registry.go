@@ -121,6 +121,9 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	}
 
 	serviceRegistration := r.makeServiceRegistration(container)
+	if serviceRegistration.Equals(existingRegistration) {
+		return nil
+	}
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
@@ -150,6 +153,36 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
 		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
 		"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
+	}, " | ")
+
+	r.OutputBuffer.Log(statusLine)
+
+	return nil
+}
+
+func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
+
+	machines := strings.Split(r.EtcdHosts, ",")
+	r.EctdClient = etcd.NewClient(machines)
+
+	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
+
+	for _, entry := range []string{"location", "environment"} {
+		_, err := r.EctdClient.Delete(registrationPath+"/"+entry, true)
+		if err != nil {
+			return err
+		}
+
+	}
+
+	statusLine := strings.Join([]string{
+		container.ID[0:12],
+		"",
+		container.Config.Image,
+		"",
+		"",
+		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+		"",
 	}, " | ")
 
 	r.OutputBuffer.Log(statusLine)
