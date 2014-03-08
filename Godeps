@@ -1,0 +1,11 @@
+{
+	"ImportPath": "github.com/litl/galaxy",
+	"GoVersion": "go1.2",
+	"Deps": [
+		{
+			"ImportPath": "github.com/codegangsta/cli",
+			"Comment": "1.0.0-39-g8f0575f",
+			"Rev": "8f0575f520013467eb175a5dd30158ed816eeda9"
+		}
+	]
+}
