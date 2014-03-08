@@ -14,21 +14,39 @@ const (
 	ETCD_ENTRY_NOT_EXISTS     = 100
 )
 
-func ensureEtcClient(c *cli.Context) (*etcd.Client, string) {
+func ensureEtcClient(c *cli.Context, command string) (*etcd.Client, string) {
 	machines := strings.Split(c.GlobalString("etcd"), ",")
 	ectdClient := etcd.NewClient(machines)
 	app := c.Args().First()
 	if app == "" {
 		println("ERROR: app name missing")
-		cli.ShowCommandHelp(c, "config")
+		cli.ShowCommandHelp(c, command)
 		os.Exit(1)
 	}
 	return ectdClient, app
 }
 
+func appDeploy(c *cli.Context) {
+
+	etcdClient, app := ensureEtcClient(c, "app:deploy")
+
+	version := c.Args().Tail()[0]
+	if version == "" {
+		println("ERROR: app name missing")
+		cli.ShowCommandHelp(c, "config")
+		os.Exit(1)
+	}
+
+	_, err := etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/version", version, 0)
+	if err != nil {
+		fmt.Printf("ERROR: Could not store version: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 func configList(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c)
+	etcdClient, app := ensureEtcClient(c, "config")
 
 	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
@@ -54,7 +72,7 @@ func configList(c *cli.Context) {
 
 func configSet(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c)
+	etcdClient, app := ensureEtcClient(c, "config:set")
 
 	var env map[string]string
 
@@ -98,7 +116,7 @@ func configSet(c *cli.Context) {
 
 func configUnset(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c)
+	etcdClient, app := ensureEtcClient(c, "config:unset")
 
 	env := map[string]string{}
 
@@ -133,7 +151,7 @@ func configUnset(c *cli.Context) {
 
 func configGet(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c)
+	etcdClient, app := ensureEtcClient(c, "config:get")
 
 	env := map[string]string{}
 
@@ -165,6 +183,12 @@ func main() {
 	}
 
 	app.Commands = []cli.Command{
+		{
+			Name:        "app:deploy",
+			Usage:       "deploy a new version of an app",
+			Action:      appDeploy,
+			Description: "config <app> <version>",
+		},
 		{
 			Name:        "config",
 			Usage:       "list the config values for an app",
