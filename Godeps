@@ -1,0 +1,43 @@
+{
+	"ImportPath": "github.com/litl/galaxy",
+	"GoVersion": "go1.2.1",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/coreos/go-etcd/etcd",
+			"Comment": "v0.2.0-rc1-96-g1e26d8e",
+			"Rev": "1e26d8ee84cf9b1000d2af8acfb45b2521f49be5"
+		},
+		{
+			"ImportPath": "github.com/fsouza/go-dockerclient/engine",
+			"Comment": "0.2.1-50-g2a0ba39",
+			"Rev": "2a0ba39b67eb83b5cab914dac1a34d23d2a1eb1a"
+		},
+		{
+			"ImportPath": "github.com/fsouza/go-dockerclient/term",
+			"Comment": "0.2.1-50-g2a0ba39",
+			"Rev": "2a0ba39b67eb83b5cab914dac1a34d23d2a1eb1a"
+		},
+		{
+			"ImportPath": "github.com/fsouza/go-dockerclient/utils",
+			"Comment": "0.2.1-50-g2a0ba39",
+			"Rev": "2a0ba39b67eb83b5cab914dac1a34d23d2a1eb1a"
+		},
+		{
+			"ImportPath": "github.com/jwilder/go-dockerclient",
+			"Comment": "0.2.1-27-g746c1a0",
+			"Rev": "746c1a01bb2a7816393a0f1dc9fdb73089348563"
+		},
+		{
+			"ImportPath": "github.com/mitchellh/cli",
+			"Rev": "69f0b65ce53b27f729b1b807b88dc88007f41dd3"
+		},
+		{
+			"ImportPath": "github.com/ryanuber/columnize",
+			"Comment": "v0.1.0-8-gd066e11",
+			"Rev": "d066e113d6e13232f45bda646a915dffeee7f1a4"
+		}
+	]
+}
