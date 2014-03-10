@@ -1,7 +1,7 @@
 .SILENT :
-.PHONY : commander shuttle discovery clean fmt test
+.PHONY : commander shuttle discovery galaxy clean fmt test
 
-all: commander shuttle discovery
+all: commander shuttle discovery galaxy
 
 commander:
 	echo "Building commander"
@@ -14,6 +14,10 @@ shuttle:
 discovery:
 	echo "Building discovery"
 	go install github.com/litl/galaxy/discovery
+
+galaxy:
+	echo "Building galaxy"
+	go install github.com/litl/galaxy
 
 clean:
 	rm -f $(GOPATH)/bin/{commander,discovery,shuttle}
