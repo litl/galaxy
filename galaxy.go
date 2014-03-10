@@ -3,9 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
 	"github.com/coreos/go-etcd/etcd"
+	"io/ioutil"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 )
 
@@ -13,6 +17,11 @@ const (
 	ETCD_ENTRY_ALREADY_EXISTS = 105
 	ETCD_ENTRY_NOT_EXISTS     = 100
 )
+
+type config struct {
+	Host       string `toml:"host"`
+	PrivateKey string `toml:"private_key"`
+}
 
 func ensureEtcClient(c *cli.Context, command string) (*etcd.Client, string) {
 	machines := strings.Split(c.GlobalString("etcd"), ",")
@@ -172,6 +181,89 @@ func configGet(c *cli.Context) {
 	}
 }
 
+func findPrivateKeys(root string) []string {
+	var availableKeys = []string{}
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		// Skip really big files to avoid OOM errors since they are
+		// unlikely to be private keys
+		if info.Size() > 1024*8 {
+			return nil
+		}
+		contents, err := ioutil.ReadFile(path)
+		if strings.Contains(string(contents), "PRIVATE KEY") {
+			availableKeys = append(availableKeys, path)
+		}
+		return nil
+	})
+	return availableKeys
+}
+
+func findSshKeys(root string) []string {
+
+	// Looks in .ssh dir and .vagrant.d dir for ssh keys
+	var availableKeys = []string{}
+	availableKeys = append(availableKeys, findPrivateKeys(filepath.Join(root, ".ssh"))...)
+	availableKeys = append(availableKeys, findPrivateKeys(filepath.Join(root, ".vagrant.d"))...)
+
+	return availableKeys
+}
+
+func login(c *cli.Context) {
+
+	if c.Args().First() == "" {
+		println("ERROR: host missing")
+		cli.ShowCommandHelp(c, "login")
+		os.Exit(1)
+	}
+
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		os.Exit(1)
+	}
+
+	configDir := filepath.Join(currentUser.HomeDir, ".galaxy")
+	_, err = os.Stat(configDir)
+	if err != nil && os.IsNotExist(err) {
+		os.Mkdir(configDir, 0700)
+	}
+	availableKeys := findSshKeys(currentUser.HomeDir)
+
+	if len(availableKeys) == 0 {
+		fmt.Printf("ERROR: No SSH private keys found.  Create one first.\n")
+		os.Exit(1)
+	}
+
+	for i, key := range availableKeys {
+		fmt.Printf("%d) %s\n", i, key)
+	}
+
+	fmt.Printf("Select private key to use [0]: ")
+	var i int
+	fmt.Scanf("%d", &i)
+
+	if i < 0 || i > len(availableKeys) {
+		i = 0
+	}
+	fmt.Printf("Using %s\n", availableKeys[i])
+
+	galaxyConfig := config{
+		Host:       c.Args().First(),
+		PrivateKey: availableKeys[i],
+	}
+
+	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
+	if err != nil {
+		fmt.Printf("ERROR: Unable to create config file: %s\n", err)
+		os.Exit(1)
+	}
+	defer configFile.Close()
+
+	encoder := toml.NewEncoder(configFile)
+	encoder.Encode(galaxyConfig)
+	configFile.WriteString("\n")
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "galaxy"
@@ -183,6 +275,12 @@ func main() {
 	}
 
 	app.Commands = []cli.Command{
+		{
+			Name:        "login",
+			Usage:       "login to a controller",
+			Action:      login,
+			Description: "login host[:port]",
+		},
 		{
 			Name:        "app:deploy",
 			Usage:       "deploy a new version of an app",
