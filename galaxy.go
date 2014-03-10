@@ -262,6 +262,26 @@ func login(c *cli.Context) {
 	encoder := toml.NewEncoder(configFile)
 	encoder.Encode(galaxyConfig)
 	configFile.WriteString("\n")
+	fmt.Printf("Login sucessful")
+}
+
+func logout(c *cli.Context) {
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		os.Exit(1)
+	}
+	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
+
+	_, err = os.Stat(configFile)
+	if err == nil {
+		err = os.Remove(configFile)
+		if err != nil {
+			fmt.Printf("ERROR: Unable to logout: %s\n", err)
+			os.Exit(1)
+		}
+	}
+	fmt.Printf("Logout sucessful\n")
 }
 
 func main() {
@@ -280,6 +300,12 @@ func main() {
 			Usage:       "login to a controller",
 			Action:      login,
 			Description: "login host[:port]",
+		},
+		{
+			Name:        "logout",
+			Usage:       "logout off a controller",
+			Action:      logout,
+			Description: "logout",
 		},
 		{
 			Name:        "app:deploy",
