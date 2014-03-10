@@ -6,7 +6,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
 	"github.com/coreos/go-etcd/etcd"
-	"io/ioutil"
+
 	"os"
 	"os/user"
 	"path/filepath"
@@ -18,7 +18,7 @@ const (
 	ETCD_ENTRY_NOT_EXISTS     = 100
 )
 
-type config struct {
+var config struct {
 	Host       string `toml:"host"`
 	PrivateKey string `toml:"private_key"`
 }
@@ -75,7 +75,7 @@ func configList(c *cli.Context) {
 	}
 
 	for k, v := range env {
-		println(fmt.Sprintf("%s=%s", k, v))
+		fmt.Printf("%s=%s\n", k, v)
 	}
 }
 
@@ -181,33 +181,6 @@ func configGet(c *cli.Context) {
 	}
 }
 
-func findPrivateKeys(root string) []string {
-	var availableKeys = []string{}
-	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		// Skip really big files to avoid OOM errors since they are
-		// unlikely to be private keys
-		if info.Size() > 1024*8 {
-			return nil
-		}
-		contents, err := ioutil.ReadFile(path)
-		if strings.Contains(string(contents), "PRIVATE KEY") {
-			availableKeys = append(availableKeys, path)
-		}
-		return nil
-	})
-	return availableKeys
-}
-
-func findSshKeys(root string) []string {
-
-	// Looks in .ssh dir and .vagrant.d dir for ssh keys
-	var availableKeys = []string{}
-	availableKeys = append(availableKeys, findPrivateKeys(filepath.Join(root, ".ssh"))...)
-	availableKeys = append(availableKeys, findPrivateKeys(filepath.Join(root, ".vagrant.d"))...)
-
-	return availableKeys
-}
-
 func login(c *cli.Context) {
 
 	if c.Args().First() == "" {
@@ -247,10 +220,8 @@ func login(c *cli.Context) {
 	}
 	fmt.Printf("Using %s\n", availableKeys[i])
 
-	galaxyConfig := config{
-		Host:       c.Args().First(),
-		PrivateKey: availableKeys[i],
-	}
+	config.Host = c.Args().First()
+	config.PrivateKey = availableKeys[i]
 
 	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
 	if err != nil {
@@ -260,7 +231,7 @@ func login(c *cli.Context) {
 	defer configFile.Close()
 
 	encoder := toml.NewEncoder(configFile)
-	encoder.Encode(galaxyConfig)
+	encoder.Encode(config)
 	configFile.WriteString("\n")
 	fmt.Printf("Login sucessful")
 }
@@ -284,7 +255,36 @@ func logout(c *cli.Context) {
 	fmt.Printf("Logout sucessful\n")
 }
 
+func runRemote() {
+	Sshcmd(config.Host, "galaxy "+strings.Join(os.Args[1:], " "), false, false)
+}
+
+func loadConfig() {
+
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		os.Exit(1)
+	}
+	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
+
+	_, err = os.Stat(configFile)
+	if err == nil {
+		if _, err := toml.DecodeFile(configFile, &config); err != nil {
+			fmt.Printf("ERROR: Unable to logout: %s\n", err)
+			os.Exit(1)
+		}
+	}
+
+}
 func main() {
+
+	loadConfig()
+	if config.Host != "" {
+		runRemote()
+		return
+	}
+
 	app := cli.NewApp()
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
@@ -331,7 +331,6 @@ func main() {
 			Action:      configUnset,
 			Description: "config <app> KEY[ KEY, etc..]",
 		},
-
 		{
 			Name:   "config:get",
 			Usage:  "display the config value for an app",
