@@ -3,9 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
 	"github.com/coreos/go-etcd/etcd"
+
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 )
 
@@ -13,6 +17,11 @@ const (
 	ETCD_ENTRY_ALREADY_EXISTS = 105
 	ETCD_ENTRY_NOT_EXISTS     = 100
 )
+
+var config struct {
+	Host       string `toml:"host"`
+	PrivateKey string `toml:"private_key"`
+}
 
 func ensureEtcClient(c *cli.Context, command string) (*etcd.Client, string) {
 	machines := strings.Split(c.GlobalString("etcd"), ",")
@@ -66,7 +75,7 @@ func configList(c *cli.Context) {
 	}
 
 	for k, v := range env {
-		println(fmt.Sprintf("%s=%s", k, v))
+		fmt.Printf("%s=%s\n", k, v)
 	}
 }
 
@@ -172,7 +181,110 @@ func configGet(c *cli.Context) {
 	}
 }
 
+func login(c *cli.Context) {
+
+	if c.Args().First() == "" {
+		println("ERROR: host missing")
+		cli.ShowCommandHelp(c, "login")
+		os.Exit(1)
+	}
+
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		os.Exit(1)
+	}
+
+	configDir := filepath.Join(currentUser.HomeDir, ".galaxy")
+	_, err = os.Stat(configDir)
+	if err != nil && os.IsNotExist(err) {
+		os.Mkdir(configDir, 0700)
+	}
+	availableKeys := findSshKeys(currentUser.HomeDir)
+
+	if len(availableKeys) == 0 {
+		fmt.Printf("ERROR: No SSH private keys found.  Create one first.\n")
+		os.Exit(1)
+	}
+
+	for i, key := range availableKeys {
+		fmt.Printf("%d) %s\n", i, key)
+	}
+
+	fmt.Printf("Select private key to use [0]: ")
+	var i int
+	fmt.Scanf("%d", &i)
+
+	if i < 0 || i > len(availableKeys) {
+		i = 0
+	}
+	fmt.Printf("Using %s\n", availableKeys[i])
+
+	config.Host = c.Args().First()
+	config.PrivateKey = availableKeys[i]
+
+	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
+	if err != nil {
+		fmt.Printf("ERROR: Unable to create config file: %s\n", err)
+		os.Exit(1)
+	}
+	defer configFile.Close()
+
+	encoder := toml.NewEncoder(configFile)
+	encoder.Encode(config)
+	configFile.WriteString("\n")
+	fmt.Printf("Login sucessful")
+}
+
+func logout(c *cli.Context) {
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		os.Exit(1)
+	}
+	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
+
+	_, err = os.Stat(configFile)
+	if err == nil {
+		err = os.Remove(configFile)
+		if err != nil {
+			fmt.Printf("ERROR: Unable to logout: %s\n", err)
+			os.Exit(1)
+		}
+	}
+	fmt.Printf("Logout sucessful\n")
+}
+
+func runRemote() {
+	Sshcmd(config.Host, "galaxy "+strings.Join(os.Args[1:], " "), false, false)
+}
+
+func loadConfig() {
+
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		os.Exit(1)
+	}
+	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
+
+	_, err = os.Stat(configFile)
+	if err == nil {
+		if _, err := toml.DecodeFile(configFile, &config); err != nil {
+			fmt.Printf("ERROR: Unable to logout: %s\n", err)
+			os.Exit(1)
+		}
+	}
+
+}
 func main() {
+
+	loadConfig()
+	if config.Host != "" {
+		runRemote()
+		return
+	}
+
 	app := cli.NewApp()
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
@@ -183,6 +295,18 @@ func main() {
 	}
 
 	app.Commands = []cli.Command{
+		{
+			Name:        "login",
+			Usage:       "login to a controller",
+			Action:      login,
+			Description: "login host[:port]",
+		},
+		{
+			Name:        "logout",
+			Usage:       "logout off a controller",
+			Action:      logout,
+			Description: "logout",
+		},
 		{
 			Name:        "app:deploy",
 			Usage:       "deploy a new version of an app",
@@ -207,7 +331,6 @@ func main() {
 			Action:      configUnset,
 			Description: "config <app> KEY[ KEY, etc..]",
 		},
-
 		{
 			Name:   "config:get",
 			Usage:  "display the config value for an app",

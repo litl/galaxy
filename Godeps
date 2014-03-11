@@ -3,9 +3,27 @@
 	"GoVersion": "go1.2",
 	"Deps": [
 		{
+			"ImportPath": "code.google.com/p/go.crypto/ssh",
+			"Comment": "null-191",
+			"Rev": "7aa593ce8ceaf0199504fff27455bbb60eedabc7"
+		},
+		{
+			"ImportPath": "github.com/BurntSushi/toml",
+			"Rev": "50ab0c35d35f5355cee28b0120b18dfbbd13ad36"
+		},
+		{
 			"ImportPath": "github.com/codegangsta/cli",
 			"Comment": "1.0.0-39-g8f0575f",
 			"Rev": "8f0575f520013467eb175a5dd30158ed816eeda9"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-etcd/etcd",
+			"Comment": "v0.2.0-rc1-75-g5c0151c",
+			"Rev": "5c0151c64399ff9a8087c2e29ae96145ede7cfc2"
+		},
+		{
+			"ImportPath": "github.com/wsxiaoys/terminal/color",
+			"Rev": "5668e431776a7957528361f90ce828266c69ed08"
 		}
 	]
 }
