@@ -98,6 +98,23 @@ func appCreate(c *cli.Context) {
 	}
 }
 
+func appDelete(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "app:delete")
+
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" {
+		return
+	}
+
+	_, err := etcdClient.Delete("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, true)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("ERROR: Could not delete app: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 func appDeploy(c *cli.Context) {
 
 	etcdClient := ensureEtcClient(c)
@@ -390,6 +407,12 @@ func main() {
 			Usage:       "create a new app",
 			Action:      appCreate,
 			Description: "app:create",
+		},
+		{
+			Name:        "app:delete",
+			Usage:       "delete a new app",
+			Action:      appDelete,
+			Description: "app:delete",
 		},
 		{
 			Name:        "app:deploy",
