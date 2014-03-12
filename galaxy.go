@@ -86,15 +86,31 @@ func appList(c *cli.Context) {
 	fmt.Println(output)
 }
 
+func appCreate(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "app:create")
+
+	_, err := etcdClient.CreateDir("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, 0)
+	if err != nil {
+		fmt.Printf("ERROR: Could not create app: %s\n", err)
+		os.Exit(1)
+	}
+}
+
 func appDeploy(c *cli.Context) {
 
 	etcdClient := ensureEtcClient(c)
 	app := ensureAppParam(c, "app:deploy")
 
-	version := c.Args().Tail()[0]
+	version := ""
+	if len(c.Args().Tail()) == 1 {
+		version = c.Args().Tail()[0]
+	}
+
 	if version == "" {
-		println("ERROR: app name missing")
-		cli.ShowCommandHelp(c, "config")
+		println("ERROR: version missing")
+		cli.ShowCommandHelp(c, "app:deploy")
 		os.Exit(1)
 	}
 
@@ -368,6 +384,12 @@ func main() {
 			Usage:       "list the apps currently created",
 			Action:      appList,
 			Description: "app",
+		},
+		{
+			Name:        "app:create",
+			Usage:       "create a new app",
+			Action:      appCreate,
+			Description: "app:create",
 		},
 		{
 			Name:        "app:deploy",
