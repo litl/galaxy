@@ -6,10 +6,12 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
 	"github.com/coreos/go-etcd/etcd"
+	"github.com/ryanuber/columnize"
 
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -23,21 +25,71 @@ var config struct {
 	PrivateKey string `toml:"private_key"`
 }
 
-func ensureEtcClient(c *cli.Context, command string) (*etcd.Client, string) {
+func ensureEtcClient(c *cli.Context) *etcd.Client {
 	machines := strings.Split(c.GlobalString("etcd"), ",")
 	ectdClient := etcd.NewClient(machines)
+	return ectdClient
+}
+
+func ensureAppParam(c *cli.Context, command string) string {
 	app := c.Args().First()
 	if app == "" {
 		println("ERROR: app name missing")
 		cli.ShowCommandHelp(c, command)
 		os.Exit(1)
 	}
-	return ectdClient, app
+	return app
+}
+
+func appList(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	path := "/" + c.GlobalString("env") + "/" + c.GlobalString("pool")
+
+	entries, err := etcdClient.Get(path, false, false)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("ERROR: Environment (%s) or pool (%s) does not exist.\n",
+			c.GlobalString("env"), c.GlobalString("pool"))
+		os.Exit(1)
+	}
+
+	if err != nil {
+		fmt.Printf("ERROR: Could not find registered apps: %s\n", err)
+		os.Exit(1)
+	}
+
+	columns := []string{"NAME | CONFIGURED | VERSION"}
+	for _, entry := range entries.Node.Nodes {
+		name := filepath.Base(entry.Key)
+		// skip runtime host entry
+		if name == "hosts" {
+			continue
+		}
+
+		environmentConfigured := false
+		_, err := etcdClient.Get(filepath.Join(path, name, "environment"), false, false)
+		if err == nil {
+			environmentConfigured = true
+		}
+
+		versionDeployed := ""
+		version, err := etcdClient.Get(filepath.Join(path, name, "version"), false, false)
+		if err == nil {
+			versionDeployed = version.Node.Value
+		}
+
+		columns = append(columns, strings.Join([]string{
+			name, strconv.FormatBool(environmentConfigured),
+			versionDeployed}, " | "))
+	}
+	output, _ := columnize.SimpleFormat(columns)
+	fmt.Println(output)
 }
 
 func appDeploy(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c, "app:deploy")
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "app:deploy")
 
 	version := c.Args().Tail()[0]
 	if version == "" {
@@ -55,7 +107,8 @@ func appDeploy(c *cli.Context) {
 
 func configList(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c, "config")
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "config")
 
 	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
@@ -81,7 +134,8 @@ func configList(c *cli.Context) {
 
 func configSet(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c, "config:set")
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "config:set")
 
 	var env map[string]string
 
@@ -125,7 +179,8 @@ func configSet(c *cli.Context) {
 
 func configUnset(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c, "config:unset")
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "config:unset")
 
 	env := map[string]string{}
 
@@ -160,7 +215,8 @@ func configUnset(c *cli.Context) {
 
 func configGet(c *cli.Context) {
 
-	etcdClient, app := ensureEtcClient(c, "config:get")
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "config:get")
 
 	env := map[string]string{}
 
@@ -306,6 +362,12 @@ func main() {
 			Usage:       "logout off a controller",
 			Action:      logout,
 			Description: "logout",
+		},
+		{
+			Name:        "app",
+			Usage:       "list the apps currently created",
+			Action:      appList,
+			Description: "app",
 		},
 		{
 			Name:        "app:deploy",
