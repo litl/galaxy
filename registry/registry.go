@@ -2,7 +2,6 @@ package registry
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/jwilder/go-dockerclient"
 	"github.com/litl/galaxy/utils"
@@ -250,7 +249,6 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 	}
 
 	desiredServiceRegistration := r.makeServiceRegistration(container)
-	fmt.Printf("%#v", desiredServiceRegistration)
 	return r.findRegistration(registrations.Node, desiredServiceRegistration)
 
 }
