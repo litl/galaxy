@@ -122,6 +122,17 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 	serviceRegistration := r.makeServiceRegistration(container)
 	if serviceRegistration.Equals(existingRegistration) {
+		statusLine := strings.Join([]string{
+			container.ID[0:12],
+			registrationPath,
+			container.Config.Image,
+			serviceRegistration.ExternalIp + ":" + serviceRegistration.ExternalPort,
+			serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
+			utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+			"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
+		}, " | ")
+
+		r.OutputBuffer.Log(statusLine)
 		return nil
 	}
 
@@ -169,7 +180,7 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 
 	for _, entry := range []string{"location", "environment"} {
 		_, err := r.EctdClient.Delete(registrationPath+"/"+entry, true)
-		if err != nil {
+		if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 			return err
 		}
 
