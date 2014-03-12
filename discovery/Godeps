@@ -28,10 +28,6 @@
 			"Rev": "746c1a01bb2a7816393a0f1dc9fdb73089348563"
 		},
 		{
-			"ImportPath": "github.com/mitchellh/cli",
-			"Rev": "69f0b65ce53b27f729b1b807b88dc88007f41dd3"
-		},
-		{
 			"ImportPath": "github.com/ryanuber/columnize",
 			"Comment": "v0.1.0-7-g877318e",
 			"Rev": "877318e3eacd9fa79ab2aabc1722b33c186a7f6d"

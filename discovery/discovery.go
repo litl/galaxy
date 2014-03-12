@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
+	"github.com/codegangsta/cli"
 	"github.com/jwilder/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
 	"github.com/litl/galaxy/discovery/registry"
-	"github.com/mitchellh/cli"
+	"github.com/litl/galaxy/utils"
 	"os"
 	"os/user"
 )
@@ -19,6 +19,7 @@ var (
 	authConfig      *auth.ConfigFile
 	hostname        string
 	serviceRegistry *registry.ServiceRegistry
+	outputBuffer    *utils.OutputBuffer
 )
 
 func initOrDie() {
@@ -45,23 +46,47 @@ func initOrDie() {
 	if err != nil {
 		panic(err)
 	}
+	outputBuffer = &utils.OutputBuffer{}
 }
 
 func main() {
 
 	initOrDie()
 
-	cli := &cli.CLI{
-		Args:     os.Args[1:],
-		Commands: Commands,
-		HelpFunc: cli.BasicHelpFunc("discovery"),
+	app := cli.NewApp()
+	app.Name = "discovery"
+	app.Usage = "discovery service registration"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{Name: "etcd", Value: "http://127.0.0.1:4001", Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
 	}
 
-	exitCode, err := cli.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error executing CLI: %s\n", err.Error())
-		os.Exit(1)
-		return
+	app.Commands = []cli.Command{
+		{
+			Name:        "register",
+			Usage:       "discovers and registers running containers",
+			Action:      register,
+			Description: "register [options]",
+			Flags: []cli.Flag{
+				cli.IntFlag{Name: "ttl", Value: 60, Usage: "TTL (s) for service registrations"},
+				cli.BoolFlag{Name: "loop", Usage: "Continuously register containers"},
+			},
+		},
+		{
+			Name:        "unregister",
+			Usage:       "discovers and unregisters running containers",
+			Action:      unregister,
+			Description: "unregister [options]",
+		},
+		{
+			Name:        "status",
+			Usage:       "Lists the registration status of running containers",
+			Action:      status,
+			Description: "status",
+		},
 	}
-	os.Exit(exitCode)
+
+	app.Run(os.Args)
 }
