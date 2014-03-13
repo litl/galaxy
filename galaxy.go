@@ -41,6 +41,22 @@ func ensureAppParam(c *cli.Context, command string) string {
 	return app
 }
 
+func countInstances(etcdClient *etcd.Client, path, app string) int {
+	total := 0
+	nodes, err := etcdClient.Get(filepath.Join(path, "hosts"), true, true)
+	if err != nil {
+		return -1
+	}
+	for _, node := range nodes.Node.Nodes {
+		for _, runtime := range node.Nodes {
+			if filepath.Base(runtime.Key) == app {
+				total += 1
+			}
+		}
+	}
+	return total
+}
+
 func appList(c *cli.Context) {
 
 	etcdClient := ensureEtcClient(c)
@@ -58,7 +74,7 @@ func appList(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	columns := []string{"NAME | CONFIGURED | VERSION"}
+	columns := []string{"NAME | CONFIGURED | VERSION | REGISTERED | POOL | ENV"}
 	for _, entry := range entries.Node.Nodes {
 		name := filepath.Base(entry.Key)
 		// skip runtime host entry
@@ -78,9 +94,13 @@ func appList(c *cli.Context) {
 			versionDeployed = version.Node.Value
 		}
 
+		registered := countInstances(etcdClient, path, name)
+
 		columns = append(columns, strings.Join([]string{
 			name, strconv.FormatBool(environmentConfigured),
-			versionDeployed}, " | "))
+			versionDeployed, strconv.FormatInt(int64(registered), 10),
+			c.GlobalString("pool"),
+			c.GlobalString("env")}, " | "))
 	}
 	output, _ := columnize.SimpleFormat(columns)
 	fmt.Println(output)
