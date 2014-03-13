@@ -3,7 +3,7 @@ package registry
 import (
 	"encoding/json"
 	"github.com/coreos/go-etcd/etcd"
-	"github.com/jwilder/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/utils"
 	"path"
 	"strings"

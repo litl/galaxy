@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/coreos/go-etcd/etcd"
-	"github.com/jwilder/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
 	"os"
 	"os/user"

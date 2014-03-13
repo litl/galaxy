@@ -30,19 +30,9 @@
 			"Rev": "08fe80a1c0c8ef39e40c6b275564eb34b3589ef7"
 		},
 		{
-			"ImportPath": "github.com/fsouza/go-dockerclient/term",
-			"Comment": "0.2.1-25-g08fe80a",
-			"Rev": "08fe80a1c0c8ef39e40c6b275564eb34b3589ef7"
-		},
-		{
 			"ImportPath": "github.com/fsouza/go-dockerclient/utils",
 			"Comment": "0.2.1-25-g08fe80a",
 			"Rev": "08fe80a1c0c8ef39e40c6b275564eb34b3589ef7"
-		},
-		{
-			"ImportPath": "github.com/jwilder/go-dockerclient",
-			"Comment": "0.2.1-27-g746c1a0",
-			"Rev": "746c1a01bb2a7816393a0f1dc9fdb73089348563"
 		},
 		{
 			"ImportPath": "github.com/ryanuber/columnize",

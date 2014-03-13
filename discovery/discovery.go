@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/codegangsta/cli"
-	"github.com/jwilder/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
