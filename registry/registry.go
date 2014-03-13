@@ -36,9 +36,9 @@ type ServiceRegistry struct {
 }
 
 type ServiceRegistration struct {
-	ExternalIp   string    `json:"EXTERNAL_IP"`
+	ExternalIP   string    `json:"EXTERNAL_IP"`
 	ExternalPort string    `json:"EXTERNAL_PORT"`
-	InternalIp   string    `json:"INTERNAL_IP"`
+	InternalIP   string    `json:"INTERNAL_IP"`
 	InternalPort string    `json:"INTERNAL_PORT"`
 	ContainerID  string    `json:"CONTAINER_ID"`
 	StartedAt    time.Time `json:"STARTED_AT"`
@@ -47,9 +47,9 @@ type ServiceRegistration struct {
 }
 
 func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
-	return s.ExternalIp == other.ExternalIp &&
+	return s.ExternalIP == other.ExternalIP &&
 		s.ExternalPort == other.ExternalPort &&
-		s.InternalIp == other.InternalIp &&
+		s.InternalIP == other.InternalIP &&
 		s.InternalPort == other.InternalPort
 }
 
@@ -94,9 +94,9 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 	}
 
 	serviceRegistration := ServiceRegistration{
-		ExternalIp:   r.HostIp,
+		ExternalIP:   r.HostIp,
 		ExternalPort: externalPort,
-		InternalIp:   container.NetworkSettings.IPAddress,
+		InternalIP:   container.NetworkSettings.IPAddress,
 		InternalPort: internalPort,
 		ContainerID:  container.ID,
 		StartedAt:    container.Created,
@@ -193,8 +193,8 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 			container.ID[0:12],
 			registrationPath,
 			container.Config.Image,
-			serviceRegistration.ExternalIp + ":" + serviceRegistration.ExternalPort,
-			serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
+			serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
+			serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
 			utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
 			"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
 		}, " | ")
@@ -227,8 +227,8 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		container.ID[0:12],
 		registrationPath,
 		container.Config.Image,
-		serviceRegistration.ExternalIp + ":" + serviceRegistration.ExternalPort,
-		serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
+		serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
+		serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
 		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
 		"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
 	}, " | ")

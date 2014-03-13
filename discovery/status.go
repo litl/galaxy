@@ -63,8 +63,8 @@ func status(c *cli.Context) {
 				container.ID[0:12],
 				registered.Path,
 				container.Image,
-				registered.ExternalIp + ":" + registered.ExternalPort,
-				registered.InternalIp + ":" + registered.InternalPort,
+				registered.ExternalIP + ":" + registered.ExternalPort,
+				registered.InternalIP + ":" + registered.InternalPort,
 				utils.HumanDuration(time.Now().Sub(time.Unix(container.Created, 0))) + " ago",
 				"In " + utils.HumanDuration(registered.Expires.Sub(time.Now())),
 			}, " | "))
