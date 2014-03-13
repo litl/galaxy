@@ -3,41 +3,25 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"os"
 )
 
 var (
-	client          *docker.Client
 	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
 	app             = flag.String("app", "", "App to start")
 	etcdHosts       = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
 	env             = flag.String("env", "dev", "Environment namespace")
 	pool            = flag.String("pool", "web", "Pool namespace")
 	serviceConfigs  []*registry.ServiceConfig
-	hostname        string
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
 )
 
 func initOrDie() {
-	var err error
-	endpoint := "unix:///var/run/docker.sock"
-	client, err = docker.NewClient(endpoint)
-
-	if err != nil {
-		panic(err)
-	}
-
-	hostname, err = os.Hostname()
-	if err != nil {
-		panic(err)
-	}
 
 	serviceRegistry = &registry.ServiceRegistry{
-		Client:    client,
 		EtcdHosts: *etcdHosts,
 		Env:       *env,
 		Pool:      *pool,

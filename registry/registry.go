@@ -24,7 +24,6 @@ type ServiceConfig struct {
 
 type ServiceRegistry struct {
 	ectdClient   *etcd.Client
-	Client       *docker.Client
 	EtcdHosts    string
 	Env          string
 	Pool         string

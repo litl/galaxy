@@ -15,7 +15,6 @@ import (
 func status(c *cli.Context) {
 
 	serviceRegistry = &registry.ServiceRegistry{
-		Client:       client,
 		EtcdHosts:    c.GlobalString("etcd"),
 		Env:          c.GlobalString("env"),
 		Pool:         c.GlobalString("pool"),

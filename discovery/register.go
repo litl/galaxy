@@ -16,7 +16,6 @@ func register(c *cli.Context) {
 
 	for {
 		serviceRegistry = &registry.ServiceRegistry{
-			Client:       client,
 			EtcdHosts:    c.GlobalString("etcd"),
 			Env:          c.GlobalString("env"),
 			Pool:         c.GlobalString("pool"),
