@@ -151,7 +151,13 @@ func appDeploy(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	_, err := etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/version", version, 0)
+	_, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, false, false)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
+		os.Exit(1)
+	}
+
+	_, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/version", version, 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store version: %s\n", err)
 		os.Exit(1)
