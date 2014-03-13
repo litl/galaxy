@@ -19,7 +19,7 @@ var (
 	client         *docker.Client
 	ectdClient     *etcd.Client
 	stopCutoff     = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
-	image          = flag.String("t", "", "Image to start")
+	app            = flag.String("app", "", "App to start")
 	etcdHosts      = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
 	env            = flag.String("env", "dev", "Environment namespace")
 	pool           = flag.String("pool", "web", "Pool namespace")
@@ -233,7 +233,6 @@ func buildServiceConfigs() []*ServiceConfig {
 
 		for _, configKey := range node.Nodes {
 			if strings.HasSuffix(configKey.Key, "/version") {
-				*image = configKey.Value
 				serviceConfig.Version = configKey.Value
 			} else if strings.HasSuffix(configKey.Key, "/environment") {
 				err := json.Unmarshal([]byte(configKey.Value), &serviceConfig.Env)
@@ -293,7 +292,7 @@ func main() {
 
 	initOrDie()
 
-	if *image == "" && *etcdHosts != "" {
+	if *etcdHosts != "" {
 		machines := strings.Split(*etcdHosts, ",")
 		ectdClient = etcd.NewClient(machines)
 
@@ -306,6 +305,11 @@ func main() {
 	}
 
 	for _, serviceConfig := range serviceConfigs {
+
+		if *app != "" && serviceConfig.Name != *app {
+			continue
+		}
+
 		if serviceConfig.Version == "" {
 			fmt.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
 			continue
