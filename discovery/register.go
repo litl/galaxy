@@ -23,6 +23,7 @@ func register(c *cli.Context) {
 			HostIp:       c.GlobalString("hostIp"),
 			TTL:          uint64(c.Int("ttl")),
 			Hostname:     hostname,
+			HostSSHAddr:  c.GlobalString("sshAddr"),
 			OutputBuffer: outputBuffer,
 		}
 

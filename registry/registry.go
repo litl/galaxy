@@ -30,6 +30,7 @@ type ServiceRegistry struct {
 	HostIp       string
 	Hostname     string
 	TTL          uint64
+	HostSSHAddr  string
 	OutputBuffer *utils.OutputBuffer
 }
 
@@ -86,6 +87,12 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 	_, err := r.EctdClient.CreateDir("/"+r.Env+"/"+r.Pool+"/hosts", 0)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
+		return err
+	}
+
+	hostPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/ssh"
+	_, err = r.EctdClient.Set(hostPath, r.HostSSHAddr, r.TTL)
+	if err != nil {
 		return err
 	}
 
