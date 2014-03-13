@@ -23,7 +23,7 @@ type ServiceConfig struct {
 }
 
 type ServiceRegistry struct {
-	EctdClient   *etcd.Client
+	ectdClient   *etcd.Client
 	Client       *docker.Client
 	EtcdHosts    string
 	Env          string
@@ -54,9 +54,20 @@ func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
 }
 
 func (r *ServiceRegistry) setHostValue(service string, key string, value string) error {
-	_, err := r.EctdClient.Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.Hostname+"/"+
+	_, err := r.ensureEtcdClient().Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.Hostname+"/"+
 		service+"/"+key, value, 0)
 	return err
+}
+
+func (r *ServiceRegistry) ensureEtcdClient() *etcd.Client {
+	if r.ectdClient == nil {
+		if r.EtcdHosts == "" {
+			panic("No etcd hosts configured")
+		}
+		machines := strings.Split(r.EtcdHosts, ",")
+		r.ectdClient = etcd.NewClient(machines)
+	}
+	return r.ectdClient
 }
 
 func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *ServiceRegistration {
@@ -84,7 +95,7 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
 	var serviceConfigs []*ServiceConfig
 
-	resp, err := r.EctdClient.Get("/"+r.Env+"/"+r.Pool, false, true)
+	resp, err := r.ensureEtcdClient().Get("/"+r.Env+"/"+r.Pool, false, true)
 	if err != nil {
 		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
 		return serviceConfigs
@@ -122,36 +133,33 @@ func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	machines := strings.Split(r.EtcdHosts, ",")
-	r.EctdClient = etcd.NewClient(machines)
-
-	_, err := r.EctdClient.CreateDir("/"+r.Env+"/"+r.Pool+"/hosts", 0)
+	_, err := r.ensureEtcdClient().CreateDir("/"+r.Env+"/"+r.Pool+"/hosts", 0)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
 		return err
 	}
 
 	hostPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/ssh"
-	_, err = r.EctdClient.Set(hostPath, r.HostSSHAddr, r.TTL)
+	_, err = r.ensureEtcdClient().Set(hostPath, r.HostSSHAddr, r.TTL)
 	if err != nil {
 		return err
 	}
 
 	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
-	registration, err := r.EctdClient.CreateDir(registrationPath, r.TTL)
+	registration, err := r.ensureEtcdClient().CreateDir(registrationPath, r.TTL)
 	if err != nil {
 
 		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
 			return err
 		}
 
-		registration, err = r.EctdClient.UpdateDir(registrationPath, r.TTL)
+		registration, err = r.ensureEtcdClient().UpdateDir(registrationPath, r.TTL)
 		if err != nil {
 			return err
 		}
 	}
 
 	var existingRegistration ServiceRegistration
-	existingJson, err := r.EctdClient.Get(registrationPath+"/location", false, false)
+	existingJson, err := r.ensureEtcdClient().Get(registrationPath+"/location", false, false)
 	if err != nil {
 		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 			return err
@@ -220,12 +228,9 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	machines := strings.Split(r.EtcdHosts, ",")
-	r.EctdClient = etcd.NewClient(machines)
-
 	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
 
-	_, err := r.EctdClient.Delete(registrationPath, true)
+	_, err := r.ensureEtcdClient().Delete(registrationPath, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		return err
 	}
@@ -283,11 +288,7 @@ func (r *ServiceRegistry) findRegistration(node *etcd.Node, criteria *ServiceReg
 }
 
 func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
-
-	machines := strings.Split(r.EtcdHosts, ",")
-	r.EctdClient = etcd.NewClient(machines)
-
-	registrations, err := r.EctdClient.Get("/", true, true)
+	registrations, err := r.ensureEtcdClient().Get("/", true, true)
 	if err != nil {
 		return nil, err
 	}

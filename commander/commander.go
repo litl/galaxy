@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/coreos/go-etcd/etcd"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
 	"github.com/litl/galaxy/registry"
@@ -16,7 +15,6 @@ import (
 
 var (
 	client          *docker.Client
-	ectdClient      *etcd.Client
 	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
 	app             = flag.String("app", "", "App to start")
 	etcdHosts       = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
@@ -261,13 +259,7 @@ func main() {
 
 	initOrDie()
 
-	if *etcdHosts != "" {
-		machines := strings.Split(*etcdHosts, ",")
-		ectdClient = etcd.NewClient(machines)
-		serviceRegistry.EctdClient = ectdClient
-
-		serviceConfigs = serviceRegistry.GetServiceConfigs()
-	}
+	serviceConfigs = serviceRegistry.GetServiceConfigs()
 
 	if len(serviceConfigs) == 0 {
 		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
