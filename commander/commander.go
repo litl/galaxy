@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/go-etcd/etcd"
@@ -144,7 +145,16 @@ func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) 
 		return container, err
 	}
 
-	return client.InspectContainer(containerId)
+	startedContainer, err := client.InspectContainer(container.ID)
+	for i := 0; i < 5; i++ {
+
+		startedContainer, err = client.InspectContainer(container.ID)
+		if !startedContainer.State.Running {
+			return nil, errors.New("Container stopped unexpectedly")
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return startedContainer, err
 }
 
 func getImageByName(img string) (*docker.APIImages, error) {
