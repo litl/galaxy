@@ -18,7 +18,7 @@ var (
 	outputBuffer    *utils.OutputBuffer
 )
 
-func initOrDie() {
+func initOrDie(c *cli.Context) {
 	var err error
 	endpoint := "unix:///var/run/docker.sock"
 	client, err = docker.NewClient(endpoint)
@@ -27,12 +27,20 @@ func initOrDie() {
 		panic(err)
 	}
 
+	serviceRegistry = &registry.ServiceRegistry{
+		EtcdHosts:    c.GlobalString("etcd"),
+		Env:          c.GlobalString("env"),
+		Pool:         c.GlobalString("pool"),
+		HostIp:       c.GlobalString("hostIp"),
+		TTL:          uint64(c.Int("ttl")),
+		HostSSHAddr:  c.GlobalString("sshAddr"),
+		OutputBuffer: outputBuffer,
+	}
+
 	outputBuffer = &utils.OutputBuffer{}
 }
 
 func main() {
-
-	initOrDie()
 
 	app := cli.NewApp()
 	app.Name = "discovery"

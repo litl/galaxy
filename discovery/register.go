@@ -14,16 +14,9 @@ import (
 
 func register(c *cli.Context) {
 
+	initOrDie(c)
+
 	for {
-		serviceRegistry = &registry.ServiceRegistry{
-			EtcdHosts:    c.GlobalString("etcd"),
-			Env:          c.GlobalString("env"),
-			Pool:         c.GlobalString("pool"),
-			HostIp:       c.GlobalString("hostIp"),
-			TTL:          uint64(c.Int("ttl")),
-			HostSSHAddr:  c.GlobalString("sshAddr"),
-			OutputBuffer: outputBuffer,
-		}
 
 		containers, err := client.ListContainers(docker.ListContainersOptions{
 			All: false,

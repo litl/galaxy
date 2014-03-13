@@ -14,14 +14,7 @@ import (
 
 func status(c *cli.Context) {
 
-	serviceRegistry = &registry.ServiceRegistry{
-		EtcdHosts:    c.GlobalString("etcd"),
-		Env:          c.GlobalString("env"),
-		Pool:         c.GlobalString("pool"),
-		HostIp:       c.GlobalString("hostIp"),
-		TTL:          uint64(c.Int("ttl")),
-		OutputBuffer: outputBuffer,
-	}
+	initOrDie(c)
 
 	containers, err := client.ListContainers(docker.ListContainersOptions{
 		All: false,
