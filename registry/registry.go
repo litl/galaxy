@@ -178,12 +178,9 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 
 	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
 
-	for _, entry := range []string{"location", "environment"} {
-		_, err := r.EctdClient.Delete(registrationPath+"/"+entry, true)
-		if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
-			return err
-		}
-
+	_, err := r.EctdClient.Delete(registrationPath, true)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
+		return err
 	}
 
 	statusLine := strings.Join([]string{
