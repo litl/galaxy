@@ -2,6 +2,7 @@ package registry
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/utils"
@@ -78,6 +79,45 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 		StartedAt:    container.Created,
 	}
 	return &serviceRegistration
+}
+
+func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
+	var serviceConfigs []*ServiceConfig
+
+	resp, err := r.EctdClient.Get("/"+r.Env+"/"+r.Pool, false, true)
+	if err != nil {
+		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
+		return serviceConfigs
+	}
+	for _, node := range resp.Node.Nodes {
+		service := path.Base(node.Key)
+
+		if service == "hosts" {
+			continue
+		}
+
+		serviceConfig := &ServiceConfig{
+			Name: service,
+			Env:  make(map[string]string),
+		}
+		fmt.Printf("Detected service %s\n", service)
+
+		for _, configKey := range node.Nodes {
+			if strings.HasSuffix(configKey.Key, "/version") {
+				serviceConfig.Version = configKey.Value
+			} else if strings.HasSuffix(configKey.Key, "/environment") {
+				err := json.Unmarshal([]byte(configKey.Value), &serviceConfig.Env)
+				if err != nil {
+					fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
+					return serviceConfigs
+				}
+			} else {
+				fmt.Printf("WARN: Unknown entry %s. Ignoring\n", configKey.Key)
+			}
+		}
+		serviceConfigs = append(serviceConfigs, serviceConfig)
+	}
+	return serviceConfigs
 }
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {

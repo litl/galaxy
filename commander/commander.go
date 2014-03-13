@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,22 +10,22 @@ import (
 	"github.com/litl/galaxy/registry"
 	"os"
 	"os/user"
-	"path"
 	"strings"
 	"time"
 )
 
 var (
-	client         *docker.Client
-	ectdClient     *etcd.Client
-	stopCutoff     = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
-	app            = flag.String("app", "", "App to start")
-	etcdHosts      = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
-	env            = flag.String("env", "dev", "Environment namespace")
-	pool           = flag.String("pool", "web", "Pool namespace")
-	authConfig     *auth.ConfigFile
-	serviceConfigs []*registry.ServiceConfig
-	hostname       string
+	client          *docker.Client
+	ectdClient      *etcd.Client
+	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
+	app             = flag.String("app", "", "App to start")
+	etcdHosts       = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
+	env             = flag.String("env", "dev", "Environment namespace")
+	pool            = flag.String("pool", "web", "Pool namespace")
+	authConfig      *auth.ConfigFile
+	serviceConfigs  []*registry.ServiceConfig
+	hostname        string
+	serviceRegistry *registry.ServiceRegistry
 )
 
 func splitDockerImage(img string) (string, string, string) {
@@ -205,45 +204,6 @@ func stopAllButLatest(img string, latest *docker.Container) error {
 
 }
 
-func buildServiceConfigs() []*registry.ServiceConfig {
-	var serviceConfigs []*registry.ServiceConfig
-
-	resp, err := ectdClient.Get("/"+*env+"/"+*pool, false, true)
-	if err != nil {
-		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
-		return serviceConfigs
-	}
-	for _, node := range resp.Node.Nodes {
-		service := path.Base(node.Key)
-
-		if service == "hosts" {
-			continue
-		}
-
-		serviceConfig := &registry.ServiceConfig{
-			Name: service,
-			Env:  make(map[string]string),
-		}
-		fmt.Printf("Detected service %s\n", service)
-
-		for _, configKey := range node.Nodes {
-			if strings.HasSuffix(configKey.Key, "/version") {
-				serviceConfig.Version = configKey.Value
-			} else if strings.HasSuffix(configKey.Key, "/environment") {
-				err := json.Unmarshal([]byte(configKey.Value), &serviceConfig.Env)
-				if err != nil {
-					fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-					return serviceConfigs
-				}
-			} else {
-				fmt.Printf("WARN: Unknown entry %s. Ignoring\n", configKey.Key)
-			}
-		}
-		serviceConfigs = append(serviceConfigs, serviceConfig)
-	}
-	return serviceConfigs
-}
-
 func initOrDie() {
 	var err error
 	endpoint := "unix:///var/run/docker.sock"
@@ -268,6 +228,20 @@ func initOrDie() {
 	if err != nil {
 		panic(err)
 	}
+
+	serviceRegistry = &registry.ServiceRegistry{
+		Client:    client,
+		EtcdHosts: *etcdHosts,
+		Env:       *env,
+		Pool:      *pool,
+		//FIXME: Move these closer to functions that use them
+		//HostIp:       "FIXME"
+		//TTL:          uint64(c.Int("ttl")),
+		//Hostname:     hostname,
+		//HostSSHAddr:  c.GlobalString("sshAddr"),
+		//OutputBuffer: outputBuffer,
+	}
+
 }
 
 func main() {
@@ -290,8 +264,9 @@ func main() {
 	if *etcdHosts != "" {
 		machines := strings.Split(*etcdHosts, ",")
 		ectdClient = etcd.NewClient(machines)
+		serviceRegistry.EctdClient = ectdClient
 
-		serviceConfigs = buildServiceConfigs()
+		serviceConfigs = serviceRegistry.GetServiceConfigs()
 	}
 
 	if len(serviceConfigs) == 0 {
