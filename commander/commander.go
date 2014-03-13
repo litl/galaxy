@@ -8,6 +8,7 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander/auth"
+	"github.com/litl/galaxy/registry"
 	"os"
 	"os/user"
 	"path"
@@ -24,15 +25,9 @@ var (
 	env            = flag.String("env", "dev", "Environment namespace")
 	pool           = flag.String("pool", "web", "Pool namespace")
 	authConfig     *auth.ConfigFile
-	serviceConfigs []*ServiceConfig
+	serviceConfigs []*registry.ServiceConfig
 	hostname       string
 )
-
-type ServiceConfig struct {
-	Name    string
-	Version string
-	Env     map[string]string
-}
 
 func splitDockerImage(img string) (string, string, string) {
 	if !strings.Contains(img, "/") {
@@ -99,7 +94,7 @@ func pullImage(registry, repository string) error {
 
 }
 
-func startIfNotRunning(serviceConfig *ServiceConfig) (*docker.Container, error) {
+func startIfNotRunning(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version
 	containerId, err := isRunning(img)
 	if err != nil && err != docker.ErrNoSuchImage {
@@ -210,8 +205,8 @@ func stopAllButLatest(img string, latest *docker.Container) error {
 
 }
 
-func buildServiceConfigs() []*ServiceConfig {
-	var serviceConfigs []*ServiceConfig
+func buildServiceConfigs() []*registry.ServiceConfig {
+	var serviceConfigs []*registry.ServiceConfig
 
 	resp, err := ectdClient.Get("/"+*env+"/"+*pool, false, true)
 	if err != nil {
@@ -225,7 +220,7 @@ func buildServiceConfigs() []*ServiceConfig {
 			continue
 		}
 
-		serviceConfig := &ServiceConfig{
+		serviceConfig := &registry.ServiceConfig{
 			Name: service,
 			Env:  make(map[string]string),
 		}
