@@ -20,7 +20,6 @@ func status(c *cli.Context) {
 		Pool:         c.GlobalString("pool"),
 		HostIp:       c.GlobalString("hostIp"),
 		TTL:          uint64(c.Int("ttl")),
-		Hostname:     hostname,
 		OutputBuffer: outputBuffer,
 	}
 

@@ -4,10 +4,8 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/registry"
-	"github.com/litl/galaxy/runtime/auth"
 	"github.com/litl/galaxy/utils"
 	"os"
-	"os/user"
 )
 
 const (
@@ -16,8 +14,6 @@ const (
 
 var (
 	client          *docker.Client
-	authConfig      *auth.ConfigFile
-	hostname        string
 	serviceRegistry *registry.ServiceRegistry
 	outputBuffer    *utils.OutputBuffer
 )
@@ -31,21 +27,6 @@ func initOrDie() {
 		panic(err)
 	}
 
-	currentUser, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-
-	hostname, err = os.Hostname()
-	if err != nil {
-		panic(err)
-	}
-
-	// use ~/.dockercfg
-	authConfig, err = auth.LoadConfig(currentUser.HomeDir)
-	if err != nil {
-		panic(err)
-	}
 	outputBuffer = &utils.OutputBuffer{}
 }
 

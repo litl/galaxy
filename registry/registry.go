@@ -6,6 +6,7 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/utils"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -53,9 +54,21 @@ func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
 }
 
 func (r *ServiceRegistry) setHostValue(service string, key string, value string) error {
-	_, err := r.ensureEtcdClient().Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.Hostname+"/"+
+	_, err := r.ensureEtcdClient().Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.ensureHostname()+"/"+
 		service+"/"+key, value, 0)
 	return err
+}
+
+func (r *ServiceRegistry) ensureHostname() string {
+	if r.Hostname == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			panic(err)
+		}
+		r.Hostname = hostname
+
+	}
+	return r.Hostname
 }
 
 func (r *ServiceRegistry) ensureEtcdClient() *etcd.Client {
@@ -137,13 +150,13 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		return err
 	}
 
-	hostPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/ssh"
+	hostPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/ssh"
 	_, err = r.ensureEtcdClient().Set(hostPath, r.HostSSHAddr, r.TTL)
 	if err != nil {
 		return err
 	}
 
-	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
+	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/" + serviceConfig.Name
 	registration, err := r.ensureEtcdClient().CreateDir(registrationPath, r.TTL)
 	if err != nil {
 
@@ -227,7 +240,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
+	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/" + serviceConfig.Name
 
 	_, err := r.ensureEtcdClient().Delete(registrationPath, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
