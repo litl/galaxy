@@ -53,3 +53,12 @@ func SplitDockerImage(img string) (string, string, string) {
 	// registry, repository, tag
 	return parts[0], imageParts[0], imageParts[1]
 }
+
+func StringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
