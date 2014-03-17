@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/codegangsta/cli"
-	"github.com/jwilder/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
@@ -14,17 +14,9 @@ import (
 
 func register(c *cli.Context) {
 
+	initOrDie(c)
+
 	for {
-		serviceRegistry = &registry.ServiceRegistry{
-			Client:       client,
-			EtcdHosts:    c.GlobalString("etcd"),
-			Env:          c.GlobalString("env"),
-			Pool:         c.GlobalString("pool"),
-			HostIp:       c.GlobalString("hostIp"),
-			TTL:          uint64(c.Int("ttl")),
-			Hostname:     hostname,
-			OutputBuffer: outputBuffer,
-		}
 
 		containers, err := client.ListContainers(docker.ListContainersOptions{
 			All: false,

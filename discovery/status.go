@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/codegangsta/cli"
-	"github.com/jwilder/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
@@ -14,16 +14,7 @@ import (
 
 func status(c *cli.Context) {
 
-	serviceRegistry = &registry.ServiceRegistry{
-		Client:       client,
-		EtcdHosts:    c.GlobalString("etcd"),
-		Env:          c.GlobalString("env"),
-		Pool:         c.GlobalString("pool"),
-		HostIp:       c.GlobalString("hostIp"),
-		TTL:          uint64(c.Int("ttl")),
-		Hostname:     hostname,
-		OutputBuffer: outputBuffer,
-	}
+	initOrDie(c)
 
 	containers, err := client.ListContainers(docker.ListContainersOptions{
 		All: false,
@@ -72,8 +63,8 @@ func status(c *cli.Context) {
 				container.ID[0:12],
 				registered.Path,
 				container.Image,
-				registered.ExternalIp + ":" + registered.ExternalPort,
-				registered.InternalIp + ":" + registered.InternalPort,
+				registered.ExternalIP + ":" + registered.ExternalPort,
+				registered.InternalIP + ":" + registered.InternalPort,
 				utils.HumanDuration(time.Now().Sub(time.Unix(container.Created, 0))) + " ago",
 				"In " + utils.HumanDuration(registered.Expires.Sub(time.Now())),
 			}, " | "))

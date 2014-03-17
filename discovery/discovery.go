@@ -2,12 +2,10 @@ package main
 
 import (
 	"github.com/codegangsta/cli"
-	"github.com/jwilder/go-dockerclient"
-	"github.com/litl/galaxy/commander/auth"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"os"
-	"os/user"
 )
 
 const (
@@ -16,13 +14,11 @@ const (
 
 var (
 	client          *docker.Client
-	authConfig      *auth.ConfigFile
-	hostname        string
 	serviceRegistry *registry.ServiceRegistry
 	outputBuffer    *utils.OutputBuffer
 )
 
-func initOrDie() {
+func initOrDie(c *cli.Context) {
 	var err error
 	endpoint := "unix:///var/run/docker.sock"
 	client, err = docker.NewClient(endpoint)
@@ -31,27 +27,20 @@ func initOrDie() {
 		panic(err)
 	}
 
-	currentUser, err := user.Current()
-	if err != nil {
-		panic(err)
+	serviceRegistry = &registry.ServiceRegistry{
+		EtcdHosts:    c.GlobalString("etcd"),
+		Env:          c.GlobalString("env"),
+		Pool:         c.GlobalString("pool"),
+		HostIp:       c.GlobalString("hostIp"),
+		TTL:          uint64(c.Int("ttl")),
+		HostSSHAddr:  c.GlobalString("sshAddr"),
+		OutputBuffer: outputBuffer,
 	}
 
-	hostname, err = os.Hostname()
-	if err != nil {
-		panic(err)
-	}
-
-	// use ~/.dockercfg
-	authConfig, err = auth.LoadConfig(currentUser.HomeDir)
-	if err != nil {
-		panic(err)
-	}
 	outputBuffer = &utils.OutputBuffer{}
 }
 
 func main() {
-
-	initOrDie()
 
 	app := cli.NewApp()
 	app.Name = "discovery"
@@ -61,6 +50,7 @@ func main() {
 		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
+		cli.StringFlag{Name: "sshAddr", Value: "127.0.0.1:22", Usage: "hosts external ssh IP:port"},
 	}
 
 	app.Commands = []cli.Command{

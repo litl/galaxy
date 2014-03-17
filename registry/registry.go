@@ -2,9 +2,11 @@ package registry
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/coreos/go-etcd/etcd"
-	"github.com/jwilder/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/utils"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -22,21 +24,21 @@ type ServiceConfig struct {
 }
 
 type ServiceRegistry struct {
-	EctdClient   *etcd.Client
-	Client       *docker.Client
+	ectdClient   *etcd.Client
 	EtcdHosts    string
 	Env          string
 	Pool         string
 	HostIp       string
 	Hostname     string
 	TTL          uint64
+	HostSSHAddr  string
 	OutputBuffer *utils.OutputBuffer
 }
 
 type ServiceRegistration struct {
-	ExternalIp   string    `json:"EXTERNAL_IP"`
+	ExternalIP   string    `json:"EXTERNAL_IP"`
 	ExternalPort string    `json:"EXTERNAL_PORT"`
-	InternalIp   string    `json:"INTERNAL_IP"`
+	InternalIP   string    `json:"INTERNAL_IP"`
 	InternalPort string    `json:"INTERNAL_PORT"`
 	ContainerID  string    `json:"CONTAINER_ID"`
 	StartedAt    time.Time `json:"STARTED_AT"`
@@ -45,16 +47,39 @@ type ServiceRegistration struct {
 }
 
 func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
-	return s.ExternalIp == other.ExternalIp &&
+	return s.ExternalIP == other.ExternalIP &&
 		s.ExternalPort == other.ExternalPort &&
-		s.InternalIp == other.InternalIp &&
+		s.InternalIP == other.InternalIP &&
 		s.InternalPort == other.InternalPort
 }
 
 func (r *ServiceRegistry) setHostValue(service string, key string, value string) error {
-	_, err := r.EctdClient.Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.Hostname+"/"+
+	_, err := r.ensureEtcdClient().Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.ensureHostname()+"/"+
 		service+"/"+key, value, 0)
 	return err
+}
+
+func (r *ServiceRegistry) ensureHostname() string {
+	if r.Hostname == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			panic(err)
+		}
+		r.Hostname = hostname
+
+	}
+	return r.Hostname
+}
+
+func (r *ServiceRegistry) ensureEtcdClient() *etcd.Client {
+	if r.ectdClient == nil {
+		if r.EtcdHosts == "" {
+			panic("No etcd hosts configured")
+		}
+		machines := strings.Split(r.EtcdHosts, ",")
+		r.ectdClient = etcd.NewClient(machines)
+	}
+	return r.ectdClient
 }
 
 func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *ServiceRegistration {
@@ -69,9 +94,9 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 	}
 
 	serviceRegistration := ServiceRegistration{
-		ExternalIp:   r.HostIp,
+		ExternalIP:   r.HostIp,
 		ExternalPort: externalPort,
-		InternalIp:   container.NetworkSettings.IPAddress,
+		InternalIP:   container.NetworkSettings.IPAddress,
 		InternalPort: internalPort,
 		ContainerID:  container.ID,
 		StartedAt:    container.Created,
@@ -79,32 +104,84 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 	return &serviceRegistration
 }
 
+func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
+	var serviceConfigs []*ServiceConfig
+
+	resp, err := r.ensureEtcdClient().Get("/"+r.Env+"/"+r.Pool, false, true)
+	if err != nil {
+		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
+		return serviceConfigs
+	}
+	for _, node := range resp.Node.Nodes {
+		service := path.Base(node.Key)
+
+		if service == "hosts" {
+			continue
+		}
+
+		serviceConfig := &ServiceConfig{
+			Name: service,
+			Env:  make(map[string]string),
+		}
+		fmt.Printf("Detected service %s\n", service)
+
+		for _, configKey := range node.Nodes {
+			if strings.HasSuffix(configKey.Key, "/version") {
+				serviceConfig.Version = configKey.Value
+			} else if strings.HasSuffix(configKey.Key, "/environment") {
+				err := json.Unmarshal([]byte(configKey.Value), &serviceConfig.Env)
+				if err != nil {
+					fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
+					return serviceConfigs
+				}
+			} else {
+				fmt.Printf("WARN: Unknown entry %s. Ignoring\n", configKey.Key)
+			}
+		}
+		serviceConfigs = append(serviceConfigs, serviceConfig)
+	}
+	return serviceConfigs
+}
+
+func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
+	serviceConfigs := r.GetServiceConfigs()
+	for _, config := range serviceConfigs {
+		if config.Name == app {
+			return config, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	machines := strings.Split(r.EtcdHosts, ",")
-	r.EctdClient = etcd.NewClient(machines)
-
-	_, err := r.EctdClient.CreateDir("/"+r.Env+"/"+r.Pool+"/hosts", 0)
+	_, err := r.ensureEtcdClient().CreateDir("/"+r.Env+"/"+r.Pool+"/hosts", 0)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
 		return err
 	}
 
-	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
-	registration, err := r.EctdClient.CreateDir(registrationPath, r.TTL)
+	hostPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/ssh"
+	_, err = r.ensureEtcdClient().Set(hostPath, r.HostSSHAddr, r.TTL)
+	if err != nil {
+		return err
+	}
+
+	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/" + serviceConfig.Name
+	registration, err := r.ensureEtcdClient().CreateDir(registrationPath, r.TTL)
 	if err != nil {
 
 		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
 			return err
 		}
 
-		registration, err = r.EctdClient.UpdateDir(registrationPath, r.TTL)
+		registration, err = r.ensureEtcdClient().UpdateDir(registrationPath, r.TTL)
 		if err != nil {
 			return err
 		}
 	}
 
 	var existingRegistration ServiceRegistration
-	existingJson, err := r.EctdClient.Get(registrationPath+"/location", false, false)
+	existingJson, err := r.ensureEtcdClient().Get(registrationPath+"/location", false, false)
 	if err != nil {
 		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 			return err
@@ -126,8 +203,8 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 			container.ID[0:12],
 			registrationPath,
 			container.Config.Image,
-			serviceRegistration.ExternalIp + ":" + serviceRegistration.ExternalPort,
-			serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
+			serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
+			serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
 			utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
 			"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
 		}, " | ")
@@ -160,8 +237,8 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		container.ID[0:12],
 		registrationPath,
 		container.Config.Image,
-		serviceRegistration.ExternalIp + ":" + serviceRegistration.ExternalPort,
-		serviceRegistration.InternalIp + ":" + serviceRegistration.InternalPort,
+		serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
+		serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
 		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
 		"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
 	}, " | ")
@@ -173,17 +250,11 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	machines := strings.Split(r.EtcdHosts, ",")
-	r.EctdClient = etcd.NewClient(machines)
+	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/" + serviceConfig.Name
 
-	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.Hostname + "/" + serviceConfig.Name
-
-	for _, entry := range []string{"location", "environment"} {
-		_, err := r.EctdClient.Delete(registrationPath+"/"+entry, true)
-		if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
-			return err
-		}
-
+	_, err := r.ensureEtcdClient().Delete(registrationPath, true)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
+		return err
 	}
 
 	statusLine := strings.Join([]string{
@@ -239,11 +310,7 @@ func (r *ServiceRegistry) findRegistration(node *etcd.Node, criteria *ServiceReg
 }
 
 func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
-
-	machines := strings.Split(r.EtcdHosts, ",")
-	r.EctdClient = etcd.NewClient(machines)
-
-	registrations, err := r.EctdClient.Get("/", true, true)
+	registrations, err := r.ensureEtcdClient().Get("/", true, true)
 	if err != nil {
 		return nil, err
 	}

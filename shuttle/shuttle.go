@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-etcd/etcd"
+	"github.com/litl/galaxy/registry"
 )
 
 var (
@@ -33,11 +34,8 @@ func init() {
 
 // struct for unmarshaling Service (for PORT) and Server locations
 type ServiceCfg struct {
-	Port         string `json:"PORT"`
-	ExternalIP   string `json:"EXTERNAL_IP"`
-	ExternalPort string `json:"EXTERNAL_PORT"`
-	InternalIP   string `json:"INTERNAL_IP"`
-	InternalPort string `json:"INTERNAL_PORT"`
+	Port string `json:"PORT"`
+	registry.ServiceRegistration
 }
 
 // detect Services and Servers by their configuration key names
