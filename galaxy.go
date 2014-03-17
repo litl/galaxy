@@ -41,7 +41,7 @@ func ensureEtcClient(c *cli.Context) *etcd.Client {
 func ensureAppParam(c *cli.Context, command string) string {
 	app := c.Args().First()
 	if app == "" {
-		println("ERROR: app name missing")
+		fmt.Println("ERROR: app name missing")
 		cli.ShowCommandHelp(c, command)
 		os.Exit(1)
 	}
@@ -73,12 +73,12 @@ func appList(c *cli.Context) {
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Environment (%s) or pool (%s) does not exist.\n",
 			c.GlobalString("env"), c.GlobalString("pool"))
-		os.Exit(1)
+		return
 	}
 
 	if err != nil {
 		fmt.Printf("ERROR: Could not find registered apps: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	columns := []string{"NAME | CONFIGURED | VERSION | REGISTERED | POOL | ENV"}
@@ -121,7 +121,6 @@ func appCreate(c *cli.Context) {
 	_, err := etcdClient.CreateDir("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not create app: %s\n", err)
-		os.Exit(1)
 	}
 }
 
@@ -138,7 +137,6 @@ func appDelete(c *cli.Context) {
 	_, err := etcdClient.Delete("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not delete app: %s\n", err)
-		os.Exit(1)
 	}
 }
 
@@ -153,21 +151,21 @@ func appDeploy(c *cli.Context) {
 	}
 
 	if version == "" {
-		println("ERROR: version missing")
+		fmt.Println("ERROR: version missing")
 		cli.ShowCommandHelp(c, "app:deploy")
-		os.Exit(1)
+		return
 	}
 
 	_, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, false, false)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
-		os.Exit(1)
+		return
 	}
 
 	_, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/version", version, 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store version: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -178,13 +176,13 @@ func appRun(c *cli.Context) {
 
 	if len(c.Args()) < 2 {
 		fmt.Printf("ERROR: Missing command to run.\n")
-		os.Exit(1)
+		return
 	}
 
 	_, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, false, false)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
-		os.Exit(1)
+		return
 	}
 
 	outputBuffer := &utils.OutputBuffer{}
@@ -203,7 +201,7 @@ func appRun(c *cli.Context) {
 	_, err = serviceRuntime.StartInteractive(serviceConfig, c.Args()[1:])
 	if err != nil {
 		fmt.Printf("ERROR: Could not start container: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -215,7 +213,7 @@ func configList(c *cli.Context) {
 	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
@@ -226,7 +224,7 @@ func configList(c *cli.Context) {
 	err = json.Unmarshal([]byte(resp.Node.Value), &env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	for k, v := range env {
@@ -244,14 +242,14 @@ func configSet(c *cli.Context) {
 	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not connect to etcd: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	if err == nil || err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		err = json.Unmarshal([]byte(resp.Node.Value), &env)
 		if err != nil {
 			fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-			os.Exit(1)
+			return
 		}
 	}
 
@@ -259,7 +257,7 @@ func configSet(c *cli.Context) {
 		if !strings.Contains(arg, "=") {
 			fmt.Printf("ERROR: bad config variable format: %s\n", arg)
 			cli.ShowCommandHelp(c, "config")
-			os.Exit(1)
+			return
 
 		}
 		values := strings.Split(arg, "=")
@@ -269,13 +267,13 @@ func configSet(c *cli.Context) {
 	serialized, err := json.Marshal(env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not marshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	resp, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", string(serialized), 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -289,13 +287,13 @@ func configUnset(c *cli.Context) {
 	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not connect to etcd: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	err = json.Unmarshal([]byte(resp.Node.Value), &env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	for _, arg := range c.Args().Tail() {
@@ -305,13 +303,13 @@ func configUnset(c *cli.Context) {
 	serialized, err := json.Marshal(env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not marshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	resp, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", string(serialized), 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -325,13 +323,13 @@ func configGet(c *cli.Context) {
 	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not connect to etcd: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	err = json.Unmarshal([]byte(resp.Node.Value), &env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	for _, arg := range c.Args().Tail() {
@@ -342,15 +340,15 @@ func configGet(c *cli.Context) {
 func login(c *cli.Context) {
 
 	if c.Args().First() == "" {
-		println("ERROR: host missing")
+		fmt.Println("ERROR: host missing")
 		cli.ShowCommandHelp(c, "login")
-		os.Exit(1)
+		return
 	}
 
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	configDir := filepath.Join(currentUser.HomeDir, ".galaxy")
@@ -362,7 +360,7 @@ func login(c *cli.Context) {
 
 	if len(availableKeys) == 0 {
 		fmt.Printf("ERROR: No SSH private keys found.  Create one first.\n")
-		os.Exit(1)
+		return
 	}
 
 	for i, key := range availableKeys {
@@ -384,7 +382,7 @@ func login(c *cli.Context) {
 	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
 	if err != nil {
 		fmt.Printf("ERROR: Unable to create config file: %s\n", err)
-		os.Exit(1)
+		return
 	}
 	defer configFile.Close()
 
@@ -398,7 +396,7 @@ func logout(c *cli.Context) {
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
-		os.Exit(1)
+		return
 	}
 	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
 
@@ -407,7 +405,7 @@ func logout(c *cli.Context) {
 		err = os.Remove(configFile)
 		if err != nil {
 			fmt.Printf("ERROR: Unable to logout: %s\n", err)
-			os.Exit(1)
+			return
 		}
 	}
 	fmt.Printf("Logout sucessful\n")
@@ -422,7 +420,7 @@ func loadConfig() {
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
-		os.Exit(1)
+		return
 	}
 	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
 
@@ -430,7 +428,7 @@ func loadConfig() {
 	if err == nil {
 		if _, err := toml.DecodeFile(configFile, &config); err != nil {
 			fmt.Printf("ERROR: Unable to logout: %s\n", err)
-			os.Exit(1)
+			return
 		}
 	}
 
