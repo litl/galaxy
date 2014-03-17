@@ -21,7 +21,8 @@ func findPrivateKeys(root string) []string {
 			return nil
 		}
 		contents, err := ioutil.ReadFile(path)
-		if strings.Contains(string(contents), "PRIVATE KEY") {
+		if strings.Contains(string(contents), "PRIVATE KEY") &&
+			!strings.Contains(string(contents), "DSA") {
 			availableKeys = append(availableKeys, path)
 		}
 		return nil
