@@ -6,8 +6,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
 	"github.com/coreos/go-etcd/etcd"
+	"github.com/litl/galaxy/registry"
+	"github.com/litl/galaxy/runtime"
+	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
-
 	"os"
 	"os/user"
 	"path/filepath"
@@ -18,6 +20,11 @@ import (
 const (
 	ETCD_ENTRY_ALREADY_EXISTS = 105
 	ETCD_ENTRY_NOT_EXISTS     = 100
+)
+
+var (
+	serviceRuntime  *runtime.ServiceRuntime
+	serviceRegistry *registry.ServiceRegistry
 )
 
 var config struct {
@@ -160,6 +167,42 @@ func appDeploy(c *cli.Context) {
 	_, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/version", version, 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store version: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+func appRun(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	app := ensureAppParam(c, "app:run")
+
+	if len(c.Args()) < 2 {
+		fmt.Printf("ERROR: Missing command to run.\n")
+		os.Exit(1)
+	}
+
+	_, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, false, false)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
+		os.Exit(1)
+	}
+
+	outputBuffer := &utils.OutputBuffer{}
+	serviceRegistry = &registry.ServiceRegistry{
+		EtcdHosts:    c.GlobalString("etcd"),
+		Env:          c.GlobalString("env"),
+		Pool:         c.GlobalString("pool"),
+		HostIp:       c.GlobalString("hostIp"),
+		TTL:          uint64(c.Int("ttl")),
+		HostSSHAddr:  c.GlobalString("sshAddr"),
+		OutputBuffer: outputBuffer,
+	}
+
+	serviceConfig, _ := serviceRegistry.GetServiceConfig(app)
+
+	_, err = serviceRuntime.StartInteractive(serviceConfig, c.Args()[1:])
+	if err != nil {
+		fmt.Printf("ERROR: Could not start container: %s\n", err)
 		os.Exit(1)
 	}
 }
@@ -395,6 +438,8 @@ func loadConfig() {
 func main() {
 
 	loadConfig()
+	serviceRuntime = &runtime.ServiceRuntime{}
+
 	if config.Host != "" {
 		runRemote()
 		return
@@ -444,7 +489,13 @@ func main() {
 			Name:        "app:deploy",
 			Usage:       "deploy a new version of an app",
 			Action:      appDeploy,
-			Description: "config <app> <version>",
+			Description: "app:deploy <app> <version>",
+		},
+		{
+			Name:        "app:run",
+			Usage:       "run a command in a container",
+			Action:      appRun,
+			Description: "app:run <app> <command>",
 		},
 		{
 			Name:        "config",

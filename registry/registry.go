@@ -143,6 +143,16 @@ func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
 	return serviceConfigs
 }
 
+func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
+	serviceConfigs := r.GetServiceConfigs()
+	for _, config := range serviceConfigs {
+		if config.Name == app {
+			return config, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
 	_, err := r.ensureEtcdClient().CreateDir("/"+r.Env+"/"+r.Pool+"/hosts", 0)
