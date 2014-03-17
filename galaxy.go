@@ -439,8 +439,7 @@ func main() {
 
 	loadConfig()
 	serviceRuntime = &runtime.ServiceRuntime{}
-
-	if config.Host != "" {
+	if config.Host != "" && len(os.Args) > 1 && (os.Args[1] != "login" && os.Args[1] != "logout") {
 		runRemote()
 		return
 	}
