@@ -21,7 +21,8 @@ func findPrivateKeys(root string) []string {
 			return nil
 		}
 		contents, err := ioutil.ReadFile(path)
-		if strings.Contains(string(contents), "PRIVATE KEY") {
+		if strings.Contains(string(contents), "PRIVATE KEY") &&
+			!strings.Contains(string(contents), "DSA") {
 			availableKeys = append(availableKeys, path)
 		}
 		return nil
@@ -111,7 +112,7 @@ func Sshcmd(host string, command string, background bool, debug bool) {
 	}
 
 	// Workaround for sessoin.Setenv not working
-	command = fmt.Sprintf("PATH=$HOME/go/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/bin %s", command)
+	command = fmt.Sprintf("PATH=$HOME/go/bin:$HOME/go/gopath/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/bin %s", command)
 
 	if debug {
 		color.Printf("@{b}%s\n", command)

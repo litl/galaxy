@@ -41,7 +41,7 @@ func ensureEtcClient(c *cli.Context) *etcd.Client {
 func ensureAppParam(c *cli.Context, command string) string {
 	app := c.Args().First()
 	if app == "" {
-		println("ERROR: app name missing")
+		fmt.Println("ERROR: app name missing")
 		cli.ShowCommandHelp(c, command)
 		os.Exit(1)
 	}
@@ -64,21 +64,103 @@ func countInstances(etcdClient *etcd.Client, path, app string) int {
 	return total
 }
 
+func envExists(etcdClient *etcd.Client, env string) (bool, error) {
+	_, err := etcdClient.Get(utils.EtcdJoin(env), false, false)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func poolExists(etcdClient *etcd.Client, env, pool string) (bool, error) {
+	_, err := etcdClient.Get(utils.EtcdJoin(env, pool), false, false)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func envPoolExists(etcdClient *etcd.Client, env, pool string) (bool, error) {
+	exists, err := envExists(etcdClient, env)
+	if err != nil {
+		fmt.Printf("ERROR: Could not determine if env %s exists: %s\n", env, err)
+		return false, err
+	}
+
+	if !exists {
+		fmt.Printf("Environment %s does not exist. Create it first.\n", env)
+		return false, nil
+	}
+
+	exists, err = poolExists(etcdClient, env, pool)
+	if err != nil {
+		fmt.Printf("ERROR: Could not determine if env %s pool %s exists: %s\n", env, pool, err)
+		return false, err
+	}
+
+	if !exists {
+		fmt.Printf("Pool %s for env %s does not exist. Create it first.\n", pool, env)
+		return false, nil
+	}
+	return true, nil
+}
+
+func appExists(etcdClient *etcd.Client, env, pool, app string) (bool, error) {
+	exists, err := envPoolExists(etcdClient, env, pool)
+	if err != nil {
+		return false, err
+	}
+
+	if !exists {
+		return false, nil
+	}
+
+	_, err = etcdClient.Get(utils.EtcdJoin(env, pool, app), false, false)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("App %s does not exist. Create it first.\n", app)
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func appList(c *cli.Context) {
 
 	etcdClient := ensureEtcClient(c)
-	path := "/" + c.GlobalString("env") + "/" + c.GlobalString("pool")
+	path := utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"))
+
+	poolExists, err := envPoolExists(etcdClient, c.GlobalString("env"), c.GlobalString("pool"))
+	if err != nil {
+		fmt.Printf("ERROR: Could not determine if env %s pool %s exists: %s\n",
+			c.GlobalString("env"), c.GlobalString("pool"), err)
+		return
+	}
+
+	if !poolExists {
+		return
+	}
 
 	entries, err := etcdClient.Get(path, false, false)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Environment (%s) or pool (%s) does not exist.\n",
 			c.GlobalString("env"), c.GlobalString("pool"))
-		os.Exit(1)
+		return
 	}
 
 	if err != nil {
 		fmt.Printf("ERROR: Could not find registered apps: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	columns := []string{"NAME | CONFIGURED | VERSION | REGISTERED | POOL | ENV"}
@@ -118,10 +200,20 @@ func appCreate(c *cli.Context) {
 	etcdClient := ensureEtcClient(c)
 	app := ensureAppParam(c, "app:create")
 
-	_, err := etcdClient.CreateDir("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, 0)
+	exists, err := envExists(etcdClient, c.GlobalString("env"))
 	if err != nil {
 		fmt.Printf("ERROR: Could not create app: %s\n", err)
-		os.Exit(1)
+		return
+	}
+
+	if !exists {
+		fmt.Printf("Environment %s does not exist. Create it first.\n", c.GlobalString("env"))
+		return
+	}
+
+	_, err = etcdClient.CreateDir(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), 0)
+	if err != nil {
+		fmt.Printf("ERROR: Could not create app: %s\n", err)
 	}
 }
 
@@ -135,10 +227,9 @@ func appDelete(c *cli.Context) {
 		return
 	}
 
-	_, err := etcdClient.Delete("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, true)
+	_, err := etcdClient.Delete(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not delete app: %s\n", err)
-		os.Exit(1)
 	}
 }
 
@@ -153,21 +244,21 @@ func appDeploy(c *cli.Context) {
 	}
 
 	if version == "" {
-		println("ERROR: version missing")
+		fmt.Println("ERROR: version missing")
 		cli.ShowCommandHelp(c, "app:deploy")
-		os.Exit(1)
+		return
 	}
 
-	_, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, false, false)
+	_, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), false, false)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
-		os.Exit(1)
+		return
 	}
 
-	_, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/version", version, 0)
+	_, err = etcdClient.Set(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "version"), version, 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store version: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -178,13 +269,13 @@ func appRun(c *cli.Context) {
 
 	if len(c.Args()) < 2 {
 		fmt.Printf("ERROR: Missing command to run.\n")
-		os.Exit(1)
+		return
 	}
 
-	_, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app, false, false)
+	_, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), false, false)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
-		os.Exit(1)
+		return
 	}
 
 	outputBuffer := &utils.OutputBuffer{}
@@ -203,7 +294,7 @@ func appRun(c *cli.Context) {
 	_, err = serviceRuntime.StartInteractive(serviceConfig, c.Args()[1:])
 	if err != nil {
 		fmt.Printf("ERROR: Could not start container: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -212,10 +303,10 @@ func configList(c *cli.Context) {
 	etcdClient := ensureEtcClient(c)
 	app := ensureAppParam(c, "config")
 
-	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
+	resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
@@ -226,7 +317,7 @@ func configList(c *cli.Context) {
 	err = json.Unmarshal([]byte(resp.Node.Value), &env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	for k, v := range env {
@@ -239,19 +330,28 @@ func configSet(c *cli.Context) {
 	etcdClient := ensureEtcClient(c)
 	app := ensureAppParam(c, "config:set")
 
-	var env map[string]string
+	appExists, err := appExists(etcdClient, c.GlobalString("env"), c.GlobalString("pool"), app)
+	if err != nil {
+		return
+	}
 
-	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
+	if !appExists {
+		return
+	}
+
+	env := make(map[string]string)
+
+	resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not connect to etcd: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	if err == nil || err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		err = json.Unmarshal([]byte(resp.Node.Value), &env)
 		if err != nil {
 			fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-			os.Exit(1)
+			return
 		}
 	}
 
@@ -259,7 +359,7 @@ func configSet(c *cli.Context) {
 		if !strings.Contains(arg, "=") {
 			fmt.Printf("ERROR: bad config variable format: %s\n", arg)
 			cli.ShowCommandHelp(c, "config")
-			os.Exit(1)
+			return
 
 		}
 		values := strings.Split(arg, "=")
@@ -269,13 +369,13 @@ func configSet(c *cli.Context) {
 	serialized, err := json.Marshal(env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not marshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
-	resp, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", string(serialized), 0)
+	resp, err = etcdClient.Set(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), string(serialized), 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -286,16 +386,16 @@ func configUnset(c *cli.Context) {
 
 	env := map[string]string{}
 
-	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
+	resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not connect to etcd: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	err = json.Unmarshal([]byte(resp.Node.Value), &env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	for _, arg := range c.Args().Tail() {
@@ -305,13 +405,13 @@ func configUnset(c *cli.Context) {
 	serialized, err := json.Marshal(env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not marshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
-	resp, err = etcdClient.Set("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", string(serialized), 0)
+	resp, err = etcdClient.Set(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), string(serialized), 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 }
 
@@ -322,16 +422,16 @@ func configGet(c *cli.Context) {
 
 	env := map[string]string{}
 
-	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool")+"/"+app+"/environment", true, true)
+	resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not connect to etcd: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	err = json.Unmarshal([]byte(resp.Node.Value), &env)
 	if err != nil {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	for _, arg := range c.Args().Tail() {
@@ -342,15 +442,15 @@ func configGet(c *cli.Context) {
 func login(c *cli.Context) {
 
 	if c.Args().First() == "" {
-		println("ERROR: host missing")
+		fmt.Println("ERROR: host missing")
 		cli.ShowCommandHelp(c, "login")
-		os.Exit(1)
+		return
 	}
 
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
-		os.Exit(1)
+		return
 	}
 
 	configDir := filepath.Join(currentUser.HomeDir, ".galaxy")
@@ -362,7 +462,7 @@ func login(c *cli.Context) {
 
 	if len(availableKeys) == 0 {
 		fmt.Printf("ERROR: No SSH private keys found.  Create one first.\n")
-		os.Exit(1)
+		return
 	}
 
 	for i, key := range availableKeys {
@@ -384,7 +484,7 @@ func login(c *cli.Context) {
 	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
 	if err != nil {
 		fmt.Printf("ERROR: Unable to create config file: %s\n", err)
-		os.Exit(1)
+		return
 	}
 	defer configFile.Close()
 
@@ -398,7 +498,7 @@ func logout(c *cli.Context) {
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
-		os.Exit(1)
+		return
 	}
 	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
 
@@ -407,10 +507,66 @@ func logout(c *cli.Context) {
 		err = os.Remove(configFile)
 		if err != nil {
 			fmt.Printf("ERROR: Unable to logout: %s\n", err)
-			os.Exit(1)
+			return
 		}
 	}
 	fmt.Printf("Logout sucessful\n")
+}
+
+func poolList(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	resp, err := etcdClient.Get("/"+c.GlobalString("env"), true, true)
+	if err != nil || len(resp.Node.Nodes) == 0 {
+		fmt.Printf("No pools in %s\n", c.GlobalString("env"))
+		return
+	}
+
+	for _, v := range resp.Node.Nodes {
+		fmt.Printf("%s\n", filepath.Base(v.Key))
+	}
+}
+
+func poolCreate(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+
+	_, err := etcdClient.CreateDir(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool")), 0)
+	if err != nil {
+		fmt.Printf("ERROR: Could not create pool: %s\n", err)
+	}
+
+	//TODO: Create ASG
+}
+
+func poolDelete(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool")), true, true)
+	if err != nil {
+		fmt.Printf("ERROR: Could not delete pool: %s\n", err)
+		return
+	}
+
+	hasAppsConfigured := false
+	for _, v := range resp.Node.Nodes {
+		if filepath.Base(v.Key) != "nodes" {
+			hasAppsConfigured = true
+			break
+		}
+	}
+
+	if hasAppsConfigured {
+		fmt.Printf("ERROR: Could not delete pool. Apps currently registered. Delete them first.\n")
+		return
+	}
+
+	// TODO: Delete ASG
+
+	_, err = etcdClient.Delete(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool")), true)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("ERROR: Could not delete pool: %s\n", err)
+	}
 }
 
 func runRemote() {
@@ -422,7 +578,7 @@ func loadConfig() {
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
-		os.Exit(1)
+		return
 	}
 	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
 
@@ -430,17 +586,24 @@ func loadConfig() {
 	if err == nil {
 		if _, err := toml.DecodeFile(configFile, &config); err != nil {
 			fmt.Printf("ERROR: Unable to logout: %s\n", err)
-			os.Exit(1)
+			return
 		}
 	}
 
 }
+
+func getEnv(name, defaultValue string) string {
+	if os.Getenv(name) == "" {
+		return defaultValue
+	}
+	return os.Getenv(name)
+}
+
 func main() {
 
 	loadConfig()
 	serviceRuntime = &runtime.ServiceRuntime{}
-
-	if config.Host != "" {
+	if config.Host != "" && len(os.Args) > 1 && (os.Args[1] != "login" && os.Args[1] != "logout") {
 		runRemote()
 		return
 	}
@@ -449,9 +612,9 @@ func main() {
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "etcd", Value: "http://127.0.0.1:4001", Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "etcd", Value: getEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: getEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: getEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
 	}
 
 	app.Commands = []cli.Command{
@@ -519,6 +682,24 @@ func main() {
 			Name:   "config:get",
 			Usage:  "display the config value for an app",
 			Action: configGet,
+		},
+		{
+			Name:        "pool",
+			Usage:       "list the pools",
+			Action:      poolList,
+			Description: "pool",
+		},
+		{
+			Name:        "pool:create",
+			Usage:       "create a pool",
+			Action:      poolCreate,
+			Description: "pool:create",
+		},
+		{
+			Name:        "pool:delete",
+			Usage:       "deletes a pool",
+			Action:      poolDelete,
+			Description: "pool:delete",
 		},
 	}
 	app.Run(os.Args)

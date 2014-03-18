@@ -54,8 +54,8 @@ func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
 }
 
 func (r *ServiceRegistry) setHostValue(service string, key string, value string) error {
-	_, err := r.ensureEtcdClient().Set("/"+r.Env+"/"+r.Pool+"/hosts/"+r.ensureHostname()+"/"+
-		service+"/"+key, value, 0)
+	_, err := r.ensureEtcdClient().Set(utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(),
+		service, key), value, 0)
 	return err
 }
 
@@ -107,7 +107,7 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
 	var serviceConfigs []*ServiceConfig
 
-	resp, err := r.ensureEtcdClient().Get("/"+r.Env+"/"+r.Pool, false, true)
+	resp, err := r.ensureEtcdClient().Get(utils.EtcdJoin(r.Env, r.Pool), false, true)
 	if err != nil {
 		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
 		return serviceConfigs
@@ -155,18 +155,18 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	_, err := r.ensureEtcdClient().CreateDir("/"+r.Env+"/"+r.Pool+"/hosts", 0)
+	_, err := r.ensureEtcdClient().CreateDir(utils.EtcdJoin(r.Env, r.Pool, "hosts"), 0)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
 		return err
 	}
 
-	hostPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/ssh"
+	hostPath := utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(), "ssh")
 	_, err = r.ensureEtcdClient().Set(hostPath, r.HostSSHAddr, r.TTL)
 	if err != nil {
 		return err
 	}
 
-	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/" + serviceConfig.Name
+	registrationPath := utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 	registration, err := r.ensureEtcdClient().CreateDir(registrationPath, r.TTL)
 	if err != nil {
 
@@ -181,7 +181,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	}
 
 	var existingRegistration ServiceRegistration
-	existingJson, err := r.ensureEtcdClient().Get(registrationPath+"/location", false, false)
+	existingJson, err := r.ensureEtcdClient().Get(utils.EtcdJoin(registrationPath, "location"), false, false)
 	if err != nil {
 		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 			return err
@@ -250,7 +250,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	registrationPath := "/" + r.Env + "/" + r.Pool + "/hosts/" + r.ensureHostname() + "/" + serviceConfig.Name
+	registrationPath := utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
 	_, err := r.ensureEtcdClient().Delete(registrationPath, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
