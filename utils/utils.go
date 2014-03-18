@@ -62,3 +62,12 @@ func StringInSlice(a string, list []string) bool {
 	}
 	return false
 }
+
+func EtcdJoin(elem ...string) string {
+	for i, e := range elem {
+		if e != "" {
+			return strings.Join(elem[i:], "/")
+		}
+	}
+	return ""
+}
