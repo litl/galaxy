@@ -113,6 +113,28 @@ func envPoolExists(etcdClient *etcd.Client, env, pool string) (bool, error) {
 	return true, nil
 }
 
+func appExists(etcdClient *etcd.Client, env, pool, app string) (bool, error) {
+	exists, err := envPoolExists(etcdClient, env, pool)
+	if err != nil {
+		return false, err
+	}
+
+	if !exists {
+		return false, nil
+	}
+
+	_, err = etcdClient.Get(utils.EtcdJoin(env, pool, app), false, false)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("App %s does not exist. Create it first.\n", app)
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func appList(c *cli.Context) {
 
 	etcdClient := ensureEtcClient(c)
@@ -308,18 +330,16 @@ func configSet(c *cli.Context) {
 	etcdClient := ensureEtcClient(c)
 	app := ensureAppParam(c, "config:set")
 
-	poolExists, err := envPoolExists(etcdClient, c.GlobalString("env"), c.GlobalString("pool"))
+	appExists, err := appExists(etcdClient, c.GlobalString("env"), c.GlobalString("pool"), app)
 	if err != nil {
-		fmt.Printf("ERROR: Could not determine if env %s pool %s exists: %s\n",
-			c.GlobalString("env"), c.GlobalString("pool"), err)
 		return
 	}
 
-	if !poolExists {
+	if !appExists {
 		return
 	}
 
-	var env map[string]string
+	env := make(map[string]string)
 
 	resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
@@ -537,7 +557,7 @@ func poolDelete(c *cli.Context) {
 	}
 
 	if hasAppsConfigured {
-		fmt.Printf("ERROR: Could not delete pool. Apps currently registered. Delete them first.\n", err)
+		fmt.Printf("ERROR: Could not delete pool. Apps currently registered. Delete them first.\n")
 		return
 	}
 
