@@ -411,6 +411,62 @@ func logout(c *cli.Context) {
 	fmt.Printf("Logout sucessful\n")
 }
 
+func poolList(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	resp, err := etcdClient.Get("/"+c.GlobalString("env"), true, true)
+	if err != nil || len(resp.Node.Nodes) == 0 {
+		fmt.Printf("No pools in %s\n", c.GlobalString("env"))
+		return
+	}
+
+	for _, v := range resp.Node.Nodes {
+		fmt.Printf("%s\n", filepath.Base(v.Key))
+	}
+}
+
+func poolCreate(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+
+	_, err := etcdClient.CreateDir("/"+c.GlobalString("env")+"/"+c.GlobalString("pool"), 0)
+	if err != nil {
+		fmt.Printf("ERROR: Could not create pool: %s\n", err)
+	}
+
+	//TODO: Create ASG
+}
+
+func poolDelete(c *cli.Context) {
+
+	etcdClient := ensureEtcClient(c)
+	resp, err := etcdClient.Get("/"+c.GlobalString("env")+"/"+c.GlobalString("pool"), true, true)
+	if err != nil {
+		fmt.Printf("ERROR: Could not delete pool: %s\n", err)
+		return
+	}
+
+	hasAppsConfigured := false
+	for _, v := range resp.Node.Nodes {
+		if filepath.Base(v.Key) != "nodes" {
+			hasAppsConfigured = true
+			break
+		}
+	}
+
+	if hasAppsConfigured {
+		fmt.Printf("ERROR: Could not delete pool. Apps currently registered. Delete them first.\n", err)
+		return
+	}
+
+	// TODO: Delete ASG
+
+	_, err = etcdClient.Delete("/"+c.GlobalString("env")+"/"+c.GlobalString("pool"), true)
+	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
+		fmt.Printf("ERROR: Could not delete pool: %s\n", err)
+	}
+}
+
 func runRemote() {
 	Sshcmd(config.Host, "galaxy "+strings.Join(os.Args[1:], " "), false, false)
 }
@@ -524,6 +580,24 @@ func main() {
 			Name:   "config:get",
 			Usage:  "display the config value for an app",
 			Action: configGet,
+		},
+		{
+			Name:        "pool",
+			Usage:       "list the pools",
+			Action:      poolList,
+			Description: "pool",
+		},
+		{
+			Name:        "pool:create",
+			Usage:       "create a pool",
+			Action:      poolCreate,
+			Description: "pool:create",
+		},
+		{
+			Name:        "pool:delete",
+			Usage:       "deletes a pool",
+			Action:      poolDelete,
+			Description: "pool:delete",
 		},
 	}
 	app.Run(os.Args)
