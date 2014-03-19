@@ -265,7 +265,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 func (s *ServiceRuntime) PullImage(registry, repository string) error {
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
-		Repository:   repository,
+		Repository:   registry + "/" + repository,
 		Registry:     registry,
 		OutputStream: os.Stdout}
 
