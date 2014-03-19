@@ -81,6 +81,7 @@ func (s *ServiceRuntime) StopAllButLatest(img string, latest *docker.Container, 
 			err := s.ensureDockerClient().StopContainer(container.ID, 10)
 			if err != nil {
 				fmt.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+				continue
 			}
 			s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 				ID:            container.ID,
