@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+var blacklistedContainerId = make(map[string]bool)
+
 type ServiceRuntime struct {
 	dockerClient *docker.Client
 	authConfig   *auth.ConfigFile
@@ -78,17 +80,38 @@ func (s *ServiceRuntime) StopAllButLatest(img string, latest *docker.Container, 
 
 		if strings.HasPrefix(container.Image, repository) && container.ID != latest.ID &&
 			container.Created < (time.Now().Unix()-stopCutoff) {
-			err := s.ensureDockerClient().StopContainer(container.ID, 10)
-			if err != nil {
-				fmt.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+
+			// HACK: Docker 0.9 gets zombie containers randomly.  The only way to remove
+			// them is to restart the docker daemon.  If we timeout once trying to stop
+			// one of these containers, blacklist it and leave it running
+
+			if _, ok := blacklistedContainerId[container.ID]; ok {
+				fmt.Printf("Container %s blacklisted. Won't try to stop.\n", container.ID)
 				continue
 			}
+
+			fmt.Printf("Stopping container %s\n", container.ID)
+			c := make(chan error, 1)
+			go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
+			select {
+			case err := <-c:
+				if err != nil {
+					fmt.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+					continue
+				}
+			case <-time.After(20 * time.Second):
+				blacklistedContainerId[container.ID] = true
+				fmt.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
+				continue
+			}
+
 			s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 				ID:            container.ID,
 				RemoveVolumes: true,
 			})
 		}
 	}
+
 	return nil
 
 }
@@ -205,22 +228,12 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 	return container, err
 }
 
-func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version
-	containerId, err := s.IsRunning(img)
-	if err != nil && err != docker.ErrNoSuchImage {
-		return nil, err
-	}
-
-	// already running, grab the container details
-	if containerId != "" {
-		return s.ensureDockerClient().InspectContainer(containerId)
-	}
-
 	registry, repository, _ := utils.SplitDockerImage(img)
 
 	// see if we have the image locally
-	_, err = s.ensureDockerClient().InspectImage(img)
+	_, err := s.ensureDockerClient().InspectImage(img)
 
 	if err == docker.ErrNoSuchImage {
 		err := s.PullImage(registry, repository)
@@ -261,6 +274,21 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 		time.Sleep(1 * time.Second)
 	}
 	return startedContainer, err
+
+}
+
+func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+	img := serviceConfig.Version
+	containerId, err := s.IsRunning(img)
+	if err != nil && err != docker.ErrNoSuchImage {
+		return nil, err
+	}
+
+	// already running, grab the container details
+	if containerId != "" {
+		return s.ensureDockerClient().InspectContainer(containerId)
+	}
+	return s.Start(serviceConfig)
 }
 
 func (s *ServiceRuntime) PullImage(registry, repository string) error {

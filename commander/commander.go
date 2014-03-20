@@ -6,7 +6,6 @@ import (
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"os"
-	"time"
 )
 
 var (
@@ -39,6 +38,60 @@ func initOrDie() {
 
 }
 
+func startContainersIfNecessary() {
+	serviceConfigs = serviceRegistry.GetServiceConfigs()
+
+	if len(serviceConfigs) == 0 {
+		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
+		os.Exit(0)
+	}
+
+	for _, serviceConfig := range serviceConfigs {
+
+		if *app != "" && serviceConfig.Name != *app {
+			continue
+		}
+
+		if serviceConfig.Version == "" {
+			fmt.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
+			continue
+		}
+
+		container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
+		if err != nil {
+			fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
+				serviceConfig.Version, err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
+
+		serviceRuntime.StopAllButLatest(serviceConfig.Version, container, *stopCutoff)
+	}
+}
+
+func restartContainers(changedConfigs chan *registry.ConfigChange) {
+	for {
+
+		changedConfig := <-changedConfigs
+		if changedConfig.Error != nil {
+			fmt.Printf("ERROR: Error watching changes: %s\n", changedConfig.Error)
+			continue
+		}
+
+		container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
+		if err != nil {
+			fmt.Printf("ERROR: Could not start %s: %s\n",
+				changedConfig.ServiceConfig.Version, err)
+			continue
+		}
+		fmt.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version, container.ID)
+
+		serviceRuntime.StopAllButLatest(changedConfig.ServiceConfig.Version, container, *stopCutoff)
+
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -55,43 +108,22 @@ func main() {
 	}
 
 	initOrDie()
+	startContainersIfNecessary()
+
+	if !*loop {
+		return
+	}
+
+	restartChan := make(chan *registry.ConfigChange, 10)
+
+	go restartContainers(restartChan)
 
 	for {
-		serviceConfigs = serviceRegistry.GetServiceConfigs()
-
-		if len(serviceConfigs) == 0 {
-			fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
-			os.Exit(0)
+		err := serviceRegistry.WaitForChanges(restartChan)
+		if err != nil {
+			fmt.Printf("ERROR: Unexpected problem waiting for changes: %s\n", err)
 		}
 
-		for _, serviceConfig := range serviceConfigs {
-
-			if *app != "" && serviceConfig.Name != *app {
-				continue
-			}
-
-			if serviceConfig.Version == "" {
-				fmt.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
-				continue
-			}
-
-			container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
-			if err != nil {
-				fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
-					serviceConfig.Version, err)
-				os.Exit(1)
-			}
-
-			fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
-
-			serviceRuntime.StopAllButLatest(serviceConfig.Version, container, *stopCutoff)
-
-		}
-
-		if !*loop {
-			break
-		}
-		time.Sleep(10 * time.Second)
 	}
 
 }

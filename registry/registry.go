@@ -46,6 +46,11 @@ type ServiceRegistration struct {
 	Path         string    `json:"-"`
 }
 
+type ConfigChange struct {
+	ServiceConfig *ServiceConfig
+	Error         error
+}
+
 func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
 	return s.ExternalIP == other.ExternalIP &&
 		s.ExternalPort == other.ExternalPort &&
@@ -123,7 +128,6 @@ func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
 			Name: service,
 			Env:  make(map[string]string),
 		}
-		fmt.Printf("Detected service %s\n", service)
 
 		for _, configKey := range node.Nodes {
 			if strings.HasSuffix(configKey.Key, "/version") {
@@ -318,4 +322,35 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 	desiredServiceRegistration := r.makeServiceRegistration(container)
 	return r.findRegistration(registrations.Node, desiredServiceRegistration)
 
+}
+
+func (r *ServiceRegistry) WaitForChanges(changedConfigs chan *ConfigChange) error {
+
+	responseChan := make(chan *etcd.Response, 50)
+	go func() {
+		for {
+
+			resp := <-responseChan
+
+			parts := strings.Split(resp.Node.Key, "/")
+
+			// Skip the "hosts" special entry which is for runtime info
+			if parts[3] != "hosts" {
+				changedConfig, err := r.GetServiceConfig(parts[3])
+				if err != nil {
+					changedConfigs <- &ConfigChange{
+						Error: err,
+					}
+					continue
+
+				}
+				changedConfigs <- &ConfigChange{
+					ServiceConfig: changedConfig,
+				}
+			}
+		}
+	}()
+
+	_, err := r.ensureEtcdClient().Watch(utils.EtcdJoin(r.Env, r.Pool), 0, true, responseChan, nil)
+	return err
 }
