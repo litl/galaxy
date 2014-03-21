@@ -14,6 +14,7 @@ var (
 	etcdHosts       = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
 	env             = flag.String("env", "dev", "Environment namespace")
 	pool            = flag.String("pool", "web", "Pool namespace")
+	loop            = flag.Bool("loop", false, "Run continously")
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
@@ -37,23 +38,7 @@ func initOrDie() {
 
 }
 
-func main() {
-	flag.Parse()
-
-	if *env == "" {
-		fmt.Println("Need an env")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if *pool == "" {
-		fmt.Println("Need a pool")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	initOrDie()
-
+func startContainersIfNecessary() {
 	serviceConfigs = serviceRegistry.GetServiceConfigs()
 
 	if len(serviceConfigs) == 0 {
@@ -82,6 +67,62 @@ func main() {
 		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
 
 		serviceRuntime.StopAllButLatest(serviceConfig.Version, container, *stopCutoff)
+	}
+}
+
+func restartContainers(changedConfigs chan *registry.ConfigChange) {
+	for {
+
+		changedConfig := <-changedConfigs
+		if changedConfig.Error != nil {
+			fmt.Printf("ERROR: Error watching changes: %s\n", changedConfig.Error)
+			continue
+		}
+
+		container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
+		if err != nil {
+			fmt.Printf("ERROR: Could not start %s: %s\n",
+				changedConfig.ServiceConfig.Version, err)
+			continue
+		}
+		fmt.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version, container.ID)
+
+		serviceRuntime.StopAllButLatest(changedConfig.ServiceConfig.Version, container, *stopCutoff)
+
+	}
+}
+
+func main() {
+	flag.Parse()
+
+	if *env == "" {
+		fmt.Println("Need an env")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if *pool == "" {
+		fmt.Println("Need a pool")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	initOrDie()
+	startContainersIfNecessary()
+
+	if !*loop {
+		return
+	}
+
+	restartChan := make(chan *registry.ConfigChange, 10)
+
+	go restartContainers(restartChan)
+
+	for {
+		err := serviceRegistry.WaitForChanges(restartChan)
+		if err != nil {
+			fmt.Printf("ERROR: Unexpected problem waiting for changes: %s\n", err)
+		}
 
 	}
 

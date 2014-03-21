@@ -66,7 +66,11 @@ func StringInSlice(a string, list []string) bool {
 func EtcdJoin(elem ...string) string {
 	for i, e := range elem {
 		if e != "" {
-			return strings.Join(elem[i:], "/")
+			joined := strings.Join(elem[i:], "/")
+			if !strings.HasPrefix(joined, "/") {
+				return "/" + joined
+			}
+			return joined
 		}
 	}
 	return ""
