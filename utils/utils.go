@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"os"
 )
 
 type OutputBuffer struct {
@@ -74,4 +76,11 @@ func EtcdJoin(elem ...string) string {
 		}
 	}
 	return ""
+}
+
+func GetEnv(name, defaultValue string) string {
+	if os.Getenv(name) == "" {
+		return defaultValue
+	}
+	return os.Getenv(name)
 }

@@ -620,13 +620,6 @@ func loadConfig() {
 
 }
 
-func getEnv(name, defaultValue string) string {
-	if os.Getenv(name) == "" {
-		return defaultValue
-	}
-	return os.Getenv(name)
-}
-
 func main() {
 
 	loadConfig()
@@ -640,9 +633,9 @@ func main() {
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "etcd", Value: getEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: getEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: getEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "etcd", Value: utils.GetEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
 	}
 
 	app.Commands = []cli.Command{
