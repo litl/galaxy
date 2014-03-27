@@ -248,7 +248,15 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	_, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), false, false)
+	registry, repository, _ := utils.SplitDockerImage(version)
+
+	err := serviceRuntime.PullImage(registry, repository)
+	if err != nil {
+		fmt.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
+		return
+	}
+
+	_, err = etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), false, false)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
 		return
