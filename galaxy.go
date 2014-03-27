@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
@@ -91,24 +92,20 @@ func poolExists(etcdClient *etcd.Client, env, pool string) (bool, error) {
 func envPoolExists(etcdClient *etcd.Client, env, pool string) (bool, error) {
 	exists, err := envExists(etcdClient, env)
 	if err != nil {
-		fmt.Printf("ERROR: Could not determine if env %s exists: %s\n", env, err)
-		return false, err
+		return false, errors.New(fmt.Sprintf("Could not determine if env `%s` exists: %s.", env, err))
 	}
 
 	if !exists {
-		fmt.Printf("Environment %s does not exist. Create it first.\n", env)
-		return false, nil
+		return false, errors.New(fmt.Sprintf("Environment `%s` does not exist. Create it first.", env))
 	}
 
 	exists, err = poolExists(etcdClient, env, pool)
 	if err != nil {
-		fmt.Printf("ERROR: Could not determine if env %s pool %s exists: %s\n", env, pool, err)
-		return false, err
+		return false, errors.New(fmt.Sprintf("Could not determine if env `%s` pool `%s` exists: %s", env, pool, err))
 	}
 
 	if !exists {
-		fmt.Printf("Pool %s for env %s does not exist. Create it first.\n", pool, env)
-		return false, nil
+		return false, errors.New(fmt.Sprintf("Pool `%s` for env `%s` does not exist. Create it first.", pool, env))
 	}
 	return true, nil
 }
@@ -125,8 +122,7 @@ func appExists(etcdClient *etcd.Client, env, pool, app string) (bool, error) {
 
 	_, err = etcdClient.Get(utils.EtcdJoin(env, pool, app), false, false)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode == ETCD_ENTRY_NOT_EXISTS {
-		fmt.Printf("App %s does not exist. Create it first.\n", app)
-		return false, nil
+		return false, errors.New(fmt.Sprintf("App %s does not exist. Create it first.", app))
 	}
 
 	if err != nil {
@@ -142,8 +138,7 @@ func appList(c *cli.Context) {
 
 	poolExists, err := envPoolExists(etcdClient, c.GlobalString("env"), c.GlobalString("pool"))
 	if err != nil {
-		fmt.Printf("ERROR: Could not determine if env %s pool %s exists: %s\n",
-			c.GlobalString("env"), c.GlobalString("pool"), err)
+		fmt.Printf("ERROR: %s\n", err)
 		return
 	}
 
@@ -214,7 +209,9 @@ func appCreate(c *cli.Context) {
 	_, err = etcdClient.CreateDir(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), 0)
 	if err != nil {
 		fmt.Printf("ERROR: Could not create app: %s\n", err)
+		return
 	}
+	fmt.Printf("App `%s` created in env `%s` on pool `%s`\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 }
 
 func appDelete(c *cli.Context) {
@@ -230,7 +227,9 @@ func appDelete(c *cli.Context) {
 	_, err := etcdClient.Delete(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app), true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not delete app: %s\n", err)
+		return
 	}
+	fmt.Printf("App `%s` deleted from env `%s` on pool `%s`\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 }
 
 func appDeploy(c *cli.Context) {
@@ -303,6 +302,17 @@ func configList(c *cli.Context) {
 	etcdClient := ensureEtcClient(c)
 	app := ensureAppParam(c, "config")
 
+	exists, err := appExists(etcdClient, c.GlobalString("env"), c.GlobalString("pool"), app)
+	if err != nil {
+		fmt.Printf("ERROR: %s\n", err)
+		return
+	}
+
+	if !exists {
+		fmt.Printf("App %s does not exist. Create it first.", app)
+		return
+	}
+
 	resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), true, true)
 	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
 		fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
@@ -336,6 +346,7 @@ func configSet(c *cli.Context) {
 	}
 
 	if !appExists {
+		fmt.Printf("App %s does not exist. Create it first.", app)
 		return
 	}
 
@@ -377,6 +388,7 @@ func configSet(c *cli.Context) {
 		fmt.Printf("ERROR: Could not store config: %s\n", err)
 		return
 	}
+	fmt.Printf("Configuration changed for %s\n", app)
 }
 
 func configUnset(c *cli.Context) {
@@ -413,12 +425,23 @@ func configUnset(c *cli.Context) {
 		fmt.Printf("ERROR: Could not store config: %s\n", err)
 		return
 	}
+	fmt.Printf("Configuration changed for %s\n", app)
 }
 
 func configGet(c *cli.Context) {
 
 	etcdClient := ensureEtcClient(c)
 	app := ensureAppParam(c, "config:get")
+
+	appExists, err := appExists(etcdClient, c.GlobalString("env"), c.GlobalString("pool"), app)
+	if err != nil {
+		return
+	}
+
+	if !appExists {
+		fmt.Printf("App %s does not exist. Create it first.", app)
+		return
+	}
 
 	env := map[string]string{}
 
@@ -517,7 +540,12 @@ func poolList(c *cli.Context) {
 
 	etcdClient := ensureEtcClient(c)
 	resp, err := etcdClient.Get("/"+c.GlobalString("env"), true, true)
-	if err != nil || len(resp.Node.Nodes) == 0 {
+	if err != nil {
+		fmt.Printf("ERROR: Unable to retrieve pools: %s\n", err)
+		return
+	}
+
+	if len(resp.Node.Nodes) == 0 {
 		fmt.Printf("No pools in %s\n", c.GlobalString("env"))
 		return
 	}
@@ -592,13 +620,6 @@ func loadConfig() {
 
 }
 
-func getEnv(name, defaultValue string) string {
-	if os.Getenv(name) == "" {
-		return defaultValue
-	}
-	return os.Getenv(name)
-}
-
 func main() {
 
 	loadConfig()
@@ -612,9 +633,9 @@ func main() {
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "etcd", Value: getEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: getEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: getEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "etcd", Value: utils.GetEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
 	}
 
 	app.Commands = []cli.Command{

@@ -258,7 +258,9 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	}
 
 	err = s.ensureDockerClient().StartContainer(container.ID,
-		&docker.HostConfig{})
+		&docker.HostConfig{
+			PublishAllPorts: true,
+		})
 
 	if err != nil {
 		return container, err

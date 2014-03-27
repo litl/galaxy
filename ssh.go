@@ -17,7 +17,7 @@ func findPrivateKeys(root string) []string {
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		// Skip really big files to avoid OOM errors since they are
 		// unlikely to be private keys
-		if info.Size() > 1024*8 {
+		if info == nil || info.Size() > 1024*8 {
 			return nil
 		}
 		contents, err := ioutil.ReadFile(path)

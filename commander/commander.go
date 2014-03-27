@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
+	"github.com/litl/galaxy/utils"
 	"os"
 )
 
 var (
 	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
 	app             = flag.String("app", "", "App to start")
-	etcdHosts       = flag.String("etcd", "http://127.0.0.1:4001", "Comma-separated list of etcd hosts")
-	env             = flag.String("env", "dev", "Environment namespace")
-	pool            = flag.String("pool", "web", "Pool namespace")
+	etcdHosts       = flag.String("etcd", utils.GetEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), "Comma-separated list of etcd hosts")
+	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
+	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	loop            = flag.Bool("loop", false, "Run continously")
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
