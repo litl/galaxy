@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
-	"os"
 )
 
 var (
