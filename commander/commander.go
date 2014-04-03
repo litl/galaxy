@@ -116,15 +116,12 @@ func main() {
 	}
 
 	restartChan := make(chan *registry.ConfigChange, 10)
+	cancelChan := make(chan struct{})
+	// do we need to cancel ever?
 
-	go restartContainers(restartChan)
+	// how do we get tha last ID?
+	lastID := int64(0)
 
-	for {
-		err := serviceRegistry.WaitForChanges(restartChan)
-		if err != nil {
-			fmt.Printf("ERROR: Unexpected problem waiting for changes: %s\n", err)
-		}
-
-	}
-
+	serviceRegistry.WaitForChanges(lastID, restartChan, cancelChan)
+	restartContainers(restartChan)
 }
