@@ -19,7 +19,9 @@ type ServiceConfig struct {
 }
 
 type ServiceRegistration struct {
-	ID           int64     `json:"id"`
+	// ID is used for ordering and conflict resolution.
+	// Usualy set to time.Now().UnixNano()
+	ID           int64     `json:"-"`
 	ExternalIP   string    `json:"EXTERNAL_IP"`
 	ExternalPort string    `json:"EXTERNAL_PORT"`
 	InternalIP   string    `json:"INTERNAL_IP"`
@@ -32,7 +34,6 @@ type ServiceRegistration struct {
 
 type ServiceRegistry struct {
 	redisPool    redis.Pool
-	redisHosts   []string
 	Env          string
 	Pool         string
 	HostIP       string
@@ -64,6 +65,30 @@ func (r *ServiceRegistry) ensureHostname() string {
 
 	}
 	return r.Hostname
+}
+
+func NewServiceRegistry(redisHost string, env, pool string) *ServiceRegistry {
+	rwTimeout := 5 * time.Second
+
+	redisPool := &redis.Pool{
+		MaxIdle:     1,
+		IdleTimeout: 120 * time.Second,
+		Dial: func() (redisConn, error) {
+			return redis.DialTimeout("tcp", redisHost, rwTimeout, rwTimeout, rwTimeout)
+		},
+		// should we always test here?
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+	}
+
+	s := &ServiceRegistry{
+		redisPool: redisPool,
+		Env:       env,
+		Pool:      pool,
+	}
+	return s
 }
 
 func (r *ServiceRegistry) setHostValue(service string, key string, value string) error {

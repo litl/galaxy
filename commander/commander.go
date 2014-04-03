@@ -12,7 +12,7 @@ import (
 var (
 	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
 	app             = flag.String("app", "", "App to start")
-	etcdHosts       = flag.String("etcd", utils.GetEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), "Comma-separated list of etcd hosts")
+	redisHost       = flag.String("redis", utils.GetEnv("GALAXY_REDIS_HOST", "http://127.0.0.1:6379"), "redis host")
 	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
 	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	loop            = flag.Bool("loop", false, "Run continously")
@@ -22,18 +22,7 @@ var (
 )
 
 func initOrDie() {
-
-	serviceRegistry = &registry.ServiceRegistry{
-		EtcdHosts: *etcdHosts,
-		Env:       *env,
-		Pool:      *pool,
-		//FIXME: Move these closer to functions that use them
-		//HostIp:       "FIXME"
-		//TTL:          uint64(c.Int("ttl")),
-		//Hostname:     hostname,
-		//HostSSHAddr:  c.GlobalString("sshAddr"),
-		//OutputBuffer: outputBuffer,
-	}
+	serviceRegistry = registry.NewServiceRegistry(*redisHost, *env, *pool)
 
 	serviceRuntime = &runtime.ServiceRuntime{}
 
