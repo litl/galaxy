@@ -78,7 +78,8 @@ func (r *ServiceRegistry) ensureHostname() string {
 	return r.Hostname
 }
 
-func NewServiceRegistry(redisHost string, env, pool, hostIP string) *ServiceRegistry {
+// Build the Redis Pool
+func (r *ServiceRegistry) Connect(redisHost string) {
 	rwTimeout := 5 * time.Second
 
 	redisPool := redis.Pool{
@@ -94,13 +95,18 @@ func NewServiceRegistry(redisHost string, env, pool, hostIP string) *ServiceRegi
 		},
 	}
 
-	s := &ServiceRegistry{
-		redisPool: redisPool,
-		Env:       env,
-		Pool:      pool,
-		HostIP:    hostIP,
+	r.redisPool = redisPool
+}
+
+func NewServiceConfig(app, version string, cfg map[string]string) (*ServiceConfig, error) {
+	svcCfg := &ServiceConfig{
+		ID:      time.Now().UnixNano(),
+		Name:    app,
+		Version: version,
+		Env:     cfg,
 	}
-	return s
+
+	return svcCfg, nil
 }
 
 func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *ServiceRegistration {
@@ -126,7 +132,7 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	return &serviceRegistration
 }
 
-func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
+func (r *ServiceRegistry) ServiceConfig(app string) (*ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -143,11 +149,24 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	return svcCfg, nil
 }
 
-func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
-	// TODO: WHAT IS THIS SSH setting?
-	hostPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), "ssh")
-	_ = hostPath
+func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) error {
+	conn := r.redisPool.Get()
+	defer conn.Close()
 
+	env, err := json.Marshal(svcCfg.Env)
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", svcCfg.ID,
+		"version", svcCfg.Version, "environment", env)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
 	var existingRegistration ServiceRegistration
@@ -187,6 +206,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
+	// TODO: use a compare-and-swap SCRIPT
 	_, err = conn.Do("HMSET", registrationPath, "id", serviceRegistration.ID, "location", jsonReg)
 	if err != nil {
 		return err
@@ -284,15 +304,18 @@ func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop c
 	}()
 }
 
+// TODO: log or return error?
 func (r *ServiceRegistry) CountInstances(app string) int {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
 	// TODO: convert to SCAN
+	// TODO: Should this just sum hosts? (this counts all services on all hosts)
 	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, "hosts", "*", app)))
 	if err != nil {
 		fmt.Printf("ERROR: could not count instances - %s\n", err)
 	}
+
 	return len(matches)
 }
 
@@ -333,12 +356,75 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
-	// get all service config versions
-	panic("list apps")
-	return nil, nil
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to scan
+	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*")))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: is it OK to error out early?
+	var appList []ServiceConfig
+	for _, app := range apps {
+		parts := strings.Split(app, "/")
+
+		// app entries should be 3 parts, /env/pool/app
+		if len(parts) != 3 {
+			continue
+		}
+
+		// we don't want host keys
+		if parts[2] == "hosts" {
+			continue
+		}
+
+		cfg, err := r.ServiceConfig(app)
+		if err != nil {
+			return nil, err
+		}
+		appList = append(appList, *cfg)
+	}
+
+	return appList, nil
+}
+
+func (r *ServiceRegistry) ListPools() ([]string, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to scan
+	matches, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "*")))
+	if err != nil {
+		return nil, err
+	}
+
+	// reduce all the keys to just the set of pools
+	poolSet := make(map[string]bool)
+	for _, match := range matches {
+		parts := strings.Split(match, "/")
+		if len(parts) > 2 {
+			poolSet[path.Join(parts[:2]...)] = true
+		}
+	}
+
+	var poolList []string
+	for pool := range poolSet {
+		poolList = append(poolList, pool)
+	}
+
+	return poolList, nil
 }
 
 func (r *ServiceRegistry) DeleteApp(app string) error {
-	panic("delete app!")
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("DEL", path.Join(r.Env, r.Pool, app))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

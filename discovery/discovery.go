@@ -28,7 +28,6 @@ func initOrDie(c *cli.Context) {
 	}
 
 	serviceRegistry = &registry.ServiceRegistry{
-		EtcdHosts:    c.GlobalString("etcd"),
 		Env:          c.GlobalString("env"),
 		Pool:         c.GlobalString("pool"),
 		HostIp:       c.GlobalString("hostIp"),
@@ -36,6 +35,8 @@ func initOrDie(c *cli.Context) {
 		HostSSHAddr:  c.GlobalString("sshAddr"),
 		OutputBuffer: outputBuffer,
 	}
+
+	serviceRegistry.Connect(c.GlobalString("redis"))
 
 	outputBuffer = &utils.OutputBuffer{}
 }
@@ -46,7 +47,7 @@ func main() {
 	app.Name = "discovery"
 	app.Usage = "discovery service registration"
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "etcd", Value: "http://127.0.0.1:4001", Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "redis", Value: "http://127.0.0.1:6379", Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},

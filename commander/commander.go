@@ -23,14 +23,15 @@ var (
 )
 
 func initOrDie() {
-	serviceRegistry = registry.NewServiceRegistry(*redisHost, *env, *pool)
+	// TODO: serviceRegistry needed a host ip??
+	serviceRegistry = registry.NewServiceRegistry(*redisHost, *env, *pool, "")
 
 	serviceRuntime = &runtime.ServiceRuntime{}
 
 }
 
 func startContainersIfNecessary() {
-	serviceConfigs = serviceRegistry.GetServiceConfigs()
+	serviceConfigs = serviceRegistry.ServiceConfigs()
 
 	if len(serviceConfigs) == 0 {
 		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
@@ -112,6 +113,6 @@ func main() {
 	// how do we get tha last ID?
 	lastID := int64(0)
 
-	serviceRegistry.WaitForChanges(lastID, restartChan, cancelChan)
+	serviceRegistry.Watch(lastID, restartChan, cancelChan)
 	restartContainers(restartChan)
 }
