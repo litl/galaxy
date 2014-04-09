@@ -30,7 +30,7 @@ func initOrDie(c *cli.Context) {
 	serviceRegistry = &registry.ServiceRegistry{
 		Env:          c.GlobalString("env"),
 		Pool:         c.GlobalString("pool"),
-		HostIp:       c.GlobalString("hostIp"),
+		HostIP:       c.GlobalString("hostIp"),
 		TTL:          uint64(c.Int("ttl")),
 		HostSSHAddr:  c.GlobalString("sshAddr"),
 		OutputBuffer: outputBuffer,

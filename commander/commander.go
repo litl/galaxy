@@ -24,14 +24,19 @@ var (
 
 func initOrDie() {
 	// TODO: serviceRegistry needed a host ip??
-	serviceRegistry = registry.NewServiceRegistry(*redisHost, *env, *pool, "")
+	serviceRegistry = &registry.ServiceRegistry{
+		Env:  *env,
+		Pool: *pool,
+	}
 
+	serviceRegistry.Connect(*redisHost)
 	serviceRuntime = &runtime.ServiceRuntime{}
 
 }
 
 func startContainersIfNecessary() {
-	serviceConfigs = serviceRegistry.ServiceConfigs()
+	// FIXME: This should list registered services from the service registry
+	serviceConfigs = []*registry.ServiceConfig{}
 
 	if len(serviceConfigs) == 0 {
 		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
