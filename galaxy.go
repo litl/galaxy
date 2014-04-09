@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
@@ -30,9 +31,14 @@ var config struct {
 }
 
 // ensure the registry as a redis host, but only once
-func initRegistry(redis string) {
+func initRegistry(c *cli.Context) {
 	f := func() {
-		serviceRegistry.Connect(redis)
+		serviceRegistry = &registry.ServiceRegistry{
+			Env:  c.GlobalString("env"),
+			Pool: c.GlobalString("pool"),
+		}
+
+		serviceRegistry.Connect(c.GlobalString("redis"))
 	}
 
 	initOnce.Do(f)
@@ -65,7 +71,7 @@ func appExists(app string) (bool, error) {
 }
 
 func appList(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 
 	appList, err := serviceRegistry.ListApps()
 	if err != nil {
@@ -91,14 +97,14 @@ func appList(c *cli.Context) {
 }
 
 func appCreate(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	// TODO: create the actual app entry???
 	panic("create app")
 	//fmt.Printf("App `%s` created in env `%s` on pool `%s`\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 }
 
 func appDelete(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	app := ensureAppParam(c, "app:delete")
 
 	// Don't allow deleting runtime hosts entries
@@ -115,7 +121,7 @@ func appDelete(c *cli.Context) {
 }
 
 func appDeploy(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 
 	app := ensureAppParam(c, "app:deploy")
 
@@ -138,13 +144,24 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	panic(app)
-	// TODO: deploy
-	//       Where do we build the config?
+	svcCfg, err := serviceRegistry.ServiceConfig(app)
+	if err != nil {
+		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
+		return
+	}
+
+	svcCfg.Version = version
+	// TODO, the ID should be handled behinf the scenes
+	svcCfg.ID = time.Now().UnixNano()
+
+	err = serviceRegistry.SetServiceConfig(svcCfg)
+	if err != nil {
+		fmt.Printf("ERROR: Could not store version: %s\n", err)
+	}
 }
 
 func appRun(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 
 	app := ensureAppParam(c, "app:run")
 
@@ -167,7 +184,7 @@ func appRun(c *cli.Context) {
 }
 
 func configList(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	app := ensureAppParam(c, "config")
 
 	cfg, err := serviceRegistry.ServiceConfig(app)
@@ -182,7 +199,7 @@ func configList(c *cli.Context) {
 }
 
 func configSet(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	app := ensureAppParam(c, "config:set")
 
 	env := make(map[string]string)
@@ -215,7 +232,7 @@ func configSet(c *cli.Context) {
 }
 
 func configUnset(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	// TODO: why do we want to unset just a config???
 	//       Does this unregister the host/app too?
 
@@ -257,7 +274,7 @@ func configUnset(c *cli.Context) {
 }
 
 func configGet(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	app := ensureAppParam(c, "config:get")
 
 	cfg, err := serviceRegistry.ServiceConfig(app)
@@ -272,7 +289,7 @@ func configGet(c *cli.Context) {
 }
 
 func login(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 
 	if c.Args().First() == "" {
 		fmt.Println("ERROR: host missing")
@@ -328,7 +345,7 @@ func login(c *cli.Context) {
 }
 
 func logout(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
@@ -348,7 +365,7 @@ func logout(c *cli.Context) {
 }
 
 func poolList(c *cli.Context) {
-	initRegistry(c.GlobalString("redis"))
+	initRegistry(c)
 	pools, err := serviceRegistry.ListPools()
 	if err != nil {
 		fmt.Printf("ERROR: cannot list pools: %s\n", err)
@@ -399,11 +416,6 @@ func main() {
 		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "http://127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
-	}
-
-	serviceRegistry = &registry.ServiceConfig{
-		Env:  c.GlobalString("env"),
-		Pool: c.GlobalString("pool"),
 	}
 
 	app.Commands = []cli.Command{
