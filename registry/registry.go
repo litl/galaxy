@@ -141,7 +141,9 @@ func (r *ServiceRegistry) ServiceConfig(app string) (*ServiceConfig, error) {
 		fmt.Printf("ERROR: could not get ServiceConfig - %s\n", err)
 	}
 
-	svcCfg := &ServiceConfig{}
+	svcCfg := &ServiceConfig{
+		Name: path.Base(app),
+	}
 	err = redis.ScanStruct(matches, svcCfg)
 	if err != nil {
 		return nil, err
@@ -335,12 +337,11 @@ func (r *ServiceRegistry) PoolExists() (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	// TODO: convert to SCAN
-	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*")))
+	pools, err := r.ListPools()
 	if err != nil {
 		return false, err
 	}
-	return len(matches) > 0, nil
+	return utils.StringInSlice(r.Pool, pools), nil
 }
 
 func (r *ServiceRegistry) AppExists(app string) (bool, error) {
@@ -353,41 +354,6 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 		return false, err
 	}
 	return len(matches) > 0, nil
-}
-
-func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
-	// TODO: convert to scan
-	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*")))
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: is it OK to error out early?
-	var appList []ServiceConfig
-	for _, app := range apps {
-		parts := strings.Split(app, "/")
-
-		// app entries should be 3 parts, /env/pool/app
-		if len(parts) != 3 {
-			continue
-		}
-
-		// we don't want host keys
-		if parts[2] == "hosts" {
-			continue
-		}
-
-		cfg, err := r.ServiceConfig(app)
-		if err != nil {
-			return nil, err
-		}
-		appList = append(appList, *cfg)
-	}
-
-	return appList, nil
 }
 
 func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
@@ -434,14 +400,69 @@ func (r *ServiceRegistry) ListPools() ([]string, error) {
 	return matches, nil
 }
 
-func (r *ServiceRegistry) DeleteApp(app string) error {
+func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	_, err := conn.Do("DEL", path.Join(r.Env, r.Pool, app))
-	if err != nil {
-		return err
+	if exists, err := r.AppExists(app); exists || err != nil {
+		return false, err
 	}
 
-	return nil
+	if exists, err := r.PoolExists(); !exists || err != nil {
+		return false, err
+	}
+
+	created, err := redis.String(conn.Do("HMSET", path.Join(r.Env, r.Pool, app), "version", "", "environment", "{}"))
+	if err != nil {
+		return false, err
+	}
+
+	return created == "OK", nil
+}
+
+func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	deleted, err := conn.Do("DEL", path.Join(r.Env, r.Pool, app))
+	if err != nil {
+		return false, err
+	}
+
+	return deleted == 1, nil
+}
+
+func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to scan
+	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*")))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: is it OK to error out early?
+	var appList []ServiceConfig
+	for _, app := range apps {
+		parts := strings.Split(app, "/")
+
+		// app entries should be 3 parts, /env/pool/app
+		if len(parts) != 3 {
+			continue
+		}
+
+		// we don't want host keys
+		if parts[2] == "hosts" {
+			continue
+		}
+
+		cfg, err := r.ServiceConfig(app)
+		if err != nil {
+			return nil, err
+		}
+		appList = append(appList, *cfg)
+	}
+
+	return appList, nil
 }

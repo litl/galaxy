@@ -98,9 +98,29 @@ func appList(c *cli.Context) {
 
 func appCreate(c *cli.Context) {
 	initRegistry(c)
-	// TODO: create the actual app entry???
-	panic("create app")
-	//fmt.Printf("App `%s` created in env `%s` on pool `%s`\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+	app := ensureAppParam(c, "app:delete")
+
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" {
+		return
+	}
+
+	if exists, err := serviceRegistry.PoolExists(); !exists || err != nil {
+		fmt.Printf("ERROR: Pool %s does not exist. Create it first.\n", serviceRegistry.Pool)
+		return
+	}
+
+	created, err := serviceRegistry.CreateApp(app)
+
+	if err != nil {
+		fmt.Printf("ERROR: Could not create app: %s\n", err)
+		return
+	}
+	if created {
+		fmt.Printf("Created %s in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+	} else {
+		fmt.Printf("%s already exists in in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+	}
 }
 
 func appDelete(c *cli.Context) {
@@ -112,12 +132,17 @@ func appDelete(c *cli.Context) {
 		return
 	}
 
-	err := serviceRegistry.DeleteApp(app)
+	deleted, err := serviceRegistry.DeleteApp(app)
 	if err != nil {
 		fmt.Printf("ERROR: Could not delete app: %s\n", err)
 		return
 	}
-	fmt.Printf("App `%s` deleted from env `%s` on pool `%s`\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+	if deleted {
+		fmt.Printf("Deleted %s from env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+	} else {
+		fmt.Printf("%s does not exists in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+	}
+
 }
 
 func appDeploy(c *cli.Context) {
