@@ -390,31 +390,48 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	return appList, nil
 }
 
+func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	//FIXME: Create an associated auto-scaling groups tied to the
+	//pool
+
+	added, err := redis.Int(conn.Do("SADD", path.Join(r.Env, "pools", "*"), name))
+	if err != nil {
+		return false, err
+	}
+	return added == 1, nil
+}
+
+func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	//FIXME: Scan keys to make sure there are no deploye apps before
+	//deleting the pool.
+
+	//FIXME: Shutdown the associated auto-scaling groups tied to the
+	//pool
+
+	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", "*"), name))
+	if err != nil {
+		return false, err
+	}
+	return removed == 1, nil
+}
+
 func (r *ServiceRegistry) ListPools() ([]string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
 	// TODO: convert to scan
-	matches, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "*")))
+	matches, err := redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", "*")))
 	if err != nil {
 		return nil, err
 	}
 
-	// reduce all the keys to just the set of pools
-	poolSet := make(map[string]bool)
-	for _, match := range matches {
-		parts := strings.Split(match, "/")
-		if len(parts) > 2 {
-			poolSet[path.Join(parts[:2]...)] = true
-		}
-	}
-
-	var poolList []string
-	for pool := range poolSet {
-		poolList = append(poolList, pool)
-	}
-
-	return poolList, nil
+	return matches, nil
 }
 
 func (r *ServiceRegistry) DeleteApp(app string) error {

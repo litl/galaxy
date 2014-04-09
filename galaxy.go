@@ -364,6 +364,23 @@ func logout(c *cli.Context) {
 	fmt.Printf("Logout sucessful\n")
 }
 
+func poolCreate(c *cli.Context) {
+
+	initRegistry(c)
+	created, err := serviceRegistry.CreatePool(c.GlobalString("pool"))
+	if err != nil {
+		fmt.Printf("ERROR: Could not create pool: %s\n", err)
+		return
+	}
+
+	if created {
+		fmt.Printf("Pool %s created\n", c.GlobalString("pool"))
+	} else {
+		fmt.Printf("Pool %s already exists\n", c.GlobalString("pool"))
+	}
+
+}
+
 func poolList(c *cli.Context) {
 	initRegistry(c)
 	pools, err := serviceRegistry.ListPools()
@@ -374,6 +391,22 @@ func poolList(c *cli.Context) {
 
 	for _, pool := range pools {
 		fmt.Println(pool)
+	}
+}
+
+func poolDelete(c *cli.Context) {
+
+	initRegistry(c)
+	created, err := serviceRegistry.DeletePool(c.GlobalString("pool"))
+	if err != nil {
+		fmt.Printf("ERROR: Could not delete pool: %s\n", err)
+		return
+	}
+
+	if created {
+		fmt.Printf("Pool %s delete\n", c.GlobalString("pool"))
+	} else {
+		fmt.Printf("Pool %s has apps configured. Delete them first.\n", c.GlobalString("pool"))
 	}
 }
 
@@ -413,7 +446,7 @@ func main() {
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "http://127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
 	}
@@ -490,19 +523,19 @@ func main() {
 			Action:      poolList,
 			Description: "pool",
 		},
-		// TODO: Do we need these??
-		//		{
-		//			Name:        "pool:create",
-		//			Usage:       "create a pool",
-		//			Action:      poolCreate,
-		//			Description: "pool:create",
-		//		},
-		//		{
-		//			Name:        "pool:delete",
-		//			Usage:       "deletes a pool",
-		//			Action:      poolDelete,
-		//			Description: "pool:delete",
-		//		},
+
+		{
+			Name:        "pool:create",
+			Usage:       "create a pool",
+			Action:      poolCreate,
+			Description: "pool:create",
+		},
+		{
+			Name:        "pool:delete",
+			Usage:       "deletes a pool",
+			Action:      poolDelete,
+			Description: "pool:delete",
+		},
 	}
 	app.Run(os.Args)
 }
