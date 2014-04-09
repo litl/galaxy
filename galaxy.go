@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
@@ -19,11 +20,22 @@ import (
 var (
 	serviceRuntime  *runtime.ServiceRuntime
 	serviceRegistry *registry.ServiceRegistry
+
+	initOnce sync.Once
 )
 
 var config struct {
 	Host       string `toml:"host"`
 	PrivateKey string `toml:"private_key"`
+}
+
+// ensure the registry as a redis host, but only once
+func initRegistry(redis string) {
+	f := func() {
+		serviceRegistry.Connect(redis)
+	}
+
+	initOnce.Do(f)
 }
 
 func ensureAppParam(c *cli.Context, command string) string {
@@ -53,6 +65,8 @@ func appExists(app string) (bool, error) {
 }
 
 func appList(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
+
 	appList, err := serviceRegistry.ListApps()
 	if err != nil {
 		fmt.Printf("ERROR: %s", err)
@@ -77,12 +91,14 @@ func appList(c *cli.Context) {
 }
 
 func appCreate(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	// TODO: create the actual app entry???
 	panic("create app")
 	//fmt.Printf("App `%s` created in env `%s` on pool `%s`\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 }
 
 func appDelete(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	app := ensureAppParam(c, "app:delete")
 
 	// Don't allow deleting runtime hosts entries
@@ -99,6 +115,7 @@ func appDelete(c *cli.Context) {
 }
 
 func appDeploy(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 
 	app := ensureAppParam(c, "app:deploy")
 
@@ -127,6 +144,7 @@ func appDeploy(c *cli.Context) {
 }
 
 func appRun(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 
 	app := ensureAppParam(c, "app:run")
 
@@ -149,6 +167,7 @@ func appRun(c *cli.Context) {
 }
 
 func configList(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	app := ensureAppParam(c, "config")
 
 	cfg, err := serviceRegistry.ServiceConfig(app)
@@ -163,6 +182,7 @@ func configList(c *cli.Context) {
 }
 
 func configSet(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	app := ensureAppParam(c, "config:set")
 
 	env := make(map[string]string)
@@ -195,6 +215,7 @@ func configSet(c *cli.Context) {
 }
 
 func configUnset(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	// TODO: why do we want to unset just a config???
 	//       Does this unregister the host/app too?
 
@@ -236,6 +257,7 @@ func configUnset(c *cli.Context) {
 }
 
 func configGet(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	app := ensureAppParam(c, "config:get")
 
 	cfg, err := serviceRegistry.ServiceConfig(app)
@@ -250,6 +272,7 @@ func configGet(c *cli.Context) {
 }
 
 func login(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 
 	if c.Args().First() == "" {
 		fmt.Println("ERROR: host missing")
@@ -305,6 +328,7 @@ func login(c *cli.Context) {
 }
 
 func logout(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	currentUser, err := user.Current()
 	if err != nil {
 		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
@@ -324,6 +348,7 @@ func logout(c *cli.Context) {
 }
 
 func poolList(c *cli.Context) {
+	initRegistry(c.GlobalString("redis"))
 	pools, err := serviceRegistry.ListPools()
 	if err != nil {
 		fmt.Printf("ERROR: cannot list pools: %s\n", err)
@@ -374,6 +399,11 @@ func main() {
 		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "http://127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
+	}
+
+	serviceRegistry = &registry.ServiceConfig{
+		Env:  c.GlobalString("env"),
+		Pool: c.GlobalString("pool"),
 	}
 
 	app.Commands = []cli.Command{
