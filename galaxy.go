@@ -179,10 +179,15 @@ func appDeploy(c *cli.Context) {
 	// TODO, the ID should be handled behinf the scenes
 	svcCfg.ID = time.Now().UnixNano()
 
-	err = serviceRegistry.SetServiceConfig(svcCfg)
+	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store version: %s\n", err)
 	}
+	if !updated {
+		fmt.Printf("%s NOT deployed.\n")
+		return
+	}
+	fmt.Printf("Deployed %s.\n")
 }
 
 func appRun(c *cli.Context) {
@@ -247,12 +252,16 @@ func configSet(c *cli.Context) {
 		return
 	}
 
-	err = serviceRegistry.SetServiceConfig(svcCfg)
+	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
 		fmt.Printf("ERROR: could not set ServiceConfig: %s\n", err)
 		return
 	}
 
+	if !updated {
+		fmt.Printf("Configuration NOT changed for %s\n", app)
+		return
+	}
 	fmt.Printf("Configuration changed for %s\n", app)
 }
 

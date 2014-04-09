@@ -151,21 +151,21 @@ func (r *ServiceRegistry) ServiceConfig(app string) (*ServiceConfig, error) {
 	return svcCfg, nil
 }
 
-func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) error {
+func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
 	env, err := json.Marshal(svcCfg.Env)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	_, err = conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", svcCfg.ID,
+	created, err := conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", svcCfg.ID,
 		"version", svcCfg.Version, "environment", env)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return created == "OK", nil
 }
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
@@ -412,12 +412,8 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 		return false, err
 	}
 
-	created, err := redis.String(conn.Do("HMSET", path.Join(r.Env, r.Pool, app), "version", "", "environment", "{}"))
-	if err != nil {
-		return false, err
-	}
-
-	return created == "OK", nil
+	emptyConfig := &ServiceConfig{}
+	return r.SetServiceConfig(emptyConfig)
 }
 
 func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
