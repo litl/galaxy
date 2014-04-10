@@ -13,7 +13,7 @@ import (
 var (
 	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
 	app             = flag.String("app", "", "App to start")
-	redisHost       = flag.String("redis", utils.GetEnv("GALAXY_REDIS_HOST", "http://127.0.0.1:6379"), "redis host")
+	redisHost       = flag.String("redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
 	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
 	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	loop            = flag.Bool("loop", false, "Run continously")
@@ -36,7 +36,11 @@ func initOrDie() {
 
 func startContainersIfNecessary() {
 	// FIXME: This should list registered services from the service registry
-	serviceConfigs = []*registry.ServiceConfig{}
+	serviceConfigs, err := serviceRegistry.ListApps()
+	if err != nil {
+		fmt.Printf("ERROR: Could not retrieve service configs for /%s/%s\n: %s", *env, *pool, err)
+		os.Exit(0)
+	}
 
 	if len(serviceConfigs) == 0 {
 		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
@@ -54,7 +58,7 @@ func startContainersIfNecessary() {
 			continue
 		}
 
-		container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
+		container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
 			fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version, err)
