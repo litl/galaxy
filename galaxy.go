@@ -235,7 +235,21 @@ func configSet(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config:set")
 
-	env := make(map[string]string)
+	if len(c.Args().Tail()) == 0 {
+		fmt.Printf("ERROR: No config values specified.\n")
+		return
+	}
+
+	// TODO: where's the version??
+	svcCfg, err := serviceRegistry.ServiceConfig(app)
+	if err != nil {
+		fmt.Printf("ERROR: could not get ServiceConfig: %s\n", err)
+		return
+	}
+
+	if svcCfg == nil {
+		svcCfg = registry.NewServiceConfig(app, "", make(map[string]string))
+	}
 
 	for _, arg := range c.Args().Tail() {
 		if !strings.Contains(arg, "=") {
@@ -245,14 +259,7 @@ func configSet(c *cli.Context) {
 
 		}
 		values := strings.Split(arg, "=")
-		env[strings.ToUpper(values[0])] = values[1]
-	}
-
-	// TODO: where's the version??
-	svcCfg, err := registry.NewServiceConfig(app, "some-version", env)
-	if err != nil {
-		fmt.Printf("ERROR: could not create ServiceConfig: %s\n", err)
-		return
+		svcCfg.Env[strings.ToUpper(values[0])] = values[1]
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)

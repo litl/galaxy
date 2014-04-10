@@ -98,7 +98,7 @@ func (r *ServiceRegistry) Connect(redisHost string) {
 	r.redisPool = redisPool
 }
 
-func NewServiceConfig(app, version string, cfg map[string]string) (*ServiceConfig, error) {
+func NewServiceConfig(app, version string, cfg map[string]string) *ServiceConfig {
 	svcCfg := &ServiceConfig{
 		ID:      time.Now().UnixNano(),
 		Name:    app,
@@ -106,7 +106,7 @@ func NewServiceConfig(app, version string, cfg map[string]string) (*ServiceConfi
 		Env:     cfg,
 	}
 
-	return svcCfg, nil
+	return svcCfg
 }
 
 func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *ServiceRegistration {
@@ -143,12 +143,28 @@ func (r *ServiceRegistry) ServiceConfig(app string) (*ServiceConfig, error) {
 
 	svcCfg := &ServiceConfig{
 		Name: path.Base(app),
+		Env:  make(map[string]string),
 	}
 
 	err = redis.ScanStruct(matches, svcCfg)
 	if err != nil {
 		return nil, err
 	}
+
+	for i := 0; i < len(matches); i += 2 {
+		if string(matches[i].([]byte)) == "environment" {
+			var env map[string]interface{}
+			err = json.Unmarshal(matches[i+1].([]byte), &env)
+			if err != nil {
+				return nil, err
+			}
+
+			for k, v := range env {
+				svcCfg.Env[k] = v.(string)
+			}
+		}
+	}
+
 	return svcCfg, nil
 }
 
@@ -413,7 +429,7 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 		return false, err
 	}
 
-	emptyConfig := &ServiceConfig{}
+	emptyConfig := NewServiceConfig(app, "", make(map[string]string))
 	return r.SetServiceConfig(emptyConfig)
 }
 
