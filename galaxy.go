@@ -163,10 +163,13 @@ func appDeploy(c *cli.Context) {
 
 	registry, repository, _ := utils.SplitDockerImage(version)
 
-	err := serviceRuntime.PullImage(registry, repository)
-	if err != nil {
-		fmt.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
-		return
+	image, err := serviceRuntime.InspectImage(version)
+	if image == nil && err == nil {
+		err := serviceRuntime.PullImage(registry, repository)
+		if err != nil {
+			fmt.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
+			return
+		}
 	}
 
 	svcCfg, err := serviceRegistry.ServiceConfig(app)
@@ -187,7 +190,7 @@ func appDeploy(c *cli.Context) {
 		fmt.Printf("%s NOT deployed.\n")
 		return
 	}
-	fmt.Printf("Deployed %s.\n")
+	fmt.Printf("Deployed %s.\n", version)
 }
 
 func appRun(c *cli.Context) {

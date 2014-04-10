@@ -23,9 +23,9 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
 */
 
 type ServiceConfig struct {
-	ID      int64
-	Name    string
-	Version string
+	ID      int64  `redis:"id"`
+	Name    string `redis:"name"`
+	Version string `redis:"version"`
 	Env     map[string]string
 }
 
@@ -144,6 +144,7 @@ func (r *ServiceRegistry) ServiceConfig(app string) (*ServiceConfig, error) {
 	svcCfg := &ServiceConfig{
 		Name: path.Base(app),
 	}
+
 	err = redis.ScanStruct(matches, svcCfg)
 	if err != nil {
 		return nil, err
@@ -453,7 +454,7 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 			continue
 		}
 
-		cfg, err := r.ServiceConfig(app)
+		cfg, err := r.ServiceConfig(parts[2])
 		if err != nil {
 			return nil, err
 		}
