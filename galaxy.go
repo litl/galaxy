@@ -240,7 +240,6 @@ func configSet(c *cli.Context) {
 		return
 	}
 
-	// TODO: where's the version??
 	svcCfg, err := serviceRegistry.ServiceConfig(app)
 	if err != nil {
 		fmt.Printf("ERROR: could not get ServiceConfig: %s\n", err)
@@ -277,44 +276,35 @@ func configSet(c *cli.Context) {
 
 func configUnset(c *cli.Context) {
 	initRegistry(c)
-	// TODO: why do we want to unset just a config???
-	//       Does this unregister the host/app too?
+	app := ensureAppParam(c, "config:unset")
 
-	/*
-			etcdClient := ensureEtcClient(c)
-			app := ensureAppParam(c, "config:unset")
+	if len(c.Args().Tail()) == 0 {
+		fmt.Printf("ERROR: No config values specified.\n")
+		return
+	}
 
-			env := map[string]string{}
+	svcCfg, err := serviceRegistry.ServiceConfig(app)
+	if err != nil {
+		fmt.Printf("ERROR: could not get ServiceConfig: %s\n", err)
+		return
+	}
 
-			resp, err := etcdClient.Get(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), true, true)
-			if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
-				fmt.Printf("ERROR: Could not connect to etcd: %s\n", err)
-				return
-			}
+	for _, arg := range c.Args().Tail() {
+		delete(svcCfg.Env, strings.ToUpper(arg))
+	}
 
-			err = json.Unmarshal([]byte(resp.Node.Value), &env)
-			if err != nil {
-				fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-				return
-			}
+	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
+	if err != nil {
+		fmt.Printf("ERROR: could not set ServiceConfig: %s\n", err)
+		return
+	}
 
-			for _, arg := range c.Args().Tail() {
-				delete(env, strings.ToUpper(arg))
-			}
+	if !updated {
+		fmt.Printf("Configuration NOT changed for %s\n", app)
+		return
+	}
+	fmt.Printf("Configuration changed for %s\n", app)
 
-			serialized, err := json.Marshal(env)
-			if err != nil {
-				fmt.Printf("ERROR: Could not marshall config: %s\n", err)
-				return
-			}
-
-			resp, err = etcdClient.Set(utils.EtcdJoin(c.GlobalString("env"), c.GlobalString("pool"), app, "environment"), string(serialized), 0)
-			if err != nil {
-				fmt.Printf("ERROR: Could not store config: %s\n", err)
-				return
-			}
-		fmt.Printf("Configuration changed for %s\n", app)
-	*/
 }
 
 func configGet(c *cli.Context) {
