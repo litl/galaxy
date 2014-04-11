@@ -188,34 +188,7 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
-	var existingRegistration ServiceRegistration
-
-	panic("get host registration JSON")
-	existingJson := []byte{}
-	err := json.Unmarshal([]byte(existingJson), &existingRegistration)
-	if err != nil {
-		return err
-	}
-
-	if existingRegistration.StartedAt.After(container.Created) {
-		return nil
-	}
-
 	serviceRegistration := r.newServiceRegistration(container)
-	if serviceRegistration.Equals(existingRegistration) {
-		statusLine := strings.Join([]string{
-			container.ID[0:12],
-			registrationPath,
-			container.Config.Image,
-			serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
-			serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
-			utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
-			"In " + "some-amount-of-time", // FIXME: what is this?
-		}, " | ")
-
-		r.OutputBuffer.Log(statusLine)
-		return nil
-	}
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
@@ -231,7 +204,10 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		return err
 	}
 
-	// TODO: SET TTL
+	_, err = conn.Do("EXPIRE", registrationPath, r.TTL)
+	if err != nil {
+		return err
+	}
 
 	statusLine := strings.Join([]string{
 		container.ID[0:12],
@@ -240,7 +216,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
 		serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
 		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
-		"In " + "some-amount-of-time", // FIXME: what is this?
+		"In " + utils.HumanDuration(time.Duration(r.TTL)*time.Second),
 	}, " | ")
 
 	r.OutputBuffer.Log(statusLine)
@@ -255,7 +231,7 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	_, err := conn.Do("DELETE", registrationPath)
+	_, err := conn.Do("DEL", registrationPath)
 	if err != nil {
 		return err
 	}
@@ -286,18 +262,27 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	location, err := redis.Bytes(conn.Do("HGET", regPath, "location"))
+	val, err := conn.Do("HGET", regPath, "location")
+
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(location, &existingRegistration)
-	if err != nil {
-		return nil, err
-	}
+	if val != nil {
+		location, err := redis.Bytes(val, err)
+		err = json.Unmarshal(location, &existingRegistration)
+		if err != nil {
+			return nil, err
+		}
 
-	if existingRegistration.Equals(*desiredServiceRegistration) {
-		return &existingRegistration, nil
+		if existingRegistration.Equals(*desiredServiceRegistration) {
+			expires, err := redis.Int(conn.Do("TTL", regPath))
+			if err != nil {
+				return nil, err
+			}
+			existingRegistration.Expires = time.Now().Add(time.Duration(expires) * time.Second)
+			return &existingRegistration, nil
+		}
 	}
 
 	return nil, fmt.Errorf("NOT FOUND")
