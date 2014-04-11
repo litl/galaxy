@@ -251,9 +251,7 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 	return nil
 }
 
-// TODO: IsRegistered shoud return bool, or be changed to GetServiceRegistration
-func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
-
+func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
 	desiredServiceRegistration := r.newServiceRegistration(container)
 	regPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
@@ -285,7 +283,13 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 		}
 	}
 
-	return nil, fmt.Errorf("NOT FOUND")
+	return nil, nil
+}
+
+func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (bool, error) {
+
+	reg, err := r.GetServiceRegistration(container, serviceConfig)
+	return reg != nil, err
 }
 
 // We need an ID to start from, so we know when something has changed.

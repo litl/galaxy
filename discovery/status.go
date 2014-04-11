@@ -51,7 +51,7 @@ func status(c *cli.Context) {
 			Version: tag,
 		}
 
-		registered, err := serviceRegistry.IsRegistered(dockerContainer, serviceConfig)
+		registered, err := serviceRegistry.GetServiceRegistration(dockerContainer, serviceConfig)
 		if err != nil {
 			fmt.Printf("ERROR: Could not register service %s is running: %s\n",
 				serviceConfig.Version, err)
