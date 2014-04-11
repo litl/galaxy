@@ -138,7 +138,11 @@ func (r *ServiceRegistry) ServiceConfig(app string) (*ServiceConfig, error) {
 
 	matches, err := redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app)))
 	if err != nil {
-		fmt.Printf("ERROR: could not get ServiceConfig - %s\n", err)
+		return nil, err
+	}
+
+	if len(matches) == 0 {
+		return nil, nil
 	}
 
 	svcCfg := &ServiceConfig{

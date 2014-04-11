@@ -75,7 +75,7 @@ func appList(c *cli.Context) {
 
 	appList, err := serviceRegistry.ListApps()
 	if err != nil {
-		fmt.Printf("ERROR: %s", err)
+		fmt.Printf("ERROR: %s\n", err)
 		return
 	}
 
@@ -105,7 +105,12 @@ func appCreate(c *cli.Context) {
 		return
 	}
 
-	if exists, err := serviceRegistry.PoolExists(); !exists || err != nil {
+	exists, err := serviceRegistry.PoolExists()
+	if err != nil {
+		fmt.Printf("ERROR: Could not create app: %s\n", err)
+		return
+	}
+	if !exists {
 		fmt.Printf("ERROR: Pool %s does not exist. Create it first.\n", serviceRegistry.Pool)
 		return
 	}
@@ -174,6 +179,12 @@ func appDeploy(c *cli.Context) {
 
 	svcCfg, err := serviceRegistry.ServiceConfig(app)
 	if err != nil {
+		fmt.Printf("ERROR: Unable to deploy app: %s.\n", err)
+		return
+	}
+
+	println(svcCfg == nil)
+	if svcCfg == nil {
 		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
 		return
 	}
@@ -185,6 +196,7 @@ func appDeploy(c *cli.Context) {
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
 		fmt.Printf("ERROR: Could not store version: %s\n", err)
+		return
 	}
 	if !updated {
 		fmt.Printf("%s NOT deployed.\n")
@@ -205,7 +217,7 @@ func appRun(c *cli.Context) {
 
 	serviceConfig, err := serviceRegistry.ServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: could not get ServiceConfig: %s\n", err)
+		fmt.Printf("ERROR: Unable to run command: %s.\n", err)
 		return
 	}
 
@@ -222,7 +234,7 @@ func configList(c *cli.Context) {
 
 	cfg, err := serviceRegistry.ServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err)
+		fmt.Printf("ERROR: Unable to list config: %s.\n", err)
 		return
 	}
 
@@ -242,7 +254,7 @@ func configSet(c *cli.Context) {
 
 	svcCfg, err := serviceRegistry.ServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: could not get ServiceConfig: %s\n", err)
+		fmt.Printf("ERROR: Unable to set config: %s.\n", err)
 		return
 	}
 
@@ -263,7 +275,7 @@ func configSet(c *cli.Context) {
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		fmt.Printf("ERROR: could not set ServiceConfig: %s\n", err)
+		fmt.Printf("ERROR: Unable to set config: %s.\n", err)
 		return
 	}
 
@@ -285,7 +297,7 @@ func configUnset(c *cli.Context) {
 
 	svcCfg, err := serviceRegistry.ServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: could not get ServiceConfig: %s\n", err)
+		fmt.Printf("ERROR: Unable to unset config: %s.\n", err)
 		return
 	}
 
@@ -295,7 +307,7 @@ func configUnset(c *cli.Context) {
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		fmt.Printf("ERROR: could not set ServiceConfig: %s\n", err)
+		fmt.Printf("ERROR: Unable to unset config: %s.\n", err)
 		return
 	}
 
@@ -313,7 +325,7 @@ func configGet(c *cli.Context) {
 
 	cfg, err := serviceRegistry.ServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err)
+		fmt.Printf("ERROR: Unable to get config: %s.\n", err)
 		return
 	}
 

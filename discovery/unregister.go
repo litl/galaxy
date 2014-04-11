@@ -52,8 +52,8 @@ func unregister(c *cli.Context) {
 
 		err = serviceRegistry.UnRegisterService(dockerContainer, serviceConfig)
 		if err != nil {
-			fmt.Printf("ERROR: Could not unregister service %s is running: %s\n",
-				serviceConfig.Version, err)
+			fmt.Printf("ERROR: Could not unregister %s: %s\n",
+				serviceConfig.Name, err)
 			os.Exit(1)
 		}
 

@@ -34,17 +34,17 @@ func initOrDie() {
 
 }
 
-func startContainersIfNecessary() {
+func startContainersIfNecessary() error {
 	// FIXME: This should list registered services from the service registry
 	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
-		fmt.Printf("ERROR: Could not retrieve service configs for /%s/%s\n: %s", *env, *pool, err)
-		os.Exit(0)
+		fmt.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", *env, *pool, err)
+		return err
 	}
 
 	if len(serviceConfigs) == 0 {
 		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
-		os.Exit(0)
+		return err
 	}
 
 	for _, serviceConfig := range serviceConfigs {
@@ -62,13 +62,14 @@ func startContainersIfNecessary() {
 		if err != nil {
 			fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version, err)
-			os.Exit(1)
+			return err
 		}
 
 		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
 
 		serviceRuntime.StopAllButLatest(serviceConfig.Version, container, *stopCutoff)
 	}
+	return nil
 }
 
 func restartContainers(changedConfigs chan *registry.ConfigChange) {
@@ -109,7 +110,10 @@ func main() {
 	}
 
 	initOrDie()
-	startContainersIfNecessary()
+	err := startContainersIfNecessary()
+	if err != nil {
+		return
+	}
 
 	if !*loop {
 		return
