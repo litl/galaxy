@@ -132,7 +132,7 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	return &serviceRegistration
 }
 
-func (r *ServiceRegistry) ServiceConfig(app string) (*ServiceConfig, error) {
+func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -463,7 +463,7 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 			continue
 		}
 
-		cfg, err := r.ServiceConfig(parts[2])
+		cfg, err := r.GetServiceConfig(parts[2])
 		if err != nil {
 			return nil, err
 		}
