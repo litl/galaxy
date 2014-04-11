@@ -47,7 +47,7 @@ func main() {
 	app.Name = "discovery"
 	app.Usage = "discovery service registration"
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "redis", Value: "http://127.0.0.1:6379", Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "redis", Value: "127.0.0.1:6379", Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
