@@ -1,0 +1,26 @@
+[
+  {
+    "name": "pretzel",
+    "address": "127.0.0.1:6666",
+    "backends": [
+      {
+        "name": "local",
+        "address": "127.0.0.1:6767",
+        "weight": 1
+      },
+      {
+        "name": "local2",
+        "address": "127.0.0.1:6767",
+        "check_address": "",
+        "weight": 1
+      }
+    ],
+    "balance": "",
+    "check_interval": 2000,
+    "fall": 2,
+    "rise": 2,
+    "client_timeout": 2000,
+    "server_timeout": 2000,
+    "connect_timeout": 2000
+  }
+]
