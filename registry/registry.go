@@ -296,26 +296,6 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 	return reg != nil, err
 }
 
-// We need an ID to start from, so we know when something has changed.
-// Return nil,nil if mothing has changed (for now)
-func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop chan struct{}) {
-	watchPath := path.Join(r.Env, r.Pool, "*")
-
-	go func() {
-		// TODO: default polling interval
-		ticker := time.NewTicker(2 * time.Second)
-		select {
-		case <-stop:
-			ticker.Stop()
-			return
-		case <-ticker.C:
-			panic("KEYS " + watchPath)
-			// GET CONFIGS AND CHECK IDs
-			changes <- nil
-		}
-	}()
-}
-
 // TODO: log or return error?
 func (r *ServiceRegistry) CountInstances(app string) int {
 	conn := r.redisPool.Get()
@@ -471,4 +451,79 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	}
 
 	return appList, nil
+}
+
+// create a snapshot of all changes since our last known ID.
+func (r *ServiceRegistry) configChangesSince(since int64) ([]*ServiceConfig, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	var changes []*ServiceConfig
+
+	keys, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*")))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, key := range keys {
+		if len(strings.Split(key, "/")) != 3 {
+			// not a service config (env/pool/service)
+			continue
+		}
+
+		cfg := ServiceConfig{}
+		values, err := redis.Values(conn.Do("HGETALL", key))
+		if err != nil {
+			// TODO: log this?
+			continue
+		}
+		err = redis.ScanStruct(values, &cfg)
+		if err != nil {
+			// TODO: log this too?
+			continue
+		}
+
+		if cfg.ID > since {
+			changes = append(changes, &cfg)
+		}
+	}
+
+	return changes, nil
+}
+
+// Poll the registry, returning all ServiceConfig changes since the speicified ID.
+func (r *ServiceRegistry) Watch(since int64, changes chan *ConfigChange, stop chan struct{}) {
+	go func() {
+		// TODO: default polling interval
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				cfgChanges, err := r.configChangesSince(since)
+				if err != nil {
+					changes <- &ConfigChange{Error: err}
+					return
+				}
+
+				// send back all current changes before polling again
+				for _, c := range cfgChanges {
+					select {
+					case changes <- &ConfigChange{c, nil}:
+						// update the last seen ID from these changes
+						if c.ID > since {
+							since = c.ID
+						}
+
+					case <-stop:
+						return
+					}
+				}
+
+			}
+		}
+	}()
 }
