@@ -30,7 +30,7 @@ func findPrivateKeys(root string) []string {
 	return availableKeys
 }
 
-func findSshKeys(root string) []string {
+func findSSHKeys(root string) []string {
 
 	// Looks in .ssh dir and .vagrant.d dir for ssh keys
 	var availableKeys = []string{}
@@ -87,7 +87,7 @@ func filterHost(host string) string {
 	return conn
 }
 
-func Sshcmd(host string, command string, background bool, debug bool) {
+func SSHCmd(host string, command string, background bool, debug bool) {
 
 	keys := new(keychain)
 	// Add path to id_rsa file

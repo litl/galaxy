@@ -55,8 +55,8 @@ func register(c *cli.Context) {
 
 			err = serviceRegistry.RegisterService(dockerContainer, serviceConfig)
 			if err != nil {
-				fmt.Printf("ERROR: Could not register service %s is running: %s\n",
-					serviceConfig.Version, err)
+				fmt.Printf("ERROR: Could not register %s: %s\n",
+					serviceConfig.Name, err)
 				os.Exit(1)
 			}
 

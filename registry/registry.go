@@ -3,39 +3,36 @@ package registry
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/coreos/go-etcd/etcd"
-	"github.com/fsouza/go-dockerclient"
-	"github.com/litl/galaxy/utils"
 	"os"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/fsouza/go-dockerclient"
+	"github.com/garyburd/redigo/redis"
+	"github.com/litl/galaxy/utils"
 )
 
-const (
-	ETCD_ENTRY_ALREADY_EXISTS = 105
-	ETCD_ENTRY_NOT_EXISTS     = 100
-)
+/*
+All config opbects in redis will be stored in a hash with an id key.
+Services will have id, version and environment keys; while Hosts will have id
+and location keys.
+
+TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
+      switch to ORDERED SETS and log changes
+*/
 
 type ServiceConfig struct {
-	Name    string
-	Version string
+	ID      int64  `redis:"id"`
+	Name    string `redis:"name"`
+	Version string `redis:"version"`
 	Env     map[string]string
 }
 
-type ServiceRegistry struct {
-	ectdClient   *etcd.Client
-	EtcdHosts    string
-	Env          string
-	Pool         string
-	HostIp       string
-	Hostname     string
-	TTL          uint64
-	HostSSHAddr  string
-	OutputBuffer *utils.OutputBuffer
-}
-
 type ServiceRegistration struct {
+	// ID is used for ordering and conflict resolution.
+	// Usualy set to time.Now().UnixNano()
+	ID           int64     `json:"-"`
 	ExternalIP   string    `json:"EXTERNAL_IP"`
 	ExternalPort string    `json:"EXTERNAL_PORT"`
 	InternalIP   string    `json:"INTERNAL_IP"`
@@ -44,6 +41,17 @@ type ServiceRegistration struct {
 	StartedAt    time.Time `json:"STARTED_AT"`
 	Expires      time.Time `json:"-"`
 	Path         string    `json:"-"`
+}
+
+type ServiceRegistry struct {
+	redisPool    redis.Pool
+	Env          string
+	Pool         string
+	HostIP       string
+	Hostname     string
+	TTL          uint64
+	HostSSHAddr  string
+	OutputBuffer *utils.OutputBuffer
 }
 
 type ConfigChange struct {
@@ -58,12 +66,6 @@ func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
 		s.InternalPort == other.InternalPort
 }
 
-func (r *ServiceRegistry) setHostValue(service string, key string, value string) error {
-	_, err := r.ensureEtcdClient().Set(utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(),
-		service, key), value, 0)
-	return err
-}
-
 func (r *ServiceRegistry) ensureHostname() string {
 	if r.Hostname == "" {
 		hostname, err := os.Hostname()
@@ -76,18 +78,38 @@ func (r *ServiceRegistry) ensureHostname() string {
 	return r.Hostname
 }
 
-func (r *ServiceRegistry) ensureEtcdClient() *etcd.Client {
-	if r.ectdClient == nil {
-		if r.EtcdHosts == "" {
-			panic("No etcd hosts configured")
-		}
-		machines := strings.Split(r.EtcdHosts, ",")
-		r.ectdClient = etcd.NewClient(machines)
+// Build the Redis Pool
+func (r *ServiceRegistry) Connect(redisHost string) {
+	rwTimeout := 5 * time.Second
+
+	redisPool := redis.Pool{
+		MaxIdle:     1,
+		IdleTimeout: 120 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			return redis.DialTimeout("tcp", redisHost, rwTimeout, rwTimeout, rwTimeout)
+		},
+		// test every connection for now
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
 	}
-	return r.ectdClient
+
+	r.redisPool = redisPool
 }
 
-func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *ServiceRegistration {
+func NewServiceConfig(app, version string, cfg map[string]string) *ServiceConfig {
+	svcCfg := &ServiceConfig{
+		ID:      time.Now().UnixNano(),
+		Name:    app,
+		Version: version,
+		Env:     cfg,
+	}
+
+	return svcCfg
+}
+
+func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *ServiceRegistration {
 	//FIXME: We're using the first found port and assuming it's tcp.
 	//How should we handle a service that exposes multiple ports
 	//as well as tcp vs udp ports.
@@ -99,7 +121,8 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 	}
 
 	serviceRegistration := ServiceRegistration{
-		ExternalIP:   r.HostIp,
+		ID:           time.Now().UnixNano(),
+		ExternalIP:   r.HostIP,
 		ExternalPort: externalPort,
 		InternalIP:   container.NetworkSettings.IPAddress,
 		InternalPort: internalPort,
@@ -109,130 +132,83 @@ func (r *ServiceRegistry) makeServiceRegistration(container *docker.Container) *
 	return &serviceRegistration
 }
 
-func (r *ServiceRegistry) GetServiceConfigs() []*ServiceConfig {
-	var serviceConfigs []*ServiceConfig
+func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
 
-	resp, err := r.ensureEtcdClient().Get(utils.EtcdJoin(r.Env, r.Pool), false, true)
+	matches, err := redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app)))
 	if err != nil {
-		fmt.Printf("ERROR: Could not retrieve service config: %s\n", err)
-		return serviceConfigs
+		return nil, err
 	}
-	for _, node := range resp.Node.Nodes {
-		service := path.Base(node.Key)
 
-		if service == "hosts" {
-			continue
-		}
+	if len(matches) == 0 {
+		return nil, nil
+	}
 
-		serviceConfig := &ServiceConfig{
-			Name: service,
-			Env:  make(map[string]string),
-		}
+	svcCfg := &ServiceConfig{
+		Name: path.Base(app),
+		Env:  make(map[string]string),
+	}
 
-		for _, configKey := range node.Nodes {
-			if strings.HasSuffix(configKey.Key, "/version") {
-				serviceConfig.Version = configKey.Value
-			} else if strings.HasSuffix(configKey.Key, "/environment") {
-				err := json.Unmarshal([]byte(configKey.Value), &serviceConfig.Env)
-				if err != nil {
-					fmt.Printf("ERROR: Could not unmarshall config: %s\n", err)
-					return serviceConfigs
-				}
-			} else {
-				fmt.Printf("WARN: Unknown entry %s. Ignoring\n", configKey.Key)
+	err = redis.ScanStruct(matches, svcCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < len(matches); i += 2 {
+		if string(matches[i].([]byte)) == "environment" {
+			var env map[string]interface{}
+			err = json.Unmarshal(matches[i+1].([]byte), &env)
+			if err != nil {
+				return nil, err
+			}
+
+			for k, v := range env {
+				svcCfg.Env[k] = v.(string)
 			}
 		}
-		serviceConfigs = append(serviceConfigs, serviceConfig)
 	}
-	return serviceConfigs
+
+	return svcCfg, nil
 }
 
-func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
-	serviceConfigs := r.GetServiceConfigs()
-	for _, config := range serviceConfigs {
-		if config.Name == app {
-			return config, nil
-		}
+func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	env, err := json.Marshal(svcCfg.Env)
+	if err != nil {
+		return false, err
 	}
-	return nil, nil
+
+	created, err := conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", svcCfg.ID,
+		"version", svcCfg.Version, "environment", env)
+	if err != nil {
+		return false, err
+	}
+	return created == "OK", nil
 }
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
+	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
-	_, err := r.ensureEtcdClient().CreateDir(utils.EtcdJoin(r.Env, r.Pool, "hosts"), 0)
-	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
-		return err
-	}
-
-	hostPath := utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(), "ssh")
-	_, err = r.ensureEtcdClient().Set(hostPath, r.HostSSHAddr, r.TTL)
-	if err != nil {
-		return err
-	}
-
-	registrationPath := utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
-	registration, err := r.ensureEtcdClient().CreateDir(registrationPath, r.TTL)
-	if err != nil {
-
-		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_ALREADY_EXISTS {
-			return err
-		}
-
-		registration, err = r.ensureEtcdClient().UpdateDir(registrationPath, r.TTL)
-		if err != nil {
-			return err
-		}
-	}
-
-	var existingRegistration ServiceRegistration
-	existingJson, err := r.ensureEtcdClient().Get(utils.EtcdJoin(registrationPath, "location"), false, false)
-	if err != nil {
-		if err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
-			return err
-		}
-	} else {
-		err = json.Unmarshal([]byte(existingJson.Node.Value), &existingRegistration)
-		if err != nil {
-			return err
-		}
-
-		if existingRegistration.StartedAt.After(container.Created) {
-			return nil
-		}
-	}
-
-	serviceRegistration := r.makeServiceRegistration(container)
-	if serviceRegistration.Equals(existingRegistration) {
-		statusLine := strings.Join([]string{
-			container.ID[0:12],
-			registrationPath,
-			container.Config.Image,
-			serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
-			serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
-			utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
-			"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
-		}, " | ")
-
-		r.OutputBuffer.Log(statusLine)
-		return nil
-	}
+	serviceRegistration := r.newServiceRegistration(container)
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
 		return err
 	}
 
-	err = r.setHostValue(serviceConfig.Name, "location", string(jsonReg))
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: use a compare-and-swap SCRIPT
+	_, err = conn.Do("HMSET", registrationPath, "id", serviceRegistration.ID, "location", jsonReg)
 	if err != nil {
 		return err
 	}
 
-	jsonReg, err = json.Marshal(serviceConfig.Env)
-	if err != nil {
-		return err
-	}
-
-	err = r.setHostValue(serviceConfig.Name, "environment", string(jsonReg))
+	_, err = conn.Do("EXPIRE", registrationPath, r.TTL)
 	if err != nil {
 		return err
 	}
@@ -244,7 +220,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
 		serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
 		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
-		"In " + utils.HumanDuration(registration.Node.Expiration.Sub(time.Now())),
+		"In " + utils.HumanDuration(time.Duration(r.TTL)*time.Second),
 	}, " | ")
 
 	r.OutputBuffer.Log(statusLine)
@@ -254,10 +230,13 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
 
-	registrationPath := utils.EtcdJoin(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
+	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
-	_, err := r.ensureEtcdClient().Delete(registrationPath, true)
-	if err != nil && err.(*etcd.EtcdError).ErrorCode != ETCD_ENTRY_NOT_EXISTS {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("DEL", registrationPath)
+	if err != nil {
 		return err
 	}
 
@@ -276,81 +255,220 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 	return nil
 }
 
-func (r *ServiceRegistry) findRegistration(node *etcd.Node, criteria *ServiceRegistration) (*ServiceRegistration, error) {
+func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
+	desiredServiceRegistration := r.newServiceRegistration(container)
+	regPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
-	var serviceRegistration ServiceRegistration
+	var existingRegistration ServiceRegistration
 
-	if strings.HasSuffix(node.Key, "location") {
-		err := json.Unmarshal([]byte(node.Value), &serviceRegistration)
-		if err != nil {
-			return nil, err
-		}
+	conn := r.redisPool.Get()
+	defer conn.Close()
 
-		if serviceRegistration.Equals(*criteria) {
-			serviceRegistration.Path = path.Dir(node.Key)
-			return &serviceRegistration, nil
-		}
-	}
+	val, err := conn.Do("HGET", regPath, "location")
 
-	for _, child := range node.Nodes {
-		serviceRegistration, err := r.findRegistration(&child, criteria)
-		if err != nil {
-			return nil, err
-		}
-
-		if serviceRegistration != nil {
-			// This is ugly.  We don't have the TTL on the "location" entry since it is
-			// set on the parent node so after the first match, set the parents expiration
-			// (based on TTL) for the registration if it's not alreayd set.
-			if serviceRegistration.Expires.IsZero() {
-				serviceRegistration.Expires = time.Now().Add(time.Duration(node.TTL) * time.Second)
-			}
-			return serviceRegistration, err
-		}
-	}
-
-	return nil, nil
-
-}
-
-func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
-	registrations, err := r.ensureEtcdClient().Get("/", true, true)
 	if err != nil {
 		return nil, err
 	}
 
-	desiredServiceRegistration := r.makeServiceRegistration(container)
-	return r.findRegistration(registrations.Node, desiredServiceRegistration)
+	if val != nil {
+		location, err := redis.Bytes(val, err)
+		err = json.Unmarshal(location, &existingRegistration)
+		if err != nil {
+			return nil, err
+		}
 
+		if existingRegistration.Equals(*desiredServiceRegistration) {
+			expires, err := redis.Int(conn.Do("TTL", regPath))
+			if err != nil {
+				return nil, err
+			}
+			existingRegistration.Expires = time.Now().Add(time.Duration(expires) * time.Second)
+			return &existingRegistration, nil
+		}
+	}
+
+	return nil, nil
 }
 
-func (r *ServiceRegistry) WaitForChanges(changedConfigs chan *ConfigChange) error {
+func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (bool, error) {
 
-	responseChan := make(chan *etcd.Response, 50)
+	reg, err := r.GetServiceRegistration(container, serviceConfig)
+	return reg != nil, err
+}
+
+// We need an ID to start from, so we know when something has changed.
+// Return nil,nil if mothing has changed (for now)
+func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop chan struct{}) {
+	watchPath := path.Join(r.Env, r.Pool, "*")
+
 	go func() {
-		for {
-
-			resp := <-responseChan
-
-			parts := strings.Split(resp.Node.Key, "/")
-
-			// Skip the "hosts" special entry which is for runtime info
-			if parts[3] != "hosts" {
-				changedConfig, err := r.GetServiceConfig(parts[3])
-				if err != nil {
-					changedConfigs <- &ConfigChange{
-						Error: err,
-					}
-					continue
-
-				}
-				changedConfigs <- &ConfigChange{
-					ServiceConfig: changedConfig,
-				}
-			}
+		// TODO: default polling interval
+		ticker := time.NewTicker(2 * time.Second)
+		select {
+		case <-stop:
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			panic("KEYS " + watchPath)
+			// GET CONFIGS AND CHECK IDs
+			changes <- nil
 		}
 	}()
+}
 
-	_, err := r.ensureEtcdClient().Watch(utils.EtcdJoin(r.Env, r.Pool), 0, true, responseChan, nil)
-	return err
+// TODO: log or return error?
+func (r *ServiceRegistry) CountInstances(app string) int {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to SCAN
+	// TODO: Should this just sum hosts? (this counts all services on all hosts)
+	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, "hosts", "*", app)))
+	if err != nil {
+		fmt.Printf("ERROR: could not count instances - %s\n", err)
+	}
+
+	return len(matches)
+}
+
+func (r *ServiceRegistry) EnvExists() (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to SCAN
+	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, "*")))
+	if err != nil {
+		return false, err
+	}
+	return len(matches) > 0, nil
+}
+
+func (r *ServiceRegistry) PoolExists() (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	pools, err := r.ListPools()
+	if err != nil {
+		return false, err
+	}
+	return utils.StringInSlice(r.Pool, pools), nil
+}
+
+func (r *ServiceRegistry) AppExists(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to SCAN
+	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, app)))
+	if err != nil {
+		return false, err
+	}
+	return len(matches) > 0, nil
+}
+
+func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	//FIXME: Create an associated auto-scaling groups tied to the
+	//pool
+
+	added, err := redis.Int(conn.Do("SADD", path.Join(r.Env, "pools", "*"), name))
+	if err != nil {
+		return false, err
+	}
+	return added == 1, nil
+}
+
+func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	//FIXME: Scan keys to make sure there are no deploye apps before
+	//deleting the pool.
+
+	//FIXME: Shutdown the associated auto-scaling groups tied to the
+	//pool
+
+	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", "*"), name))
+	if err != nil {
+		return false, err
+	}
+	return removed == 1, nil
+}
+
+func (r *ServiceRegistry) ListPools() ([]string, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to scan
+	matches, err := redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", "*")))
+	if err != nil {
+		return nil, err
+	}
+
+	return matches, nil
+}
+
+func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	if exists, err := r.AppExists(app); exists || err != nil {
+		return false, err
+	}
+
+	if exists, err := r.PoolExists(); !exists || err != nil {
+		return false, err
+	}
+
+	emptyConfig := NewServiceConfig(app, "", make(map[string]string))
+	return r.SetServiceConfig(emptyConfig)
+}
+
+func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	deleted, err := conn.Do("DEL", path.Join(r.Env, r.Pool, app))
+	if err != nil {
+		return false, err
+	}
+
+	return deleted == 1, nil
+}
+
+func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: convert to scan
+	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*")))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: is it OK to error out early?
+	var appList []ServiceConfig
+	for _, app := range apps {
+		parts := strings.Split(app, "/")
+
+		// app entries should be 3 parts, /env/pool/app
+		if len(parts) != 3 {
+			continue
+		}
+
+		// we don't want host keys
+		if parts[2] == "hosts" {
+			continue
+		}
+
+		cfg, err := r.GetServiceConfig(parts[2])
+		if err != nil {
+			return nil, err
+		}
+		appList = append(appList, *cfg)
+	}
+
+	return appList, nil
 }

@@ -3,16 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
-	"os"
 )
 
 var (
 	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
 	app             = flag.String("app", "", "App to start")
-	etcdHosts       = flag.String("etcd", utils.GetEnv("GALAXY_ETCD_HOST", "http://127.0.0.1:4001"), "Comma-separated list of etcd hosts")
+	redisHost       = flag.String("redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
 	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
 	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	loop            = flag.Bool("loop", false, "Run continously")
@@ -22,29 +23,28 @@ var (
 )
 
 func initOrDie() {
-
+	// TODO: serviceRegistry needed a host ip??
 	serviceRegistry = &registry.ServiceRegistry{
-		EtcdHosts: *etcdHosts,
-		Env:       *env,
-		Pool:      *pool,
-		//FIXME: Move these closer to functions that use them
-		//HostIp:       "FIXME"
-		//TTL:          uint64(c.Int("ttl")),
-		//Hostname:     hostname,
-		//HostSSHAddr:  c.GlobalString("sshAddr"),
-		//OutputBuffer: outputBuffer,
+		Env:  *env,
+		Pool: *pool,
 	}
 
+	serviceRegistry.Connect(*redisHost)
 	serviceRuntime = &runtime.ServiceRuntime{}
 
 }
 
-func startContainersIfNecessary() {
-	serviceConfigs = serviceRegistry.GetServiceConfigs()
+func startContainersIfNecessary() error {
+	// FIXME: This should list registered services from the service registry
+	serviceConfigs, err := serviceRegistry.ListApps()
+	if err != nil {
+		fmt.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", *env, *pool, err)
+		return err
+	}
 
 	if len(serviceConfigs) == 0 {
 		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
-		os.Exit(0)
+		return err
 	}
 
 	for _, serviceConfig := range serviceConfigs {
@@ -58,17 +58,18 @@ func startContainersIfNecessary() {
 			continue
 		}
 
-		container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
+		container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
 			fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version, err)
-			os.Exit(1)
+			return err
 		}
 
 		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
 
 		serviceRuntime.StopAllButLatest(serviceConfig.Version, container, *stopCutoff)
 	}
+	return nil
 }
 
 func restartContainers(changedConfigs chan *registry.ConfigChange) {
@@ -109,22 +110,22 @@ func main() {
 	}
 
 	initOrDie()
-	startContainersIfNecessary()
+	err := startContainersIfNecessary()
+	if err != nil {
+		return
+	}
 
 	if !*loop {
 		return
 	}
 
 	restartChan := make(chan *registry.ConfigChange, 10)
+	cancelChan := make(chan struct{})
+	// do we need to cancel ever?
 
-	go restartContainers(restartChan)
+	// how do we get tha last ID?
+	lastID := int64(0)
 
-	for {
-		err := serviceRegistry.WaitForChanges(restartChan)
-		if err != nil {
-			fmt.Printf("ERROR: Unexpected problem waiting for changes: %s\n", err)
-		}
-
-	}
-
+	serviceRegistry.Watch(lastID, restartChan, cancelChan)
+	restartContainers(restartChan)
 }

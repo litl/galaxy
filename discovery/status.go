@@ -7,7 +7,6 @@ import (
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
-	"os"
 	"strings"
 	"time"
 )
@@ -51,11 +50,11 @@ func status(c *cli.Context) {
 			Version: tag,
 		}
 
-		registered, err := serviceRegistry.IsRegistered(dockerContainer, serviceConfig)
+		registered, err := serviceRegistry.GetServiceRegistration(dockerContainer, serviceConfig)
 		if err != nil {
-			fmt.Printf("ERROR: Could not register service %s is running: %s\n",
-				serviceConfig.Version, err)
-			os.Exit(1)
+			fmt.Printf("ERROR: Unable to determine status of %s: %s\n",
+				serviceConfig.Name, err)
+			return
 		}
 
 		if registered != nil {
