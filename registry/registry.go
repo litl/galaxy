@@ -181,7 +181,7 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 		return false, err
 	}
 
-	created, err := conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", svcCfg.ID,
+	created, err := conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", time.Now().UnixNano(),
 		"version", svcCfg.Version, "environment", env)
 	if err != nil {
 		return false, err
