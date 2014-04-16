@@ -3,9 +3,9 @@ package runtime
 import (
 	"errors"
 	"fmt"
+	auth "github.com/dotcloud/docker/registry"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/registry"
-	"github.com/litl/galaxy/runtime/auth"
 	"github.com/litl/galaxy/utils"
 	"os"
 	"os/signal"

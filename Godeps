@@ -25,6 +25,31 @@
 			"Rev": "5c0151c64399ff9a8087c2e29ae96145ede7cfc2"
 		},
 		{
+			"ImportPath": "github.com/dotcloud/docker/dockerversion",
+			"Comment": "v0.10.0-91-g24c4c3e",
+			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
+		},
+		{
+			"ImportPath": "github.com/dotcloud/docker/pkg/term",
+			"Comment": "v0.10.0-91-g24c4c3e",
+			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
+		},
+		{
+			"ImportPath": "github.com/dotcloud/docker/registry",
+			"Comment": "v0.10.0-91-g24c4c3e",
+			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
+		},
+		{
+			"ImportPath": "github.com/dotcloud/docker/utils",
+			"Comment": "v0.10.0-91-g24c4c3e",
+			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
+		},
+		{
+			"ImportPath": "github.com/dotcloud/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar",
+			"Comment": "v0.10.0-91-g24c4c3e",
+			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
+		},
+		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
 			"Comment": "0.2.1-59-gff447df",
 			"Rev": "ff447df9b0d911b47618056b3ed9f84148fde765"
@@ -35,8 +60,8 @@
 		},
 		{
 			"ImportPath": "github.com/ryanuber/columnize",
-			"Comment": "v0.1.0-7-g877318e",
-			"Rev": "877318e3eacd9fa79ab2aabc1722b33c186a7f6d"
+			"Comment": "v1.1.0",
+			"Rev": "fef4ee9c9ecfb000e86ca19ac9cea7d58200d5b6"
 		},
 		{
 			"ImportPath": "github.com/wsxiaoys/terminal/color",
