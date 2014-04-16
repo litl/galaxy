@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -248,6 +249,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
+		Name: serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID, 10),
 		Config: &docker.Config{
 			Image: img,
 			Env:   envVars,
