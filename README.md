@@ -8,21 +8,27 @@ galaxy
 ===
 
 The project handles deployment of services in docker containers, registration of those
-services w/ etcd, discovery and proxying of registered services through etcd and haproxy.
+services using redis, discovery and proxying of registered services.
 
-There will be three sub-projects tentatively named: commander, discovery and shuttle.  Commander
-deploys service containers.  Discovery registers services contianers in etcd.
-Shuttle discovers and proxies connections to containers.
+There are three sub-projects: commander, discovery and shuttle.
+
+  * Commander - deploys service containers.
+  * Discovery - registers and discovers services containers through the docker API and redis. It
+    configures routes using the Shuttle API.
+  * Shuttle - A TCP proxy that can be configured through a HTTP based API.
 
 === Dev Setup
 
-You need to have a docker 0.8 env available.  Set that up w/ boot2docker, vagrant, etc..
+You need to have a docker 0.9+ env available.  Set that up w/ boot2docker or use the provided
+vagrant file.
 
-1.  Start etcd
-`docker run -i -p 127.0.0.1:4001:4001 -p 7001:7001 -d -t coreos/etcd`
-2. Add a service VERSION
-`curl -v -L http://127.0.0.1:4001/v2/keys/dev/web/beanstalkd/VERSION -XPUT -d value="registry.wovops.net/beanstalkd:latest"`
-3. Add service env vars
-`curl -v -L http://172.17.0.3:4001/v2/keys/dev/web/beanstalkd/PORT -XPUT -d value="12345"`
-4. Run commander in foreground
-`go install github.com/litl/galaxy/commander && commander`
+1. Install vagrant 1.5.2
+2. Install virtualbox 4.3.10
+3. vagrant up
+4. vagrant ssh
+5. cd /vagrant
+6. godep restore
+7. make
+8. goreman start
+
+
