@@ -301,7 +301,6 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 // We need an ID to start from, so we know when something has changed.
 // Return nil,nil if mothing has changed (for now)
 func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop chan struct{}) {
-	watchPath := path.Join(r.Env, r.Pool, "*")
 
 	go func() {
 		// TODO: default polling interval
@@ -311,9 +310,18 @@ func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop c
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			panic("KEYS " + watchPath)
-			// GET CONFIGS AND CHECK IDs
-			changes <- nil
+			serviceConfigs, err := r.ListApps()
+			if err != nil {
+				changes <- &ConfigChange{
+					Error: err,
+				}
+				break
+			}
+			for _, changedConfig := range serviceConfigs {
+				changes <- &ConfigChange{
+					ServiceConfig: &changedConfig,
+				}
+			}
 		}
 	}()
 }

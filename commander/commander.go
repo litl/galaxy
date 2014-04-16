@@ -111,7 +111,7 @@ func main() {
 
 	initOrDie()
 	err := startContainersIfNecessary()
-	if err != nil {
+	if err != nil && !*loop {
 		return
 	}
 
