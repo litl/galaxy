@@ -23,6 +23,8 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
 */
 
 type ServiceConfig struct {
+	// ID is used for ordering and conflict resolution.
+	// Usualy set to time.Now().UnixNano()
 	ID      int64  `redis:"id"`
 	Name    string `redis:"name"`
 	Version string `redis:"version"`
@@ -30,9 +32,6 @@ type ServiceConfig struct {
 }
 
 type ServiceRegistration struct {
-	// ID is used for ordering and conflict resolution.
-	// Usualy set to time.Now().UnixNano()
-	ID           int64     `json:"-"`
 	ExternalIP   string    `json:"EXTERNAL_IP"`
 	ExternalPort string    `json:"EXTERNAL_PORT"`
 	InternalIP   string    `json:"INTERNAL_IP"`
@@ -121,7 +120,6 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	}
 
 	serviceRegistration := ServiceRegistration{
-		ID:           time.Now().UnixNano(),
 		ExternalIP:   r.HostIP,
 		ExternalPort: externalPort,
 		InternalIP:   container.NetworkSettings.IPAddress,
@@ -203,7 +201,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	defer conn.Close()
 
 	// TODO: use a compare-and-swap SCRIPT
-	_, err = conn.Do("HMSET", registrationPath, "id", serviceRegistration.ID, "location", jsonReg)
+	_, err = conn.Do("HMSET", registrationPath, "location", jsonReg)
 	if err != nil {
 		return err
 	}
