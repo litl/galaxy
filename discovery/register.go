@@ -32,6 +32,7 @@ func register(c *cli.Context) {
 
 		for _, container := range containers {
 			dockerContainer, err := client.InspectContainer(container.ID)
+
 			if err != nil {
 				fmt.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
 				continue
@@ -53,9 +54,15 @@ func register(c *cli.Context) {
 				Version: tag,
 			}
 
-			existingConfig, err := serviceRegistry.GetServiceConfig(repository)
+			// container name is <app>_<id>
+			if strings.Contains(dockerContainer.Name, "_") {
+				app := strings.TrimPrefix(strings.Split(dockerContainer.Name, "_")[0], "/")
+				serviceConfig.Name = app
+			}
+
+			existingConfig, err := serviceRegistry.GetServiceConfig(serviceConfig.Name)
 			if err != nil {
-				fmt.Printf("ERROR: Unable to determine if app %s exists: %s. Skipping.\n", repository, err)
+				fmt.Printf("ERROR: Unable to determine if app %s exists: %s. Skipping.\n", serviceConfig.Name, err)
 				continue
 			}
 			if existingConfig == nil {
