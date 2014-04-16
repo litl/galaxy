@@ -303,23 +303,43 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop chan struct{}) {
 
 	go func() {
+
+		lastVersion := make(map[string]int64)
+		serviceConfigs, err := r.ListApps()
+		if err != nil {
+			changes <- &ConfigChange{
+				Error: err,
+			}
+			return
+		}
+
+		for _, config := range serviceConfigs {
+			lastVersion[config.Name] = config.ID
+		}
+
 		// TODO: default polling interval
 		ticker := time.NewTicker(2 * time.Second)
-		select {
-		case <-stop:
-			ticker.Stop()
-			return
-		case <-ticker.C:
-			serviceConfigs, err := r.ListApps()
-			if err != nil {
-				changes <- &ConfigChange{
-					Error: err,
+		for {
+			select {
+			case <-stop:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				serviceConfigs, err := r.ListApps()
+				if err != nil {
+					changes <- &ConfigChange{
+						Error: err,
+					}
+					break
 				}
-				break
-			}
-			for _, changedConfig := range serviceConfigs {
-				changes <- &ConfigChange{
-					ServiceConfig: &changedConfig,
+				for _, changedConfig := range serviceConfigs {
+					if changedConfig.ID != lastVersion[changedConfig.Name] {
+						lastVersion[changedConfig.Name] = changedConfig.ID
+						changes <- &ConfigChange{
+							ServiceConfig: &changedConfig,
+						}
+
+					}
 				}
 			}
 		}
