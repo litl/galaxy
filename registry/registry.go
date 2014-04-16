@@ -259,7 +259,9 @@ func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, se
 	desiredServiceRegistration := r.newServiceRegistration(container)
 	regPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
-	var existingRegistration ServiceRegistration
+	existingRegistration := ServiceRegistration{
+		Path: regPath,
+	}
 
 	conn := r.redisPool.Get()
 	defer conn.Close()
