@@ -50,6 +50,16 @@ func status(c *cli.Context) {
 			Version: tag,
 		}
 
+		existingConfig, err := serviceRegistry.GetServiceConfig(repository)
+		if err != nil {
+			fmt.Printf("ERROR: Unable to determine if app %s exists: %s. Skipping.\n", repository, err)
+			continue
+		}
+		if existingConfig == nil {
+			// container isn't a galaxy app. skip it.
+			continue
+		}
+
 		registered, err := serviceRegistry.GetServiceRegistration(dockerContainer, serviceConfig)
 		if err != nil {
 			fmt.Printf("ERROR: Unable to determine status of %s: %s\n",
