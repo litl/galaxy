@@ -118,6 +118,8 @@ func main() {
 	}
 
 	initOrDie()
+	serviceRegistry.CreatePool(*pool)
+
 	err := startContainersIfNecessary()
 	if err != nil && !*loop {
 		return
