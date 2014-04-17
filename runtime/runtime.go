@@ -2,9 +2,9 @@ package runtime
 
 import (
 	"errors"
-	"fmt"
 	auth "github.com/dotcloud/docker/registry"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"os"
@@ -87,22 +87,22 @@ func (s *ServiceRuntime) StopAllButLatest(img string, latest *docker.Container, 
 			// one of these containers, blacklist it and leave it running
 
 			if _, ok := blacklistedContainerId[container.ID]; ok {
-				fmt.Printf("Container %s blacklisted. Won't try to stop.\n", container.ID)
+				log.Printf("Container %s blacklisted. Won't try to stop.\n", container.ID)
 				continue
 			}
 
-			fmt.Printf("Stopping container %s\n", container.ID)
+			log.Printf("Stopping container %s\n", container.ID)
 			c := make(chan error, 1)
 			go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
 			select {
 			case err := <-c:
 				if err != nil {
-					fmt.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+					log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
 					continue
 				}
 			case <-time.After(20 * time.Second):
 				blacklistedContainerId[container.ID] = true
-				fmt.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
+				log.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
 				continue
 			}
 
@@ -159,7 +159,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 	}
 
 	runCmd := []string{"/bin/bash", "-c", strings.Join(cmd, " ")}
-	fmt.Printf("%#v\n", runCmd)
+	log.Printf("%#v\n", runCmd)
 
 	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
@@ -180,16 +180,16 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 	signal.Notify(c, os.Interrupt, os.Kill)
 	go func(s *ServiceRuntime, containerId string) {
 		<-c
-		fmt.Println("Stopping command")
+		log.Println("Stopping command")
 		err := s.ensureDockerClient().StopContainer(containerId, 3)
 		if err != nil {
-			fmt.Printf("ERROR: Unable to stop container: %s", err)
+			log.Printf("ERROR: Unable to stop container: %s", err)
 		}
 		err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 			ID: containerId,
 		})
 		if err != nil {
-			fmt.Printf("ERROR: Unable to stop container: %s", err)
+			log.Printf("ERROR: Unable to stop container: %s", err)
 		}
 
 	}(s, container.ID)
@@ -221,7 +221,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 	})
 
 	if err != nil {
-		fmt.Printf("ERROR: Unable to attach to running container: %s", err.Error())
+		log.Printf("ERROR: Unable to attach to running container: %s", err.Error())
 	}
 
 	s.ensureDockerClient().WaitContainer(container.ID)

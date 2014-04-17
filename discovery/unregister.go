@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
@@ -30,7 +30,7 @@ func unregister(c *cli.Context) {
 	for _, container := range containers {
 		dockerContainer, err := client.InspectContainer(container.ID)
 		if err != nil {
-			fmt.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
+			log.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
 			continue
 		}
 
@@ -58,7 +58,7 @@ func unregister(c *cli.Context) {
 
 		existingConfig, err := serviceRegistry.GetServiceConfig(serviceConfig.Name)
 		if err != nil {
-			fmt.Printf("ERROR: Unable to determine if app %s exists: %s. Skipping.\n", serviceConfig.Name, err)
+			log.Printf("ERROR: Unable to determine if app %s exists: %s. Skipping.\n", serviceConfig.Name, err)
 			continue
 		}
 		if existingConfig == nil {
@@ -68,13 +68,14 @@ func unregister(c *cli.Context) {
 
 		err = serviceRegistry.UnRegisterService(dockerContainer, serviceConfig)
 		if err != nil {
-			fmt.Printf("ERROR: Could not unregister %s: %s\n",
+			log.Printf("ERROR: Could not unregister %s: %s\n",
 				serviceConfig.Name, err)
 			os.Exit(1)
 		}
+		log.Printf("Unregistered %s as %s", dockerContainer.ID[0:12], serviceConfig.Name)
 
 	}
 
 	result, _ := columnize.SimpleFormat(outputBuffer.Output)
-	fmt.Println(result)
+	log.Println(result)
 }

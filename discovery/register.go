@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
@@ -34,7 +34,7 @@ func register(c *cli.Context) {
 			dockerContainer, err := client.InspectContainer(container.ID)
 
 			if err != nil {
-				fmt.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
+				log.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
 				continue
 			}
 
@@ -62,7 +62,7 @@ func register(c *cli.Context) {
 
 			existingConfig, err := serviceRegistry.GetServiceConfig(serviceConfig.Name)
 			if err != nil {
-				fmt.Printf("ERROR: Unable to determine if app %s exists: %s. Skipping.\n", serviceConfig.Name, err)
+				log.Printf("ERROR: Unable to determine if app %s exists: %s. Skipping.\n", serviceConfig.Name, err)
 				continue
 			}
 			if existingConfig == nil {
@@ -72,10 +72,11 @@ func register(c *cli.Context) {
 
 			err = serviceRegistry.RegisterService(dockerContainer, serviceConfig)
 			if err != nil {
-				fmt.Printf("ERROR: Could not register %s: %s\n",
+				log.Printf("ERROR: Could not register %s: %s\n",
 					serviceConfig.Name, err)
 				os.Exit(1)
 			}
+			log.Printf("Registered %s as %s", dockerContainer.ID[0:12], serviceConfig.Name)
 
 		}
 
@@ -87,6 +88,6 @@ func register(c *cli.Context) {
 	}
 
 	result, _ := columnize.SimpleFormat(outputBuffer.Output)
-	fmt.Println(result)
+	log.Println(result)
 
 }

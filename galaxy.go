@@ -12,6 +12,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
@@ -47,7 +48,7 @@ func initRegistry(c *cli.Context) {
 func ensureAppParam(c *cli.Context, command string) string {
 	app := c.Args().First()
 	if app == "" {
-		fmt.Println("ERROR: app name missing")
+		log.Println("ERROR: app name missing")
 		cli.ShowCommandHelp(c, command)
 		os.Exit(1)
 	}
@@ -75,7 +76,7 @@ func appList(c *cli.Context) {
 
 	appList, err := serviceRegistry.ListApps()
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err)
+		log.Printf("ERROR: %s\n", err)
 		return
 	}
 
@@ -93,7 +94,7 @@ func appList(c *cli.Context) {
 			c.GlobalString("env")}, " | "))
 	}
 	output, _ := columnize.SimpleFormat(columns)
-	fmt.Println(output)
+	log.Println(output)
 }
 
 func appCreate(c *cli.Context) {
@@ -107,24 +108,24 @@ func appCreate(c *cli.Context) {
 
 	exists, err := serviceRegistry.PoolExists()
 	if err != nil {
-		fmt.Printf("ERROR: Could not create app: %s\n", err)
+		log.Printf("ERROR: Could not create app: %s\n", err)
 		return
 	}
 	if !exists {
-		fmt.Printf("ERROR: Pool %s does not exist. Create it first.\n", serviceRegistry.Pool)
+		log.Printf("ERROR: Pool %s does not exist. Create it first.\n", serviceRegistry.Pool)
 		return
 	}
 
 	created, err := serviceRegistry.CreateApp(app)
 
 	if err != nil {
-		fmt.Printf("ERROR: Could not create app: %s\n", err)
+		log.Printf("ERROR: Could not create app: %s\n", err)
 		return
 	}
 	if created {
-		fmt.Printf("Created %s in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("Created %s in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 	} else {
-		fmt.Printf("%s already exists in in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("%s already exists in in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 	}
 }
 
@@ -139,13 +140,13 @@ func appDelete(c *cli.Context) {
 
 	deleted, err := serviceRegistry.DeleteApp(app)
 	if err != nil {
-		fmt.Printf("ERROR: Could not delete app: %s\n", err)
+		log.Printf("ERROR: Could not delete app: %s\n", err)
 		return
 	}
 	if deleted {
-		fmt.Printf("Deleted %s from env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("Deleted %s from env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 	} else {
-		fmt.Printf("%s does not exists in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("%s does not exists in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
 	}
 
 }
@@ -161,7 +162,7 @@ func appDeploy(c *cli.Context) {
 	}
 
 	if version == "" {
-		fmt.Println("ERROR: version missing")
+		log.Println("ERROR: version missing")
 		cli.ShowCommandHelp(c, "app:deploy")
 		return
 	}
@@ -172,20 +173,20 @@ func appDeploy(c *cli.Context) {
 	if image == nil && err == nil {
 		err := serviceRuntime.PullImage(registry, repository)
 		if err != nil {
-			fmt.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
+			log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
 			return
 		}
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to deploy app: %s.\n", err)
+		log.Printf("ERROR: Unable to deploy app: %s.\n", err)
 		return
 	}
 
 	println(svcCfg == nil)
 	if svcCfg == nil {
-		fmt.Printf("ERROR: App %s does not exist. Create it first.\n", app)
+		log.Printf("ERROR: App %s does not exist. Create it first.\n", app)
 		return
 	}
 
@@ -195,14 +196,14 @@ func appDeploy(c *cli.Context) {
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		fmt.Printf("ERROR: Could not store version: %s\n", err)
+		log.Printf("ERROR: Could not store version: %s\n", err)
 		return
 	}
 	if !updated {
-		fmt.Printf("%s NOT deployed.\n")
+		log.Printf("%s NOT deployed.\n")
 		return
 	}
-	fmt.Printf("Deployed %s.\n", version)
+	log.Printf("Deployed %s.\n", version)
 }
 
 func appRun(c *cli.Context) {
@@ -211,19 +212,19 @@ func appRun(c *cli.Context) {
 	app := ensureAppParam(c, "app:run")
 
 	if len(c.Args()) < 2 {
-		fmt.Printf("ERROR: Missing command to run.\n")
+		log.Printf("ERROR: Missing command to run.\n")
 		return
 	}
 
 	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to run command: %s.\n", err)
+		log.Printf("ERROR: Unable to run command: %s.\n", err)
 		return
 	}
 
 	_, err = serviceRuntime.StartInteractive(serviceConfig, c.Args()[1:])
 	if err != nil {
-		fmt.Printf("ERROR: Could not start container: %s\n", err)
+		log.Printf("ERROR: Could not start container: %s\n", err)
 		return
 	}
 }
@@ -234,12 +235,12 @@ func configList(c *cli.Context) {
 
 	cfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to list config: %s.\n", err)
+		log.Printf("ERROR: Unable to list config: %s.\n", err)
 		return
 	}
 
 	for k, v := range cfg.Env {
-		fmt.Printf("%s=%s\n", k, v)
+		log.Printf("%s=%s\n", k, v)
 	}
 }
 
@@ -248,13 +249,13 @@ func configSet(c *cli.Context) {
 	app := ensureAppParam(c, "config:set")
 
 	if len(c.Args().Tail()) == 0 {
-		fmt.Printf("ERROR: No config values specified.\n")
+		log.Printf("ERROR: No config values specified.\n")
 		return
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to set config: %s.\n", err)
+		log.Printf("ERROR: Unable to set config: %s.\n", err)
 		return
 	}
 
@@ -264,7 +265,7 @@ func configSet(c *cli.Context) {
 
 	for _, arg := range c.Args().Tail() {
 		if !strings.Contains(arg, "=") {
-			fmt.Printf("ERROR: bad config variable format: %s\n", arg)
+			log.Printf("ERROR: bad config variable format: %s\n", arg)
 			cli.ShowCommandHelp(c, "config")
 			return
 
@@ -275,15 +276,15 @@ func configSet(c *cli.Context) {
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to set config: %s.\n", err)
+		log.Printf("ERROR: Unable to set config: %s.\n", err)
 		return
 	}
 
 	if !updated {
-		fmt.Printf("Configuration NOT changed for %s\n", app)
+		log.Printf("Configuration NOT changed for %s\n", app)
 		return
 	}
-	fmt.Printf("Configuration changed for %s\n", app)
+	log.Printf("Configuration changed for %s\n", app)
 }
 
 func configUnset(c *cli.Context) {
@@ -291,13 +292,13 @@ func configUnset(c *cli.Context) {
 	app := ensureAppParam(c, "config:unset")
 
 	if len(c.Args().Tail()) == 0 {
-		fmt.Printf("ERROR: No config values specified.\n")
+		log.Printf("ERROR: No config values specified.\n")
 		return
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to unset config: %s.\n", err)
+		log.Printf("ERROR: Unable to unset config: %s.\n", err)
 		return
 	}
 
@@ -307,15 +308,15 @@ func configUnset(c *cli.Context) {
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to unset config: %s.\n", err)
+		log.Printf("ERROR: Unable to unset config: %s.\n", err)
 		return
 	}
 
 	if !updated {
-		fmt.Printf("Configuration NOT changed for %s\n", app)
+		log.Printf("Configuration NOT changed for %s\n", app)
 		return
 	}
-	fmt.Printf("Configuration changed for %s\n", app)
+	log.Printf("Configuration changed for %s\n", app)
 
 }
 
@@ -325,12 +326,12 @@ func configGet(c *cli.Context) {
 
 	cfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		fmt.Printf("ERROR: Unable to get config: %s.\n", err)
+		log.Printf("ERROR: Unable to get config: %s.\n", err)
 		return
 	}
 
 	for _, arg := range c.Args().Tail() {
-		fmt.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env[strings.ToUpper(arg)])
+		log.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env[strings.ToUpper(arg)])
 	}
 }
 
@@ -338,14 +339,14 @@ func login(c *cli.Context) {
 	initRegistry(c)
 
 	if c.Args().First() == "" {
-		fmt.Println("ERROR: host missing")
+		log.Println("ERROR: host missing")
 		cli.ShowCommandHelp(c, "login")
 		return
 	}
 
 	currentUser, err := user.Current()
 	if err != nil {
-		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		log.Printf("ERROR: Unable to determine current user: %s\n", err)
 		return
 	}
 
@@ -357,29 +358,29 @@ func login(c *cli.Context) {
 	availableKeys := findSSHKeys(currentUser.HomeDir)
 
 	if len(availableKeys) == 0 {
-		fmt.Printf("ERROR: No SSH private keys found.  Create one first.\n")
+		log.Printf("ERROR: No SSH private keys found.  Create one first.\n")
 		return
 	}
 
 	for i, key := range availableKeys {
-		fmt.Printf("%d) %s\n", i, key)
+		log.Printf("%d) %s\n", i, key)
 	}
 
-	fmt.Printf("Select private key to use [0]: ")
+	log.Printf("Select private key to use [0]: ")
 	var i int
 	fmt.Scanf("%d", &i)
 
 	if i < 0 || i > len(availableKeys) {
 		i = 0
 	}
-	fmt.Printf("Using %s\n", availableKeys[i])
+	log.Printf("Using %s\n", availableKeys[i])
 
 	config.Host = c.Args().First()
 	config.PrivateKey = availableKeys[i]
 
 	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
 	if err != nil {
-		fmt.Printf("ERROR: Unable to create config file: %s\n", err)
+		log.Printf("ERROR: Unable to create config file: %s\n", err)
 		return
 	}
 	defer configFile.Close()
@@ -387,14 +388,14 @@ func login(c *cli.Context) {
 	encoder := toml.NewEncoder(configFile)
 	encoder.Encode(config)
 	configFile.WriteString("\n")
-	fmt.Printf("Login sucessful")
+	log.Printf("Login sucessful")
 }
 
 func logout(c *cli.Context) {
 	initRegistry(c)
 	currentUser, err := user.Current()
 	if err != nil {
-		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		log.Printf("ERROR: Unable to determine current user: %s\n", err)
 		return
 	}
 	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
@@ -403,11 +404,11 @@ func logout(c *cli.Context) {
 	if err == nil {
 		err = os.Remove(configFile)
 		if err != nil {
-			fmt.Printf("ERROR: Unable to logout: %s\n", err)
+			log.Printf("ERROR: Unable to logout: %s\n", err)
 			return
 		}
 	}
-	fmt.Printf("Logout sucessful\n")
+	log.Printf("Logout sucessful\n")
 }
 
 func poolCreate(c *cli.Context) {
@@ -415,14 +416,14 @@ func poolCreate(c *cli.Context) {
 	initRegistry(c)
 	created, err := serviceRegistry.CreatePool(c.GlobalString("pool"))
 	if err != nil {
-		fmt.Printf("ERROR: Could not create pool: %s\n", err)
+		log.Printf("ERROR: Could not create pool: %s\n", err)
 		return
 	}
 
 	if created {
-		fmt.Printf("Pool %s created\n", c.GlobalString("pool"))
+		log.Printf("Pool %s created\n", c.GlobalString("pool"))
 	} else {
-		fmt.Printf("Pool %s already exists\n", c.GlobalString("pool"))
+		log.Printf("Pool %s already exists\n", c.GlobalString("pool"))
 	}
 
 }
@@ -431,12 +432,12 @@ func poolList(c *cli.Context) {
 	initRegistry(c)
 	pools, err := serviceRegistry.ListPools()
 	if err != nil {
-		fmt.Printf("ERROR: cannot list pools: %s\n", err)
+		log.Printf("ERROR: cannot list pools: %s\n", err)
 		return
 	}
 
 	for _, pool := range pools {
-		fmt.Println(pool)
+		log.Println(pool)
 	}
 }
 
@@ -445,14 +446,14 @@ func poolDelete(c *cli.Context) {
 	initRegistry(c)
 	created, err := serviceRegistry.DeletePool(c.GlobalString("pool"))
 	if err != nil {
-		fmt.Printf("ERROR: Could not delete pool: %s\n", err)
+		log.Printf("ERROR: Could not delete pool: %s\n", err)
 		return
 	}
 
 	if created {
-		fmt.Printf("Pool %s delete\n", c.GlobalString("pool"))
+		log.Printf("Pool %s delete\n", c.GlobalString("pool"))
 	} else {
-		fmt.Printf("Pool %s has apps configured. Delete them first.\n", c.GlobalString("pool"))
+		log.Printf("Pool %s has apps configured. Delete them first.\n", c.GlobalString("pool"))
 	}
 }
 
@@ -464,7 +465,7 @@ func loadConfig() {
 
 	currentUser, err := user.Current()
 	if err != nil {
-		fmt.Printf("ERROR: Unable to determine current user: %s\n", err)
+		log.Printf("ERROR: Unable to determine current user: %s\n", err)
 		return
 	}
 	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
@@ -472,7 +473,7 @@ func loadConfig() {
 	_, err = os.Stat(configFile)
 	if err == nil {
 		if _, err := toml.DecodeFile(configFile, &config); err != nil {
-			fmt.Printf("ERROR: Unable to logout: %s\n", err)
+			log.Printf("ERROR: Unable to logout: %s\n", err)
 			return
 		}
 	}
@@ -482,6 +483,10 @@ func loadConfig() {
 func main() {
 
 	loadConfig()
+
+	// Don't print date, etc..
+	log.DefaultLogger.SetFlags(0)
+
 	serviceRuntime = &runtime.ServiceRuntime{}
 	if config.Host != "" && len(os.Args) > 1 && (os.Args[1] != "login" && os.Args[1] != "logout") {
 		runRemote()

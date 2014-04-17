@@ -2,7 +2,6 @@ package registry
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/garyburd/redigo/redis"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -353,7 +353,7 @@ func (r *ServiceRegistry) CountInstances(app string) int {
 	// TODO: Should this just sum hosts? (this counts all services on all hosts)
 	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, "hosts", "*", app)))
 	if err != nil {
-		fmt.Printf("ERROR: could not count instances - %s\n", err)
+		log.Printf("ERROR: could not count instances - %s\n", err)
 	}
 
 	return len(matches)

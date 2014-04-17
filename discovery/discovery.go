@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"os"
@@ -39,6 +40,11 @@ func initOrDie(c *cli.Context) {
 
 	outputBuffer = &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer
+
+	// Don't log timestamps, etc. if running interactively
+	if !c.Bool("loop") {
+		log.DefaultLogger.SetFlags(0)
+	}
 }
 
 func main() {
