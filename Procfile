@@ -1,3 +1,3 @@
 commander: commander -loop
-discovery: discovery register
+discovery: discovery register -loop
 shuttle: shuttle
