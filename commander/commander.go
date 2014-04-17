@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/litl/galaxy/registry"
@@ -38,12 +39,12 @@ func startContainersIfNecessary() error {
 	// FIXME: This should list registered services from the service registry
 	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
-		fmt.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", *env, *pool, err)
+		log.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", *env, *pool, err)
 		return err
 	}
 
 	if len(serviceConfigs) == 0 {
-		fmt.Printf("No services configured for /%s/%s\n", *env, *pool)
+		log.Printf("No services configured for /%s/%s\n", *env, *pool)
 		return err
 	}
 
@@ -54,18 +55,18 @@ func startContainersIfNecessary() error {
 		}
 
 		if serviceConfig.Version == "" {
-			fmt.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
+			log.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
 			continue
 		}
 
 		container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
-			fmt.Printf("ERROR: Could not determine if %s is running: %s\n",
+			log.Printf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version, err)
 			return err
 		}
 
-		fmt.Printf("%s running as %s\n", serviceConfig.Version, container.ID)
+		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version, container.ID[0:12])
 
 		serviceRuntime.StopAllButLatest(serviceConfig.Version, container, *stopCutoff)
 	}
@@ -77,7 +78,7 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 
 		changedConfig := <-changedConfigs
 		if changedConfig.Error != nil {
-			fmt.Printf("ERROR: Error watching changes: %s\n", changedConfig.Error)
+			log.Printf("ERROR: Error watching changes: %s\n", changedConfig.Error)
 			continue
 		}
 
@@ -91,11 +92,11 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 
 		container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
 		if err != nil {
-			fmt.Printf("ERROR: Could not start %s: %s\n",
+			log.Printf("ERROR: Could not start %s: %s\n",
 				changedConfig.ServiceConfig.Version, err)
 			continue
 		}
-		fmt.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version, container.ID)
+		log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version, container.ID)
 
 		serviceRuntime.StopAllButLatest(changedConfig.ServiceConfig.Version, container, *stopCutoff)
 
