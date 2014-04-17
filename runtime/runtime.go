@@ -248,15 +248,25 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	for key, value := range serviceConfig.Env {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
-	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
-		Name: serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID, 10),
-		Config: &docker.Config{
-			Image: img,
-			Env:   envVars,
-		},
-	})
-	if err != nil {
+
+	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID, 10)
+	container, err := s.ensureDockerClient().InspectContainer(containerName)
+	_, ok := err.(*docker.NoSuchContainer)
+	if err != nil && !ok {
 		return nil, err
+	}
+
+	if container == nil {
+		container, err = s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
+			Name: containerName,
+			Config: &docker.Config{
+				Image: img,
+				Env:   envVars,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = s.ensureDockerClient().StartContainer(container.ID,
