@@ -58,6 +58,14 @@ func (v *VersionedMap) Get(key string) string {
 	return maxEntry.value
 }
 
+func (v *VersionedMap) Keys() []string {
+	keys := []string{}
+	for k := range v.values {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func (v *VersionedMap) Merge(other *VersionedMap) {
 	for k, entries := range other.values {
 		v.values[k] = append(v.values[k], entries...)

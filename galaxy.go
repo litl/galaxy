@@ -308,7 +308,7 @@ func configUnset(c *cli.Context) {
 	}
 
 	for _, arg := range c.Args().Tail() {
-		delete(svcCfg.Env, strings.ToUpper(arg))
+		svcCfg.Env[strings.ToUpper(arg)] = ""
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)

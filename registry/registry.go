@@ -25,10 +25,12 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
 type ServiceConfig struct {
 	// ID is used for ordering and conflict resolution.
 	// Usualy set to time.Now().UnixNano()
-	ID      int64  `redis:"id"`
-	Name    string `redis:"name"`
-	Version string `redis:"version"`
-	Env     map[string]string
+	ID              int64  `redis:"id"`
+	Name            string `redis:"name"`
+	Version         string `redis:"version"`
+	Env             map[string]string
+	versionVMap     *utils.VersionedMap
+	environmentVMap *utils.VersionedMap
 }
 
 type ServiceRegistration struct {
@@ -99,10 +101,12 @@ func (r *ServiceRegistry) Connect(redisHost string) {
 
 func NewServiceConfig(app, version string, cfg map[string]string) *ServiceConfig {
 	svcCfg := &ServiceConfig{
-		ID:      time.Now().UnixNano(),
-		Name:    app,
-		Version: version,
-		Env:     cfg,
+		ID:              time.Now().UnixNano(),
+		Name:            app,
+		Version:         version,
+		Env:             cfg,
+		versionVMap:     utils.NewVersionedMap(),
+		environmentVMap: utils.NewVersionedMap(),
 	}
 
 	return svcCfg
@@ -144,8 +148,10 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	}
 
 	svcCfg := &ServiceConfig{
-		Name: path.Base(app),
-		Env:  make(map[string]string),
+		Name:            path.Base(app),
+		Env:             make(map[string]string),
+		versionVMap:     utils.NewVersionedMap(),
+		environmentVMap: utils.NewVersionedMap(),
 	}
 
 	err = redis.ScanStruct(matches, svcCfg)
@@ -153,17 +159,24 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		return nil, err
 	}
 
-	for i := 0; i < len(matches); i += 2 {
-		if string(matches[i].([]byte)) == "environment" {
-			var env map[string]interface{}
-			err = json.Unmarshal(matches[i+1].([]byte), &env)
-			if err != nil {
-				return nil, err
-			}
+	matches, err = redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app, "environment")))
+	if err != nil {
+		return nil, err
+	}
 
-			for k, v := range env {
-				svcCfg.Env[k] = v.(string)
-			}
+	// load environmentVMap from redis hash
+	serialized := make(map[string]string)
+	for i := 0; i < len(matches); i += 2 {
+		key := string(matches[i].([]byte))
+		value := string(matches[i+1].([]byte))
+		serialized[key] = value
+	}
+
+	svcCfg.environmentVMap.UnmarshalMap(serialized)
+	for _, k := range svcCfg.environmentVMap.Keys() {
+		val := svcCfg.environmentVMap.Get(k)
+		if val != "" {
+			svcCfg.Env[k] = val
 		}
 	}
 
@@ -174,13 +187,24 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	env, err := json.Marshal(svcCfg.Env)
-	if err != nil {
-		return false, err
+	for k, v := range svcCfg.Env {
+		if svcCfg.environmentVMap.Get(k) != v {
+			svcCfg.environmentVMap.Set(k, v, time.Now().UnixNano())
+		}
+	}
+
+	serialized := svcCfg.environmentVMap.MarshalMap()
+	if len(serialized) > 0 {
+		redisArgs := redis.Args{}.Add(
+			path.Join(r.Env, r.Pool, svcCfg.Name, "environment")).AddFlat(serialized)
+		_, err := conn.Do("HMSET", redisArgs...)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	created, err := conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", time.Now().UnixNano(),
-		"version", svcCfg.Version, "environment", env)
+		"version", svcCfg.Version)
 	if err != nil {
 		return false, err
 	}
