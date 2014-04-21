@@ -66,6 +66,18 @@ func (v *VersionedMap) Keys() []string {
 	return keys
 }
 
+func (v *VersionedMap) LatestVersion() int64 {
+	latest := int64(0)
+	for _, entries := range v.values {
+		for _, mapEntry := range entries {
+			if mapEntry.version > latest {
+				latest = mapEntry.version
+			}
+		}
+	}
+	return latest
+}
+
 func (v *VersionedMap) Merge(other *VersionedMap) {
 	for k, entries := range other.values {
 		v.values[k] = append(v.values[k], entries...)

@@ -133,3 +133,14 @@ func TestUnmarshalMap(t *testing.T) {
 	}
 
 }
+
+func TestLatestversion(t *testing.T) {
+	vmap := NewVersionedMap()
+	vmap.Set("k1", "v1", 1)
+	vmap.Set("k2", "v1", 2)
+	vmap.Set("k2", "v2", 3)
+
+	if vmap.LatestVersion() != 3 {
+		t.Fail()
+	}
+}
