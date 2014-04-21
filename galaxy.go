@@ -239,6 +239,11 @@ func configList(c *cli.Context) {
 		return
 	}
 
+	if cfg == nil {
+		log.Printf("ERROR: Unable to list config for %s.\n", app)
+		return
+	}
+
 	for k, v := range cfg.Env {
 		log.Printf("%s=%s\n", k, v)
 	}
