@@ -523,6 +523,13 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 		return false, err
 	}
 
+	for _, k := range []string{"environment", "version"} {
+		deleted, err = conn.Do("DEL", path.Join(r.Env, r.Pool, app, k))
+		if err != nil {
+			return false, err
+		}
+	}
+
 	return deleted == 1, nil
 }
 
