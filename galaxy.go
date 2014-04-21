@@ -34,10 +34,14 @@ var config struct {
 // ensure the registry as a redis host, but only once
 func initRegistry(c *cli.Context) {
 	f := func() {
-		serviceRegistry = &registry.ServiceRegistry{
-			Env:  c.GlobalString("env"),
-			Pool: c.GlobalString("pool"),
-		}
+
+		serviceRegistry = registry.NewServiceRegistry(
+			c.GlobalString("env"),
+			c.GlobalString("pool"),
+			c.GlobalString("hostIp"),
+			uint64(c.Int("ttl")),
+			c.GlobalString("sshAddr"),
+		)
 
 		serviceRegistry.Connect(c.GlobalString("redis"))
 	}

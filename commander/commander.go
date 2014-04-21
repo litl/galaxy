@@ -30,6 +30,14 @@ func initOrDie() {
 		Pool: *pool,
 	}
 
+	serviceRegistry = registry.NewServiceRegistry(
+		*env,
+		*pool,
+		"",
+		600,
+		"",
+	)
+
 	serviceRegistry.Connect(*redisHost)
 	serviceRuntime = &runtime.ServiceRuntime{}
 

@@ -28,13 +28,13 @@ func initOrDie(c *cli.Context) {
 		panic(err)
 	}
 
-	serviceRegistry = &registry.ServiceRegistry{
-		Env:         c.GlobalString("env"),
-		Pool:        c.GlobalString("pool"),
-		HostIP:      c.GlobalString("hostIp"),
-		TTL:         uint64(c.Int("ttl")),
-		HostSSHAddr: c.GlobalString("sshAddr"),
-	}
+	serviceRegistry = registry.NewServiceRegistry(
+		c.GlobalString("env"),
+		c.GlobalString("pool"),
+		c.GlobalString("hostIp"),
+		uint64(c.Int("ttl")),
+		c.GlobalString("sshAddr"),
+	)
 
 	serviceRegistry.Connect(c.GlobalString("redis"))
 

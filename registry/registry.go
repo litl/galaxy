@@ -54,6 +54,7 @@ type ServiceRegistry struct {
 	TTL          uint64
 	HostSSHAddr  string
 	OutputBuffer *utils.OutputBuffer
+	pollCh       chan bool
 }
 
 type ConfigChange struct {
@@ -66,6 +67,18 @@ func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
 		s.ExternalPort == other.ExternalPort &&
 		s.InternalIP == other.InternalIP &&
 		s.InternalPort == other.InternalPort
+}
+
+func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
+	return &ServiceRegistry{
+		Env:         env,
+		Pool:        pool,
+		HostIP:      hostIp,
+		TTL:         ttl,
+		HostSSHAddr: sshAddr,
+		pollCh:      make(chan bool),
+	}
+
 }
 
 func (r *ServiceRegistry) ensureHostname() string {
@@ -346,24 +359,47 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 	return reg != nil, err
 }
 
-// We need an ID to start from, so we know when something has changed.
-// Return nil,nil if mothing has changed (for now)
-func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop chan struct{}) {
+func (r *ServiceRegistry) CheckForChanges(changes chan *ConfigChange) {
+	lastVersion := make(map[string]int64)
+	serviceConfigs, err := r.ListApps()
+	if err != nil {
+		changes <- &ConfigChange{
+			Error: err,
+		}
+		return
+	}
 
-	go func() {
+	for _, config := range serviceConfigs {
+		lastVersion[config.Name] = config.ID
+	}
 
-		lastVersion := make(map[string]int64)
+	for {
+		<-r.pollCh
 		serviceConfigs, err := r.ListApps()
 		if err != nil {
 			changes <- &ConfigChange{
 				Error: err,
 			}
-			return
+			break
+		}
+		for _, changedConfig := range serviceConfigs {
+			if changedConfig.ID != lastVersion[changedConfig.Name] {
+				lastVersion[changedConfig.Name] = changedConfig.ID
+				changes <- &ConfigChange{
+					ServiceConfig: &changedConfig,
+				}
+
+			}
 		}
 
-		for _, config := range serviceConfigs {
-			lastVersion[config.Name] = config.ID
-		}
+	}
+}
+
+// We need an ID to start from, so we know when something has changed.
+// Return nil,nil if mothing has changed (for now)
+func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop chan struct{}) {
+
+	go func() {
 
 		// TODO: default polling interval
 		ticker := time.NewTicker(2 * time.Second)
@@ -373,22 +409,8 @@ func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop c
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				serviceConfigs, err := r.ListApps()
-				if err != nil {
-					changes <- &ConfigChange{
-						Error: err,
-					}
-					break
-				}
-				for _, changedConfig := range serviceConfigs {
-					if changedConfig.ID != lastVersion[changedConfig.Name] {
-						lastVersion[changedConfig.Name] = changedConfig.ID
-						changes <- &ConfigChange{
-							ServiceConfig: &changedConfig,
-						}
+				r.pollCh <- true
 
-					}
-				}
 			}
 		}
 	}()
