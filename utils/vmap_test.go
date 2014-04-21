@@ -77,5 +77,59 @@ func TestUnsetConflict(t *testing.T) {
 	if vmap.Get("k1") != "v3" {
 		t.Fail()
 	}
+}
+
+func TestMarshalMap(t *testing.T) {
+
+	vmap := NewVersionedMap()
+	vmap.Set("k1", "v1", 1)
+	vmap.Set("k1", "v2", 2)
+	vmap.UnSet("k1", 2)
+
+	vmap.Set("k2", "v1", 1)
+	vmap.Set("k2", "v2", 2)
+
+	serialized := vmap.MarshalMap()
+	if serialized["k1:s:1"] != "v1" {
+		t.Fail()
+	}
+	if serialized["k1:s:2"] != "v2" {
+		t.Fail()
+	}
+	if serialized["k1:u:2"] != "" {
+		t.Fail()
+	}
+	if serialized["k2:s:1"] != "v1" {
+		t.Fail()
+	}
+	if serialized["k2:s:2"] != "v2" {
+		t.Fail()
+	}
+}
+
+func TestUnmarshalMap(t *testing.T) {
+
+	serialized := map[string]string{
+		"k1:s:1": "v1",
+		"k1:s:2": "v2",
+		"k1:u:2": "",
+		"k2:s:1": "v1",
+		"k2:s:2": "v2",
+		"k3:s:1": "v1",
+		"k3:u:2": "",
+	}
+
+	vmap := NewVersionedMap()
+	vmap.UnmarshalMap(serialized)
+
+	if vmap.Get("k1") != "v2" {
+		t.Fail()
+	}
+	if vmap.Get("k2") != "v2" {
+		t.Fail()
+	}
+	if vmap.Get("k3") != "" {
+		t.Fail()
+	}
 
 }

@@ -1,5 +1,10 @@
 package utils
 
+import (
+	"strconv"
+	"strings"
+)
+
 // VersionedMap is a CRDT where each key contains a version history of prior values.
 // The value of the key is the value with the latest version.  VersionMaps can be combined
 // such that they always converge to the same values for all keys.
@@ -57,4 +62,37 @@ func (v *VersionedMap) Merge(other *VersionedMap) {
 	for k, entries := range other.values {
 		v.values[k] = append(v.values[k], entries...)
 	}
+}
+
+func (v *VersionedMap) MarshalMap() map[string]string {
+	result := make(map[string]string)
+	for key, entries := range v.values {
+		for _, mapEntry := range entries {
+			op := "s"
+			if mapEntry.value == "" {
+				op = "u"
+			}
+			mapKey := strings.Join([]string{key, op, strconv.FormatInt(mapEntry.version, 10)}, ":")
+			result[mapKey] = mapEntry.value
+		}
+
+	}
+	return result
+}
+
+func (v *VersionedMap) UnmarshalMap(serialized map[string]string) error {
+
+	for key, val := range serialized {
+		parts := strings.Split(key, ":")
+		version, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil {
+			return err
+		}
+		if parts[1] == "s" {
+			v.Set(parts[0], val, version)
+		} else {
+			v.UnSet(parts[0], version)
+		}
+	}
+	return nil
 }
