@@ -184,7 +184,6 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	println(svcCfg == nil)
 	if svcCfg == nil {
 		log.Printf("ERROR: App %s does not exist. Create it first.\n", app)
 		return

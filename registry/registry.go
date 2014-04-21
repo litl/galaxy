@@ -138,15 +138,6 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	matches, err := redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app)))
-	if err != nil {
-		return nil, err
-	}
-
-	if len(matches) == 0 {
-		return nil, nil
-	}
-
 	svcCfg := &ServiceConfig{
 		Name:            path.Base(app),
 		Env:             make(map[string]string),
@@ -154,12 +145,7 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		environmentVMap: utils.NewVersionedMap(),
 	}
 
-	err = redis.ScanStruct(matches, svcCfg)
-	if err != nil {
-		return nil, err
-	}
-
-	matches, err = redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app, "environment")))
+	matches, err := redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app, "environment")))
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +433,7 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 	defer conn.Close()
 
 	// TODO: convert to SCAN
-	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, app)))
+	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, app, "*")))
 	if err != nil {
 		return false, err
 	}
@@ -511,6 +497,9 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 	}
 
 	emptyConfig := NewServiceConfig(app, "", make(map[string]string))
+
+	// Always set an ENV env var for containers
+	emptyConfig.Env["ENV"] = r.Env
 	return r.SetServiceConfig(emptyConfig)
 }
 
@@ -518,19 +507,23 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
+	deletedOne := false
 	deleted, err := conn.Do("DEL", path.Join(r.Env, r.Pool, app))
 	if err != nil {
 		return false, err
 	}
+
+	deletedOne = deletedOne || deleted.(int64) == 1
 
 	for _, k := range []string{"environment", "version"} {
 		deleted, err = conn.Do("DEL", path.Join(r.Env, r.Pool, app, k))
 		if err != nil {
 			return false, err
 		}
+		deletedOne = deletedOne || deleted.(int64) == 1
 	}
 
-	return deleted == 1, nil
+	return deletedOne, nil
 }
 
 func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
@@ -538,7 +531,7 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	defer conn.Close()
 
 	// TODO: convert to scan
-	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*")))
+	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*", "environment")))
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +542,7 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 		parts := strings.Split(app, "/")
 
 		// app entries should be 3 parts, /env/pool/app
-		if len(parts) != 3 {
+		if len(parts) != 4 {
 			continue
 		}
 
