@@ -27,7 +27,7 @@ type ServiceConfig struct {
 	// Usualy set to time.Now().UnixNano()
 	ID              int64  `redis:"id"`
 	Name            string `redis:"name"`
-	Version         string `redis:"version"`
+	Version         string
 	Env             map[string]string
 	versionVMap     *utils.VersionedMap
 	environmentVMap *utils.VersionedMap
@@ -180,12 +180,42 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		}
 	}
 
+	matches, err = redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app, "version")))
+	if err != nil {
+		return nil, err
+	}
+
+	// load versionVMap from redis hash
+	serialized = make(map[string]string)
+	for i := 0; i < len(matches); i += 2 {
+		key := string(matches[i].([]byte))
+		value := string(matches[i+1].([]byte))
+		serialized[key] = value
+	}
+
+	svcCfg.versionVMap.UnmarshalMap(serialized)
+	svcCfg.Version = svcCfg.versionVMap.Get("version")
+
 	return svcCfg, nil
 }
 
-func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+func (r *ServiceRegistry) saveVersionedMap(key string, vmap *utils.VersionedMap) (string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
+
+	serialized := vmap.MarshalMap()
+	if len(serialized) > 0 {
+		redisArgs := redis.Args{}.Add(key).AddFlat(serialized)
+		created, err := conn.Do("HMSET", redisArgs...)
+		if err != nil {
+			return "", err
+		}
+		return created.(string), err
+	}
+	return "OK", nil
+}
+
+func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
 
 	for k, v := range svcCfg.Env {
 		if svcCfg.environmentVMap.Get(k) != v {
@@ -193,21 +223,27 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 		}
 	}
 
-	serialized := svcCfg.environmentVMap.MarshalMap()
-	if len(serialized) > 0 {
-		redisArgs := redis.Args{}.Add(
-			path.Join(r.Env, r.Pool, svcCfg.Name, "environment")).AddFlat(serialized)
-		_, err := conn.Do("HMSET", redisArgs...)
+	if svcCfg.versionVMap.Get("version") != svcCfg.Version {
+		svcCfg.versionVMap.Set("version", svcCfg.Version, time.Now().UnixNano())
+	}
+
+	//TODO: user MULTI/EXEC
+	created, err := r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "environment"),
+		svcCfg.environmentVMap)
+
+	if err != nil {
+		return false, err
+	}
+
+	if created == "OK" {
+		created, err = r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "version"),
+			svcCfg.versionVMap)
+
 		if err != nil {
 			return false, err
 		}
 	}
 
-	created, err := conn.Do("HMSET", path.Join(r.Env, r.Pool, svcCfg.Name), "id", time.Now().UnixNano(),
-		"version", svcCfg.Version)
-	if err != nil {
-		return false, err
-	}
 	return created == "OK", nil
 }
 
