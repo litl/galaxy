@@ -2,6 +2,7 @@ package registry
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path"
 	"strings"
@@ -25,7 +26,7 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
 type ServiceConfig struct {
 	// ID is used for ordering and conflict resolution.
 	// Usualy set to time.Now().UnixNano()
-	ID              int64  `redis:"id"`
+	ID              int64
 	Name            string `redis:"name"`
 	Version         string
 	Env             map[string]string
@@ -181,6 +182,9 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 
 	svcCfg.versionVMap.UnmarshalMap(serialized)
 	svcCfg.Version = svcCfg.versionVMap.Get("version")
+
+	svcCfg.ID = int64(math.Max(float64(svcCfg.environmentVMap.LatestVersion()),
+		float64(svcCfg.versionVMap.LatestVersion())))
 
 	return svcCfg, nil
 }
