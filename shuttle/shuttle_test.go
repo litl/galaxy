@@ -333,7 +333,7 @@ func (s *BasicSuite) TestUpdateService(c *C) {
 	}
 
 	// Now update the service
-	if err := Registry.UpdateService(svcCfg); err != nil {
+	if err := Registry.UpdateService(svcCfg, false); err != nil {
 		c.Fatal(err)
 	}
 

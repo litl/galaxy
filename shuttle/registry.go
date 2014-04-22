@@ -52,25 +52,58 @@ func (s *ServiceRegistry) AddService(cfg ServiceConfig) error {
 	return service.start()
 }
 
-// Update a service.
-// This will shutdown the existing service, and start a new one, which will
-// cause the listening socket to be temporarily unavailable.
-func (s *ServiceRegistry) UpdateService(cfg ServiceConfig) error {
+// Replace the service's configuration, or update its list of backends.
+// Replacing a configuration will shutdown the existing service, and start a
+// new one, which will cause the listening socket to be temporarily
+// unavailable.
+func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool) error {
 	s.Lock()
 	defer s.Unlock()
 
-	service, ok := s.svcs[cfg.Name]
+	service, ok := s.svcs[newCfg.Name]
 	if !ok {
 		return ErrNoService
 	}
 
-	delete(s.svcs, service.Name)
-	service.stop()
+	currentCfg := service.Config()
 
-	service = NewService(cfg)
-	s.svcs[service.Name] = service
+	// if we're not doing only the backends, just wipe the service and start fresh.
+	// No need to stop the service if nothing has changed though.
+	if !backendsOnly && !currentCfg.Equal(newCfg) {
+		delete(s.svcs, service.Name)
+		service.stop()
 
-	return service.start()
+		service = NewService(newCfg)
+		s.svcs[service.Name] = service
+		return service.start()
+	}
+
+	// we're going to update just the backends for this config
+	// get a map of what's already running
+	currentBackends := make(map[string]BackendConfig)
+	for _, backendCfg := range currentCfg.Backends {
+		currentBackends[backendCfg.Name] = backendCfg
+	}
+
+	// Keep existing backends when they have equivalent config.
+	// Update changed backends, and add new ones.
+	for _, newBackend := range newCfg.Backends {
+		current, ok := currentBackends[newBackend.Name]
+		if ok && current == newBackend {
+			// no change for this one
+			delete(currentBackends, current.Name)
+			continue
+		}
+
+		service.add(NewBackend(current))
+		delete(currentBackends, current.Name)
+	}
+
+	// remove any left over backends
+	for name := range currentBackends {
+		service.remove(name)
+	}
+	return nil
 }
 
 func (s *ServiceRegistry) RemoveService(name string) error {

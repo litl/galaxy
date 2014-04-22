@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -71,6 +72,15 @@ type ServiceConfig struct {
 	ClientTimeout int             `json:"client_timeout"`
 	ServerTimeout int             `json:"server_timeout"`
 	DialTimeout   int             `json:"connect_timeout"`
+}
+
+// Compare a service's settings, ignoring individual backends.
+func (s ServiceConfig) Equal(other ServiceConfig) bool {
+	// just remove the backends and compare the rest
+	s.Backends = nil
+	other.Backends = nil
+	// TODO: write this out to remove reflect
+	return reflect.DeepEqual(s, other)
 }
 
 // Create a Service from a config struct

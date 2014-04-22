@@ -32,6 +32,9 @@ func getService(w http.ResponseWriter, r *http.Request) {
 	w.Write(marshal(serviceStats))
 }
 
+// Update a service and/or backends.
+// Adding a `backends_only` query parameter will prevent the service from being
+// shutdown and replaced if the ServiceConfig is not identical..
 func postService(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -43,6 +46,11 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	backendsOnly := false
+	if r.FormValue("backends_only") != "" {
+		backendsOnly = true
+	}
+
 	svcCfg := ServiceConfig{Name: vars["service"]}
 	err = json.Unmarshal(body, &svcCfg)
 	if err != nil {
@@ -51,10 +59,10 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if e := Registry.AddService(svcCfg); e != nil {
+	if e := Registry.UpdateService(svcCfg, backendsOnly); e != nil {
 		// we can probably distinguish between 4xx and 5xx errors here at some point.
-		log.Printf("service %s exists, updating", svcCfg.Name)
-		if e := Registry.UpdateService(svcCfg); e != nil {
+		log.Printf("service %s doesn't exist, adding", svcCfg.Name)
+		if e := Registry.AddService(svcCfg); e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return
 		}
