@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -55,6 +56,7 @@ type ServiceRegistry struct {
 	HostSSHAddr  string
 	OutputBuffer *utils.OutputBuffer
 	pollCh       chan bool
+	redisHost    string
 }
 
 type ConfigChange struct {
@@ -95,6 +97,7 @@ func (r *ServiceRegistry) ensureHostname() string {
 
 // Build the Redis Pool
 func (r *ServiceRegistry) Connect(redisHost string) {
+	r.redisHost = redisHost
 	rwTimeout := 5 * time.Second
 
 	redisPool := redis.Pool{
@@ -245,6 +248,11 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 		if err != nil {
 			return false, err
 		}
+	}
+
+	err = r.notifyChanged()
+	if err != nil {
+		return created == "OK", err
 	}
 
 	return created == "OK", nil
@@ -409,15 +417,63 @@ func (r *ServiceRegistry) checkForChangePeriodically(stop chan struct{}) {
 			return
 		case <-ticker.C:
 			r.pollCh <- true
-
 		}
 	}
+}
 
+func (r *ServiceRegistry) notifyChanged() error {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+	// TODO: received count ignored, use it somehow?
+	_, err := redis.Int(conn.Do("PUBLISH", "galaxy", "config"))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ServiceRegistry) subscribeChanges() {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	conn, err := redis.Dial("tcp", r.redisHost)
+	if err != nil {
+		//FIXME: Handle w/ retries
+		panic(err)
+	}
+
+	defer conn.Close()
+	psc := redis.PubSubConn{Conn: conn}
+	go func() {
+		defer wg.Done()
+		for {
+			switch n := psc.Receive().(type) {
+			case redis.Message:
+				if string(n.Data) == "config" {
+					log.Printf("Config changed. Re-deploying containers.\n")
+					r.CheckForChangesNow()
+				} else {
+					log.Printf("Ignoring notification: %s %s\n", n.Channel, n.Data)
+				}
+
+			case error:
+				log.Printf("ERROR: %v\n", n)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		psc.Subscribe("galaxy")
+		log.Printf("Monitoring for config changes on channel: galaxy\n")
+	}()
+	wg.Wait()
 }
 
 func (r *ServiceRegistry) Watch(changes chan *ConfigChange, stop chan struct{}) {
 	go r.checkForChanges(changes)
 	go r.checkForChangePeriodically(stop)
+	go r.subscribeChanges()
 }
 
 // TODO: log or return error?
