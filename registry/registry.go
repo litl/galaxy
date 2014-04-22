@@ -693,3 +693,6 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 
 	return appList, nil
 }
+
+// TODO: get all ServiceRegistrations
+func (r *ServiceRegistry) ListRegistrations() ([]ServiceRegistration, error) { return nil, nil }

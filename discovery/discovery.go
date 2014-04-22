@@ -1,12 +1,13 @@
 package main
 
 import (
+	"os"
+
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
-	"os"
 )
 
 const (
@@ -45,6 +46,10 @@ func initOrDie(c *cli.Context) {
 	if !c.Bool("loop") {
 		log.DefaultLogger.SetFlags(0)
 	}
+
+	if shuttle := c.GlobalString("shuttleAddr"); shuttle != "" {
+		go RunShuttle(shuttle)
+	}
 }
 
 func main() {
@@ -58,6 +63,7 @@ func main() {
 		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
 		cli.StringFlag{Name: "sshAddr", Value: "127.0.0.1:22", Usage: "hosts external ssh IP:port"},
+		cli.StringFlag{Name: "shuttleAddr", Usage: "shuttle http address"},
 	}
 
 	app.Commands = []cli.Command{
