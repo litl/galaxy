@@ -359,7 +359,11 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 	return reg != nil, err
 }
 
-func (r *ServiceRegistry) CheckForChanges(changes chan *ConfigChange) {
+func (r *ServiceRegistry) CheckForChangesNow() {
+	r.pollCh <- true
+}
+
+func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 	lastVersion := make(map[string]int64)
 	serviceConfigs, err := r.ListApps()
 	if err != nil {
@@ -395,25 +399,25 @@ func (r *ServiceRegistry) CheckForChanges(changes chan *ConfigChange) {
 	}
 }
 
-// We need an ID to start from, so we know when something has changed.
-// Return nil,nil if mothing has changed (for now)
-func (r *ServiceRegistry) Watch(lastID int64, changes chan *ConfigChange, stop chan struct{}) {
+func (r *ServiceRegistry) checkForChangePeriodically(stop chan struct{}) {
+	// TODO: default polling interval
+	ticker := time.NewTicker(2 * time.Second)
+	for {
+		select {
+		case <-stop:
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			r.pollCh <- true
 
-	go func() {
-
-		// TODO: default polling interval
-		ticker := time.NewTicker(2 * time.Second)
-		for {
-			select {
-			case <-stop:
-				ticker.Stop()
-				return
-			case <-ticker.C:
-				r.pollCh <- true
-
-			}
 		}
-	}()
+	}
+
+}
+
+func (r *ServiceRegistry) Watch(changes chan *ConfigChange, stop chan struct{}) {
+	go r.checkForChanges(changes)
+	go r.checkForChangePeriodically(stop)
 }
 
 // TODO: log or return error?

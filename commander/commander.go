@@ -142,9 +142,6 @@ func main() {
 	cancelChan := make(chan struct{})
 	// do we need to cancel ever?
 
-	// how do we get tha last ID?
-	lastID := int64(0)
-
-	serviceRegistry.Watch(lastID, restartChan, cancelChan)
+	serviceRegistry.Watch(restartChan, cancelChan)
 	restartContainers(restartChan)
 }
