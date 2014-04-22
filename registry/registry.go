@@ -109,11 +109,19 @@ func (r *ServiceRegistry) Connect(redisHost string) {
 		// test every connection for now
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			_, err := c.Do("PING")
+			if err != nil {
+				defer c.Close()
+			}
 			return err
 		},
 	}
 
 	r.redisPool = redisPool
+}
+
+func (r *ServiceRegistry) reconnectRedis() {
+	r.redisPool.Close()
+	r.Connect(r.redisHost)
 }
 
 func NewServiceConfig(app, version string, cfg map[string]string) *ServiceConfig {
@@ -373,16 +381,21 @@ func (r *ServiceRegistry) CheckForChangesNow() {
 
 func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 	lastVersion := make(map[string]int64)
-	serviceConfigs, err := r.ListApps()
-	if err != nil {
-		changes <- &ConfigChange{
-			Error: err,
+	for {
+		serviceConfigs, err := r.ListApps()
+		if err != nil {
+			changes <- &ConfigChange{
+				Error: err,
+			}
+			time.Sleep(5 * time.Second)
+			continue
 		}
-		return
-	}
 
-	for _, config := range serviceConfigs {
-		lastVersion[config.Name] = config.ID
+		for _, config := range serviceConfigs {
+			lastVersion[config.Name] = config.ID
+		}
+		break
+
 	}
 
 	for {
@@ -392,7 +405,7 @@ func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 			changes <- &ConfigChange{
 				Error: err,
 			}
-			break
+			continue
 		}
 		for _, changedConfig := range serviceConfigs {
 			if changedConfig.ID != lastVersion[changedConfig.Name] {
@@ -409,14 +422,14 @@ func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 
 func (r *ServiceRegistry) checkForChangePeriodically(stop chan struct{}) {
 	// TODO: default polling interval
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	for {
 		select {
 		case <-stop:
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			r.pollCh <- true
+			r.CheckForChangesNow()
 		}
 	}
 }
@@ -434,40 +447,68 @@ func (r *ServiceRegistry) notifyChanged() error {
 
 func (r *ServiceRegistry) subscribeChanges() {
 	var wg sync.WaitGroup
-	wg.Add(2)
 
-	conn, err := redis.Dial("tcp", r.redisHost)
-	if err != nil {
-		//FIXME: Handle w/ retries
-		panic(err)
+	redisPool := redis.Pool{
+		MaxIdle:     1,
+		IdleTimeout: 0,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", r.redisHost)
+			if err != nil {
+				return nil, err
+			}
+			return c, err
+		},
+		// test every connection for now
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			if err != nil {
+				defer c.Close()
+			}
+			return err
+		},
 	}
 
-	defer conn.Close()
-	psc := redis.PubSubConn{Conn: conn}
-	go func() {
-		defer wg.Done()
-		for {
-			switch n := psc.Receive().(type) {
-			case redis.Message:
-				if string(n.Data) == "config" {
-					log.Printf("Config changed. Re-deploying containers.\n")
-					r.CheckForChangesNow()
-				} else {
-					log.Printf("Ignoring notification: %s %s\n", n.Channel, n.Data)
-				}
+	for {
 
-			case error:
-				log.Printf("ERROR: %v\n", n)
-				return
-			}
+		conn := redisPool.Get()
+		defer conn.Close()
+		if conn.Err() != nil {
+			conn.Close()
+			log.Printf("ERROR: %v\n", conn.Err())
+			time.Sleep(5 * time.Second)
+			r.reconnectRedis()
+			continue
 		}
-	}()
-	go func() {
-		defer wg.Done()
-		psc.Subscribe("galaxy")
-		log.Printf("Monitoring for config changes on channel: galaxy\n")
-	}()
-	wg.Wait()
+
+		wg.Add(2)
+		psc := redis.PubSubConn{Conn: conn}
+		go func() {
+			defer wg.Done()
+			for {
+				switch n := psc.Receive().(type) {
+				case redis.Message:
+					if string(n.Data) == "config" {
+						log.Printf("Config changed. Re-deploying containers.\n")
+						r.CheckForChangesNow()
+					} else {
+						log.Printf("Ignoring notification: %s %s\n", n.Channel, n.Data)
+					}
+
+				case error:
+					psc.Close()
+					log.Printf("ERROR: %v\n", n)
+					return
+				}
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			psc.Subscribe("galaxy")
+			log.Printf("Monitoring for config changes on channel: galaxy\n")
+		}()
+		wg.Wait()
+	}
 }
 
 func (r *ServiceRegistry) Watch(changes chan *ConfigChange, stop chan struct{}) {
@@ -615,6 +656,12 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
+
+	if conn.Err() != nil {
+		conn.Close()
+		r.reconnectRedis()
+		return nil, conn.Err()
+	}
 
 	// TODO: convert to scan
 	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*", "environment")))

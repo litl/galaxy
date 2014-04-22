@@ -98,6 +98,7 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 			continue
 		}
 
+		log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
 		container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
 		if err != nil {
 			log.Printf("ERROR: Could not start %s: %s\n",
