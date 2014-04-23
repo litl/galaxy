@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/litl/galaxy/log"
@@ -18,6 +19,7 @@ var (
 	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
 	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	loop            = flag.Bool("loop", false, "Run continously")
+	shuttleHost     = flag.String("shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
@@ -41,6 +43,23 @@ func initOrDie() {
 	serviceRegistry.Connect(*redisHost)
 	serviceRuntime = &runtime.ServiceRuntime{}
 
+	if *shuttleHost == "" {
+		dockerZero, err := net.InterfaceByName("docker0")
+		if err != nil {
+			log.Fatalf("ERROR: Unable to find docker0 interface")
+		}
+		addrs, _ := dockerZero.Addrs()
+		for _, addr := range addrs {
+			ip, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				log.Fatalf("ERROR: Unable to parse %s", addr.String())
+			}
+			if ip.DefaultMask() != nil {
+				*shuttleHost = ip.String()
+				break
+			}
+		}
+	}
 }
 
 func startContainersIfNecessary() error {
