@@ -163,6 +163,11 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
+	exists, err := r.AppExists(app)
+	if err != nil || !exists {
+		return nil, err
+	}
+
 	svcCfg := &ServiceConfig{
 		Name:            path.Base(app),
 		Env:             make(map[string]string),
@@ -170,7 +175,11 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		environmentVMap: utils.NewVersionedMap(),
 	}
 
-	matches, err := redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app, "environment")))
+	// Service config is spread across two keys currently.
+	envKey := path.Join(r.Env, r.Pool, app, "environment")
+	versionKey := path.Join(r.Env, r.Pool, app, "version")
+
+	matches, err := redis.Values(conn.Do("HGETALL", envKey))
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +200,7 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		}
 	}
 
-	matches, err = redis.Values(conn.Do("HGETALL", path.Join(r.Env, r.Pool, app, "version")))
+	matches, err = redis.Values(conn.Do("HGETALL", versionKey))
 	if err != nil {
 		return nil, err
 	}
