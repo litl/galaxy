@@ -7,6 +7,7 @@ import (
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
+	"net"
 	"os"
 	"os/signal"
 	"os/user"
@@ -20,6 +21,32 @@ var blacklistedContainerId = make(map[string]bool)
 type ServiceRuntime struct {
 	dockerClient *docker.Client
 	authConfig   *auth.ConfigFile
+	shuttleHost  string
+}
+
+func NewServiceRuntime(shuttleHost string) *ServiceRuntime {
+	if shuttleHost == "" {
+		dockerZero, err := net.InterfaceByName("docker0")
+		if err != nil {
+			log.Fatalf("ERROR: Unable to find docker0 interface")
+		}
+		addrs, _ := dockerZero.Addrs()
+		for _, addr := range addrs {
+			ip, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				log.Fatalf("ERROR: Unable to parse %s", addr.String())
+			}
+			if ip.DefaultMask() != nil {
+				shuttleHost = ip.String()
+				break
+			}
+		}
+	}
+
+	return &ServiceRuntime{
+		shuttleHost: shuttleHost,
+	}
+
 }
 
 func (r *ServiceRuntime) ensureDockerClient() *docker.Client {

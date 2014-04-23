@@ -495,7 +495,7 @@ func main() {
 	// Don't print date, etc..
 	log.DefaultLogger.SetFlags(0)
 
-	serviceRuntime = &runtime.ServiceRuntime{}
+	serviceRuntime = runtime.NewServiceRuntime("")
 	if config.Host != "" && len(os.Args) > 1 && (os.Args[1] != "login" && os.Args[1] != "logout") {
 		runRemote()
 		return

@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"os"
 
 	"github.com/litl/galaxy/log"
@@ -41,25 +40,7 @@ func initOrDie() {
 	)
 
 	serviceRegistry.Connect(*redisHost)
-	serviceRuntime = &runtime.ServiceRuntime{}
-
-	if *shuttleHost == "" {
-		dockerZero, err := net.InterfaceByName("docker0")
-		if err != nil {
-			log.Fatalf("ERROR: Unable to find docker0 interface")
-		}
-		addrs, _ := dockerZero.Addrs()
-		for _, addr := range addrs {
-			ip, _, err := net.ParseCIDR(addr.String())
-			if err != nil {
-				log.Fatalf("ERROR: Unable to parse %s", addr.String())
-			}
-			if ip.DefaultMask() != nil {
-				*shuttleHost = ip.String()
-				break
-			}
-		}
-	}
+	serviceRuntime = runtime.NewServiceRuntime(*shuttleHost)
 }
 
 func startContainersIfNecessary() error {
