@@ -25,11 +25,6 @@ var (
 )
 
 func initOrDie() {
-	// TODO: serviceRegistry needed a host ip??
-	serviceRegistry = &registry.ServiceRegistry{
-		Env:  *env,
-		Pool: *pool,
-	}
 
 	serviceRegistry = registry.NewServiceRegistry(
 		*env,
@@ -40,7 +35,7 @@ func initOrDie() {
 	)
 
 	serviceRegistry.Connect(*redisHost)
-	serviceRuntime = runtime.NewServiceRuntime(*shuttleHost)
+	serviceRuntime = runtime.NewServiceRuntime(*shuttleHost, *env, *pool, *redisHost)
 }
 
 func startContainersIfNecessary() error {

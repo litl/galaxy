@@ -19,12 +19,13 @@ import (
 var blacklistedContainerId = make(map[string]bool)
 
 type ServiceRuntime struct {
-	dockerClient *docker.Client
-	authConfig   *auth.ConfigFile
-	shuttleHost  string
+	dockerClient    *docker.Client
+	authConfig      *auth.ConfigFile
+	shuttleHost     string
+	serviceRegistry *registry.ServiceRegistry
 }
 
-func NewServiceRuntime(shuttleHost string) *ServiceRuntime {
+func NewServiceRuntime(shuttleHost, env, pool, redisHost string) *ServiceRuntime {
 	if shuttleHost == "" {
 		dockerZero, err := net.InterfaceByName("docker0")
 		if err != nil {
@@ -43,8 +44,18 @@ func NewServiceRuntime(shuttleHost string) *ServiceRuntime {
 		}
 	}
 
+	serviceRegistry := registry.NewServiceRegistry(
+		env,
+		pool,
+		"",
+		600,
+		"",
+	)
+	serviceRegistry.Connect(redisHost)
+
 	return &ServiceRuntime{
-		shuttleHost: shuttleHost,
+		shuttleHost:     shuttleHost,
+		serviceRegistry: serviceRegistry,
 	}
 
 }
@@ -274,6 +285,16 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	var envVars []string
 	for key, value := range serviceConfig.Env {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+	}
+
+	serviceConfigs, err := s.serviceRegistry.ListApps()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, config := range serviceConfigs {
+		// FIXME: Need a deterministic way to map local shuttle ports to remote services
+		envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":5000")
 	}
 
 	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID, 10)
