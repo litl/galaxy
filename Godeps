@@ -20,11 +20,6 @@
 			"Rev": "8f0575f520013467eb175a5dd30158ed816eeda9"
 		},
 		{
-			"ImportPath": "github.com/coreos/go-etcd/etcd",
-			"Comment": "v0.2.0-rc1-75-g5c0151c",
-			"Rev": "5c0151c64399ff9a8087c2e29ae96145ede7cfc2"
-		},
-		{
 			"ImportPath": "github.com/dotcloud/docker/dockerversion",
 			"Comment": "v0.10.0-91-g24c4c3e",
 			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
@@ -59,6 +54,14 @@
 			"Rev": "ed54f4ed86a815cf09870e4bd1a10a2ee39a4308"
 		},
 		{
+			"ImportPath": "github.com/gorilla/context",
+			"Rev": "a08edd30ad9e104612741163dc087a613829a23c"
+		},
+		{
+			"ImportPath": "github.com/gorilla/mux",
+			"Rev": "270c42505a11c779b5a5aaecfa5ec717adac996e"
+		},
+		{
 			"ImportPath": "github.com/ryanuber/columnize",
 			"Comment": "v1.1.0",
 			"Rev": "fef4ee9c9ecfb000e86ca19ac9cea7d58200d5b6"
@@ -66,6 +69,10 @@
 		{
 			"ImportPath": "github.com/wsxiaoys/terminal/color",
 			"Rev": "5668e431776a7957528361f90ce828266c69ed08"
+		},
+		{
+			"ImportPath": "gopkg.in/check.v1",
+			"Rev": "871360013c92e1c715c2de6d06b54899468a8a2d"
 		}
 	]
 }
