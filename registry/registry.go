@@ -29,7 +29,6 @@ type ServiceConfig struct {
 	// Usualy set to time.Now().UnixNano()
 	ID              int64
 	Name            string `redis:"name"`
-	Version         string
 	Ports           map[string]string
 	versionVMap     *utils.VersionedMap
 	environmentVMap *utils.VersionedMap
@@ -95,6 +94,16 @@ func (s *ServiceConfig) EnvGet(key string) string {
 	return s.environmentVMap.Get(key)
 }
 
+func (s *ServiceConfig) Version() string {
+	return s.versionVMap.Get("version")
+}
+
+func (s *ServiceConfig) SetVersion(version string) {
+	if s.versionVMap.Get("version") != version {
+		s.versionVMap.Set("version", version, time.Now().UnixNano())
+	}
+}
+
 func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
 	return &ServiceRegistry{
 		Env:         env,
@@ -152,10 +161,10 @@ func NewServiceConfig(app, version string) *ServiceConfig {
 	svcCfg := &ServiceConfig{
 		ID:              time.Now().UnixNano(),
 		Name:            app,
-		Version:         version,
 		versionVMap:     utils.NewVersionedMap(),
 		environmentVMap: utils.NewVersionedMap(),
 	}
+	svcCfg.SetVersion(version)
 
 	return svcCfg
 }
@@ -230,37 +239,22 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		portsVMap:       utils.NewVersionedMap(),
 	}
 
-	// Service config is spread across two keys currently.
-	versionKey := path.Join(r.Env, r.Pool, app, "version")
-	portsKey := path.Join(r.Env, r.Pool, app, "ports")
-
 	r.loadVMap(path.Join(r.Env, r.Pool, app, "environment"),
 		svcCfg.environmentVMap)
+	r.loadVMap(path.Join(r.Env, r.Pool, app, "version"),
+		svcCfg.versionVMap)
 
-	matches, err = redis.Values(conn.Do("HGETALL", versionKey))
-	if err != nil {
-		return nil, err
-	}
-
-	// load versionVMap from redis hash
-	serialized := make(map[string]string)
-	for i := 0; i < len(matches); i += 2 {
-		key := string(matches[i].([]byte))
-		value := string(matches[i+1].([]byte))
-		serialized[key] = value
-	}
-
-	svcCfg.versionVMap.UnmarshalMap(serialized)
-	svcCfg.Version = svcCfg.versionVMap.Get("version")
+	// Service config is spread across two keys currently.
+	portsKey := path.Join(r.Env, r.Pool, app, "ports")
 
 	// ports
-	matches, err = redis.Values(conn.Do("HGETALL", portsKey))
+	matches, err := redis.Values(conn.Do("HGETALL", portsKey))
 	if err != nil {
 		return nil, err
 	}
 
 	// load environmentVMap from redis hash
-	serialized = make(map[string]string)
+	serialized := make(map[string]string)
 	for i := 0; i < len(matches); i += 2 {
 		key := string(matches[i].([]byte))
 		value := string(matches[i+1].([]byte))
@@ -306,10 +300,6 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 		if svcCfg.environmentVMap.Get(k) != v {
 			svcCfg.environmentVMap.Set(k, v, time.Now().UnixNano())
 		}
-	}
-
-	if svcCfg.versionVMap.Get("version") != svcCfg.Version {
-		svcCfg.versionVMap.Set("version", svcCfg.Version, time.Now().UnixNano())
 	}
 
 	for k, v := range svcCfg.Ports {

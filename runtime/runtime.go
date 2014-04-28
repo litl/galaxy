@@ -173,10 +173,10 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
-	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version)
+	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
 
 	// see if we have the image locally
-	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version)
+	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
 
 	if err == docker.ErrNoSuchImage {
 		_, err := s.PullImage(registry, repository)
@@ -202,7 +202,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 
 	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
-			Image:        serviceConfig.Version,
+			Image:        serviceConfig.Version(),
 			Env:          envVars,
 			AttachStdout: true,
 			AttachStderr: true,
@@ -269,7 +269,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 }
 
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
-	img := serviceConfig.Version
+	img := serviceConfig.Version()
 	registry, repository, _ := utils.SplitDockerImage(img)
 
 	// see if we have the image locally
@@ -343,7 +343,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 }
 
 func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
-	img := serviceConfig.Version
+	img := serviceConfig.Version()
 	containerId, err := s.IsRunning(img)
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err

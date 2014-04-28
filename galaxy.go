@@ -98,7 +98,7 @@ func appList(c *cli.Context) {
 	for _, app := range appList {
 		name := app.Name
 		environmentConfigured := app.Env != nil
-		versionDeployed := app.Version
+		versionDeployed := app.Version()
 		registered := serviceRegistry.CountInstances(name)
 
 		columns = append(columns, strings.Join([]string{
@@ -204,7 +204,7 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	svcCfg.Version = version
+	svcCfg.SetVersion(version)
 	// TODO, the ID should be handled behinf the scenes
 	svcCfg.ID = time.Now().UnixNano()
 
