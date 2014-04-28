@@ -18,17 +18,13 @@ var (
 	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
 	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	loop            = flag.Bool("loop", false, "Run continously")
+	shuttleHost     = flag.String("shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
 )
 
 func initOrDie() {
-	// TODO: serviceRegistry needed a host ip??
-	serviceRegistry = &registry.ServiceRegistry{
-		Env:  *env,
-		Pool: *pool,
-	}
 
 	serviceRegistry = registry.NewServiceRegistry(
 		*env,
@@ -39,8 +35,7 @@ func initOrDie() {
 	)
 
 	serviceRegistry.Connect(*redisHost)
-	serviceRuntime = &runtime.ServiceRuntime{}
-
+	serviceRuntime = runtime.NewServiceRuntime(*shuttleHost, *env, *pool, *redisHost)
 }
 
 func startContainersIfNecessary() error {

@@ -7,6 +7,7 @@ import (
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
+	"net"
 	"os"
 	"os/signal"
 	"os/user"
@@ -18,8 +19,45 @@ import (
 var blacklistedContainerId = make(map[string]bool)
 
 type ServiceRuntime struct {
-	dockerClient *docker.Client
-	authConfig   *auth.ConfigFile
+	dockerClient    *docker.Client
+	authConfig      *auth.ConfigFile
+	shuttleHost     string
+	serviceRegistry *registry.ServiceRegistry
+}
+
+func NewServiceRuntime(shuttleHost, env, pool, redisHost string) *ServiceRuntime {
+	if shuttleHost == "" {
+		dockerZero, err := net.InterfaceByName("docker0")
+		if err != nil {
+			log.Fatalf("ERROR: Unable to find docker0 interface")
+		}
+		addrs, _ := dockerZero.Addrs()
+		for _, addr := range addrs {
+			ip, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				log.Fatalf("ERROR: Unable to parse %s", addr.String())
+			}
+			if ip.DefaultMask() != nil {
+				shuttleHost = ip.String()
+				break
+			}
+		}
+	}
+
+	serviceRegistry := registry.NewServiceRegistry(
+		env,
+		pool,
+		"",
+		600,
+		"",
+	)
+	serviceRegistry.Connect(redisHost)
+
+	return &ServiceRuntime{
+		shuttleHost:     shuttleHost,
+		serviceRegistry: serviceRegistry,
+	}
+
 }
 
 func (r *ServiceRuntime) ensureDockerClient() *docker.Client {
@@ -247,6 +285,16 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	var envVars []string
 	for key, value := range serviceConfig.Env {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+	}
+
+	serviceConfigs, err := s.serviceRegistry.ListApps()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, config := range serviceConfigs {
+		// FIXME: Need a deterministic way to map local shuttle ports to remote services
+		envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":5000")
 	}
 
 	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID, 10)

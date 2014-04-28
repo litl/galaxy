@@ -49,6 +49,21 @@ func initRegistry(c *cli.Context) {
 	initOnce.Do(f)
 }
 
+// ensure the registry as a redis host, but only once
+func initRuntime(c *cli.Context) {
+	f := func() {
+
+		serviceRuntime = runtime.NewServiceRuntime(
+			"",
+			c.GlobalString("env"),
+			c.GlobalString("pool"),
+			c.GlobalString("redis"),
+		)
+	}
+
+	initOnce.Do(f)
+}
+
 func ensureAppParam(c *cli.Context, command string) string {
 	app := c.Args().First()
 	if app == "" {
@@ -157,6 +172,7 @@ func appDelete(c *cli.Context) {
 
 func appDeploy(c *cli.Context) {
 	initRegistry(c)
+	initRuntime(c)
 
 	app := ensureAppParam(c, "app:deploy")
 
@@ -211,6 +227,7 @@ func appDeploy(c *cli.Context) {
 
 func appRun(c *cli.Context) {
 	initRegistry(c)
+	initRuntime(c)
 
 	app := ensureAppParam(c, "app:run")
 
@@ -495,7 +512,6 @@ func main() {
 	// Don't print date, etc..
 	log.DefaultLogger.SetFlags(0)
 
-	serviceRuntime = &runtime.ServiceRuntime{}
 	if config.Host != "" && len(os.Args) > 1 && (os.Args[1] != "login" && os.Args[1] != "logout") {
 		runRemote()
 		return
