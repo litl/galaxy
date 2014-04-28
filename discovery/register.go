@@ -1,15 +1,16 @@
 package main
 
 import (
+	"os"
+	"strings"
+	"time"
+
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
-	"os"
-	"strings"
-	"time"
 )
 
 func register(c *cli.Context) {
@@ -48,11 +49,7 @@ func register(c *cli.Context) {
 				env[key] = value
 			}
 
-			serviceConfig := &registry.ServiceConfig{
-				Name:    repository,
-				Env:     env,
-				Version: tag,
-			}
+			serviceConfig := registry.NewServiceConfigWithEnv(repository, tag, env)
 
 			// container name is <app>_<id>
 			if strings.Contains(dockerContainer.Name, "_") {

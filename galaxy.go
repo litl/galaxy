@@ -265,7 +265,7 @@ func configList(c *cli.Context) {
 		return
 	}
 
-	for k, v := range cfg.Env {
+	for k, v := range cfg.Env() {
 		log.Printf("%s=%s\n", k, v)
 	}
 }
@@ -286,7 +286,7 @@ func configSet(c *cli.Context) {
 	}
 
 	if svcCfg == nil {
-		svcCfg = registry.NewServiceConfig(app, "", make(map[string]string))
+		svcCfg = registry.NewServiceConfig(app, "")
 	}
 
 	for _, arg := range c.Args().Tail() {
@@ -297,7 +297,7 @@ func configSet(c *cli.Context) {
 
 		}
 		values := strings.Split(arg, "=")
-		svcCfg.Env[strings.ToUpper(values[0])] = values[1]
+		svcCfg.EnvSet(strings.ToUpper(values[0]), values[1])
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
@@ -329,7 +329,7 @@ func configUnset(c *cli.Context) {
 	}
 
 	for _, arg := range c.Args().Tail() {
-		svcCfg.Env[strings.ToUpper(arg)] = ""
+		svcCfg.EnvSet(strings.ToUpper(arg), "")
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
@@ -357,7 +357,7 @@ func configGet(c *cli.Context) {
 	}
 
 	for _, arg := range c.Args().Tail() {
-		log.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env[strings.ToUpper(arg)])
+		log.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
 	}
 }
 

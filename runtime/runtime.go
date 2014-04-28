@@ -193,7 +193,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 		"TERM=xterm",
 	}
 
-	for key, value := range serviceConfig.Env {
+	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
@@ -284,7 +284,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 
 	// setup env vars from etcd
 	var envVars []string
-	for key, value := range serviceConfig.Env {
+	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
