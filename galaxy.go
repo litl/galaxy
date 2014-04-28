@@ -51,17 +51,12 @@ func initRegistry(c *cli.Context) {
 
 // ensure the registry as a redis host, but only once
 func initRuntime(c *cli.Context) {
-	f := func() {
-
-		serviceRuntime = runtime.NewServiceRuntime(
-			"",
-			c.GlobalString("env"),
-			c.GlobalString("pool"),
-			c.GlobalString("redis"),
-		)
-	}
-
-	initOnce.Do(f)
+	serviceRuntime = runtime.NewServiceRuntime(
+		"",
+		c.GlobalString("env"),
+		c.GlobalString("pool"),
+		c.GlobalString("redis"),
+	)
 }
 
 func ensureAppParam(c *cli.Context, command string) string {
@@ -191,7 +186,7 @@ func appDeploy(c *cli.Context) {
 
 	image, err := serviceRuntime.InspectImage(version)
 	if image == nil && err == nil {
-		err := serviceRuntime.PullImage(registry, repository)
+		image, err = serviceRuntime.PullImage(registry, repository)
 		if err != nil {
 			log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
 			return
@@ -212,6 +207,12 @@ func appDeploy(c *cli.Context) {
 	svcCfg.Version = version
 	// TODO, the ID should be handled behinf the scenes
 	svcCfg.ID = time.Now().UnixNano()
+
+	ports := map[string]string{}
+	for k, _ := range image.Config.ExposedPorts {
+		ports[k.Port()] = k.Proto()
+	}
+	svcCfg.Ports = ports
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {

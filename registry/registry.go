@@ -31,8 +31,10 @@ type ServiceConfig struct {
 	Name            string `redis:"name"`
 	Version         string
 	Env             map[string]string
+	Ports           map[string]string
 	versionVMap     *utils.VersionedMap
 	environmentVMap *utils.VersionedMap
+	portsVMap       *utils.VersionedMap
 }
 
 type ServiceRegistration struct {
@@ -171,13 +173,16 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	svcCfg := &ServiceConfig{
 		Name:            path.Base(app),
 		Env:             make(map[string]string),
+		Ports:           make(map[string]string),
 		versionVMap:     utils.NewVersionedMap(),
 		environmentVMap: utils.NewVersionedMap(),
+		portsVMap:       utils.NewVersionedMap(),
 	}
 
 	// Service config is spread across two keys currently.
 	envKey := path.Join(r.Env, r.Pool, app, "environment")
 	versionKey := path.Join(r.Env, r.Pool, app, "version")
+	portsKey := path.Join(r.Env, r.Pool, app, "ports")
 
 	matches, err := redis.Values(conn.Do("HGETALL", envKey))
 	if err != nil {
@@ -216,8 +221,33 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	svcCfg.versionVMap.UnmarshalMap(serialized)
 	svcCfg.Version = svcCfg.versionVMap.Get("version")
 
-	svcCfg.ID = int64(math.Max(float64(svcCfg.environmentVMap.LatestVersion()),
-		float64(svcCfg.versionVMap.LatestVersion())))
+	// ports
+	matches, err = redis.Values(conn.Do("HGETALL", portsKey))
+	if err != nil {
+		return nil, err
+	}
+
+	// load environmentVMap from redis hash
+	serialized = make(map[string]string)
+	for i := 0; i < len(matches); i += 2 {
+		key := string(matches[i].([]byte))
+		value := string(matches[i+1].([]byte))
+		serialized[key] = value
+	}
+
+	svcCfg.portsVMap.UnmarshalMap(serialized)
+	for _, k := range svcCfg.portsVMap.Keys() {
+		val := svcCfg.portsVMap.Get(k)
+		if val != "" {
+			svcCfg.Ports[k] = val
+		}
+	}
+
+	maxId := float64(svcCfg.environmentVMap.LatestVersion())
+	maxId = math.Max(maxId, float64(svcCfg.versionVMap.LatestVersion()))
+	maxId = math.Max(maxId, float64(svcCfg.portsVMap.LatestVersion()))
+
+	svcCfg.ID = int64(maxId)
 
 	return svcCfg, nil
 }
@@ -250,6 +280,12 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 		svcCfg.versionVMap.Set("version", svcCfg.Version, time.Now().UnixNano())
 	}
 
+	for k, v := range svcCfg.Ports {
+		if svcCfg.portsVMap.Get(k) != v {
+			svcCfg.portsVMap.Set(k, v, time.Now().UnixNano())
+		}
+	}
+
 	//TODO: user MULTI/EXEC
 	created, err := r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "environment"),
 		svcCfg.environmentVMap)
@@ -261,6 +297,15 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	if created == "OK" {
 		created, err = r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "version"),
 			svcCfg.versionVMap)
+
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if created == "OK" {
+		created, err = r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "ports"),
+			svcCfg.portsVMap)
 
 		if err != nil {
 			return false, err
