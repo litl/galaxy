@@ -2,7 +2,6 @@ package registry
 
 import (
 	"encoding/json"
-	"math"
 	"os"
 	"path"
 	"strings"
@@ -27,7 +26,6 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
 type ServiceConfig struct {
 	// ID is used for ordering and conflict resolution.
 	// Usualy set to time.Now().UnixNano()
-	ID              int64
 	Name            string `redis:"name"`
 	versionVMap     *utils.VersionedMap
 	environmentVMap *utils.VersionedMap
@@ -124,6 +122,20 @@ func (s *ServiceConfig) AddPort(port, portType string) {
 	s.portsVMap.Set(port, portType, time.Now().UnixNano())
 }
 
+func (s *ServiceConfig) ID() int64 {
+	id := int64(0)
+	for _, vmap := range []*utils.VersionedMap{
+		s.environmentVMap,
+		s.versionVMap,
+		s.portsVMap,
+	} {
+		if vmap.LatestVersion() > id {
+			id = vmap.LatestVersion()
+		}
+	}
+	return id
+}
+
 func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
 	return &ServiceRegistry{
 		Env:         env,
@@ -179,7 +191,6 @@ func (r *ServiceRegistry) reconnectRedis() {
 
 func NewServiceConfig(app, version string) *ServiceConfig {
 	svcCfg := &ServiceConfig{
-		ID:              time.Now().UnixNano(),
 		Name:            app,
 		versionVMap:     utils.NewVersionedMap(),
 		environmentVMap: utils.NewVersionedMap(),
@@ -264,12 +275,6 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		svcCfg.versionVMap)
 	r.loadVMap(path.Join(r.Env, r.Pool, app, "ports"),
 		svcCfg.portsVMap)
-
-	maxId := float64(svcCfg.environmentVMap.LatestVersion())
-	maxId = math.Max(maxId, float64(svcCfg.versionVMap.LatestVersion()))
-	maxId = math.Max(maxId, float64(svcCfg.portsVMap.LatestVersion()))
-
-	svcCfg.ID = int64(maxId)
 
 	return svcCfg, nil
 }
@@ -464,7 +469,7 @@ func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 		}
 
 		for _, config := range serviceConfigs {
-			lastVersion[config.Name] = config.ID
+			lastVersion[config.Name] = config.ID()
 		}
 		break
 
@@ -480,15 +485,14 @@ func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 			continue
 		}
 		for _, changedConfig := range serviceConfigs {
-			if changedConfig.ID != lastVersion[changedConfig.Name] {
-				lastVersion[changedConfig.Name] = changedConfig.ID
+			changeCopy := changedConfig
+			if changedConfig.ID() != lastVersion[changedConfig.Name] {
+				lastVersion[changedConfig.Name] = changedConfig.ID()
 				changes <- &ConfigChange{
-					ServiceConfig: &changedConfig,
+					ServiceConfig: &changeCopy,
 				}
-
 			}
 		}
-
 	}
 }
 

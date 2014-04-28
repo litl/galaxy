@@ -300,7 +300,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		}
 	}
 
-	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID, 10)
+	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID(), 10)
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
 	_, ok := err.(*docker.NoSuchContainer)
 	if err != nil && !ok {

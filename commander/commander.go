@@ -65,7 +65,7 @@ func startContainersIfNecessary() error {
 		container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
 			log.Printf("ERROR: Could not determine if %s is running: %s\n",
-				serviceConfig.Version, err)
+				serviceConfig.Version(), err)
 			return err
 		}
 
@@ -97,10 +97,10 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 		container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
 		if err != nil {
 			log.Printf("ERROR: Could not start %s: %s\n",
-				changedConfig.ServiceConfig.Version, err)
+				changedConfig.ServiceConfig.Version(), err)
 			continue
 		}
-		log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version, container.ID)
+		log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID)
 
 		serviceRuntime.StopAllButLatest(changedConfig.ServiceConfig.Version(), container, *stopCutoff)
 

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
@@ -205,8 +204,6 @@ func appDeploy(c *cli.Context) {
 	}
 
 	svcCfg.SetVersion(version)
-	// TODO, the ID should be handled behinf the scenes
-	svcCfg.ID = time.Now().UnixNano()
 
 	svcCfg.ClearPorts()
 	for k, _ := range image.Config.ExposedPorts {
