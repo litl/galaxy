@@ -208,11 +208,10 @@ func appDeploy(c *cli.Context) {
 	// TODO, the ID should be handled behinf the scenes
 	svcCfg.ID = time.Now().UnixNano()
 
-	ports := map[string]string{}
+	svcCfg.ClearPorts()
 	for k, _ := range image.Config.ExposedPorts {
-		ports[k.Port()] = k.Proto()
+		svcCfg.AddPort(k.Port(), k.Proto())
 	}
-	svcCfg.Ports = ports
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {

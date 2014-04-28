@@ -294,7 +294,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	}
 
 	for _, config := range serviceConfigs {
-		for port, _ := range config.Ports {
+		for port, _ := range config.Ports() {
 			// FIXME: Need a deterministic way to map local shuttle ports to remote services
 			envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR_"+port+"="+s.shuttleHost+":"+port)
 		}
