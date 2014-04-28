@@ -2,6 +2,7 @@ package registry
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path"
 	"strings"
@@ -143,7 +144,6 @@ func (r *ServiceRegistry) loadVMap(key string, dest *utils.VersionedMap) error {
 		return err
 	}
 
-	// load environmentVMap from redis hash
 	serialized := make(map[string]string)
 	for i := 0; i < len(matches); i += 2 {
 		key := string(matches[i].([]byte))
@@ -152,6 +152,27 @@ func (r *ServiceRegistry) loadVMap(key string, dest *utils.VersionedMap) error {
 	}
 
 	dest.UnmarshalMap(serialized)
+	return nil
+}
+
+func (r *ServiceRegistry) saveVMap(key string, vmap *utils.VersionedMap) error {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	serialized := vmap.MarshalMap()
+	if len(serialized) > 0 {
+		redisArgs := redis.Args{}.Add(key).AddFlat(serialized)
+		created, err := redis.String(conn.Do("HMSET", redisArgs...))
+
+		if err != nil {
+			return err
+		}
+
+		if created != "OK" {
+			return errors.New("not saved")
+		}
+
+	}
 	return nil
 }
 
@@ -164,37 +185,23 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 		return nil, err
 	}
 
-	svcCfg := &ServiceConfig{
-		Name:            path.Base(app),
-		versionVMap:     utils.NewVersionedMap(),
-		environmentVMap: utils.NewVersionedMap(),
-		portsVMap:       utils.NewVersionedMap(),
+	svcCfg := NewServiceConfig(path.Base(app), "")
+
+	err = r.loadVMap(path.Join(r.Env, r.Pool, app, "environment"), svcCfg.environmentVMap)
+	if err != nil {
+		return nil, err
+	}
+	err = r.loadVMap(path.Join(r.Env, r.Pool, app, "version"), svcCfg.versionVMap)
+	if err != nil {
+		return nil, err
 	}
 
-	r.loadVMap(path.Join(r.Env, r.Pool, app, "environment"),
-		svcCfg.environmentVMap)
-	r.loadVMap(path.Join(r.Env, r.Pool, app, "version"),
-		svcCfg.versionVMap)
-	r.loadVMap(path.Join(r.Env, r.Pool, app, "ports"),
-		svcCfg.portsVMap)
+	err = r.loadVMap(path.Join(r.Env, r.Pool, app, "ports"), svcCfg.portsVMap)
+	if err != nil {
+		return nil, err
+	}
 
 	return svcCfg, nil
-}
-
-func (r *ServiceRegistry) saveVersionedMap(key string, vmap *utils.VersionedMap) (string, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
-	serialized := vmap.MarshalMap()
-	if len(serialized) > 0 {
-		redisArgs := redis.Args{}.Add(key).AddFlat(serialized)
-		created, err := conn.Do("HMSET", redisArgs...)
-		if err != nil {
-			return "", err
-		}
-		return created.(string), err
-	}
-	return "OK", nil
 }
 
 func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
@@ -212,37 +219,33 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	}
 
 	//TODO: user MULTI/EXEC
-	created, err := r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "environment"),
+	err := r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "environment"),
 		svcCfg.environmentVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	if created == "OK" {
-		created, err = r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "version"),
-			svcCfg.versionVMap)
+	err = r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "version"),
+		svcCfg.versionVMap)
 
-		if err != nil {
-			return false, err
-		}
+	if err != nil {
+		return false, err
 	}
 
-	if created == "OK" {
-		created, err = r.saveVersionedMap(path.Join(r.Env, r.Pool, svcCfg.Name, "ports"),
-			svcCfg.portsVMap)
+	err = r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "ports"),
+		svcCfg.portsVMap)
 
-		if err != nil {
-			return false, err
-		}
+	if err != nil {
+		return false, err
 	}
 
 	err = r.notifyChanged()
 	if err != nil {
-		return created == "OK", err
+		return false, err
 	}
 
-	return created == "OK", nil
+	return true, nil
 }
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
