@@ -20,6 +20,7 @@ func NewServiceConfig(app, version string) *ServiceConfig {
 		Name:            app,
 		versionVMap:     utils.NewVersionedMap(),
 		environmentVMap: utils.NewVersionedMap(),
+		portsVMap:       utils.NewVersionedMap(),
 	}
 	svcCfg.SetVersion(version)
 
