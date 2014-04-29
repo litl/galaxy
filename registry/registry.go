@@ -208,13 +208,13 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 
 	for k, v := range svcCfg.Env() {
 		if svcCfg.environmentVMap.Get(k) != v {
-			svcCfg.environmentVMap.Set(k, v, time.Now().UnixNano())
+			svcCfg.environmentVMap.Set(k, v)
 		}
 	}
 
 	for k, v := range svcCfg.Ports() {
 		if svcCfg.portsVMap.Get(k) != v {
-			svcCfg.portsVMap.Set(k, v, time.Now().UnixNano())
+			svcCfg.portsVMap.Set(k, v)
 		}
 	}
 
@@ -605,7 +605,7 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 	}
 
 	emptyConfig := NewServiceConfig(app, "")
-	emptyConfig.environmentVMap.Set("ENV", r.Env, time.Now().UnixNano())
+	emptyConfig.environmentVMap.Set("ENV", r.Env)
 
 	return r.SetServiceConfig(emptyConfig)
 }
