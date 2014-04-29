@@ -51,7 +51,7 @@ func mySetup(s *BasicSuite, t Tester) {
 
 	svcCfg := ServiceConfig{
 		Name: "testService",
-		Addr: "127.0.0.1:2222",
+		Addr: "127.0.0.1:2000",
 	}
 
 	if err := Registry.AddService(svcCfg); err != nil {

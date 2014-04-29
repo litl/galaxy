@@ -57,7 +57,7 @@ func startContainersIfNecessary() error {
 			continue
 		}
 
-		if serviceConfig.Version == "" {
+		if serviceConfig.Version() == "" {
 			log.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
 			continue
 		}
@@ -65,13 +65,13 @@ func startContainersIfNecessary() error {
 		container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
 			log.Printf("ERROR: Could not determine if %s is running: %s\n",
-				serviceConfig.Version, err)
+				serviceConfig.Version(), err)
 			return err
 		}
 
-		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version, container.ID[0:12])
+		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
-		serviceRuntime.StopAllButLatest(serviceConfig.Version, container, *stopCutoff)
+		serviceRuntime.StopAllButLatest(serviceConfig.Version(), container, *stopCutoff)
 	}
 	return nil
 }
@@ -89,7 +89,7 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 			continue
 		}
 
-		if changedConfig.ServiceConfig.Version == "" {
+		if changedConfig.ServiceConfig.Version() == "" {
 			continue
 		}
 
@@ -97,12 +97,12 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 		container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
 		if err != nil {
 			log.Printf("ERROR: Could not start %s: %s\n",
-				changedConfig.ServiceConfig.Version, err)
+				changedConfig.ServiceConfig.Version(), err)
 			continue
 		}
-		log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version, container.ID)
+		log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID)
 
-		serviceRuntime.StopAllButLatest(changedConfig.ServiceConfig.Version, container, *stopCutoff)
+		serviceRuntime.StopAllButLatest(changedConfig.ServiceConfig.Version(), container, *stopCutoff)
 
 	}
 }

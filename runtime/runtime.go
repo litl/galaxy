@@ -2,11 +2,6 @@ package runtime
 
 import (
 	"errors"
-	auth "github.com/dotcloud/docker/registry"
-	"github.com/fsouza/go-dockerclient"
-	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
-	"github.com/litl/galaxy/utils"
 	"net"
 	"os"
 	"os/signal"
@@ -14,6 +9,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	auth "github.com/dotcloud/docker/registry"
+	"github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/registry"
+	"github.com/litl/galaxy/utils"
 )
 
 var blacklistedContainerId = make(map[string]bool)
@@ -60,17 +61,17 @@ func NewServiceRuntime(shuttleHost, env, pool, redisHost string) *ServiceRuntime
 
 }
 
-func (r *ServiceRuntime) ensureDockerClient() *docker.Client {
-	if r.dockerClient == nil {
+func (s *ServiceRuntime) ensureDockerClient() *docker.Client {
+	if s.dockerClient == nil {
 		endpoint := "unix:///var/run/docker.sock"
 		client, err := docker.NewClient(endpoint)
 		if err != nil {
 			panic(err)
 		}
-		r.dockerClient = client
+		s.dockerClient = client
 
 	}
-	return r.dockerClient
+	return s.dockerClient
 }
 
 func (s *ServiceRuntime) InspectImage(image string) (*docker.Image, error) {
@@ -172,13 +173,13 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
-	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version)
+	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
 
 	// see if we have the image locally
-	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version)
+	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
 
 	if err == docker.ErrNoSuchImage {
-		err := s.PullImage(registry, repository)
+		_, err := s.PullImage(registry, repository)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +193,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 		"TERM=xterm",
 	}
 
-	for key, value := range serviceConfig.Env {
+	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
@@ -201,7 +202,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 
 	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
-			Image:        serviceConfig.Version,
+			Image:        serviceConfig.Version(),
 			Env:          envVars,
 			AttachStdout: true,
 			AttachStderr: true,
@@ -268,14 +269,14 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 }
 
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
-	img := serviceConfig.Version
+	img := serviceConfig.Version()
 	registry, repository, _ := utils.SplitDockerImage(img)
 
 	// see if we have the image locally
 	_, err := s.ensureDockerClient().InspectImage(img)
 
 	if err == docker.ErrNoSuchImage {
-		err := s.PullImage(registry, repository)
+		_, err = s.PullImage(registry, repository)
 		if err != nil {
 			return nil, err
 		}
@@ -283,7 +284,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 
 	// setup env vars from etcd
 	var envVars []string
-	for key, value := range serviceConfig.Env {
+	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
@@ -293,11 +294,13 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	}
 
 	for _, config := range serviceConfigs {
-		// FIXME: Need a deterministic way to map local shuttle ports to remote services
-		envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":5000")
+		for port, _ := range config.Ports() {
+			// FIXME: Need a deterministic way to map local shuttle ports to remote services
+			envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR_"+port+"="+s.shuttleHost+":"+port)
+		}
 	}
 
-	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID, 10)
+	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID(), 10)
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
 	_, ok := err.(*docker.NoSuchContainer)
 	if err != nil && !ok {
@@ -340,7 +343,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 }
 
 func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
-	img := serviceConfig.Version
+	img := serviceConfig.Version()
 	containerId, err := s.IsRunning(img)
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
@@ -353,7 +356,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 	return s.Start(serviceConfig)
 }
 
-func (s *ServiceRuntime) PullImage(registry, repository string) error {
+func (s *ServiceRuntime) PullImage(registry, repository string) (*docker.Image, error) {
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
@@ -384,6 +387,10 @@ func (s *ServiceRuntime) PullImage(registry, repository string) error {
 		dockerAuth.Email = authCreds.Email
 	}
 
-	return s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
+	err := s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
+	if err != nil {
+		return nil, err
+	}
+	return s.ensureDockerClient().InspectImage(registry + "/" + repository)
 
 }

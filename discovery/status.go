@@ -1,14 +1,15 @@
 package main
 
 import (
+	"strings"
+	"time"
+
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
-	"strings"
-	"time"
 )
 
 func status(c *cli.Context) {
@@ -44,11 +45,7 @@ func status(c *cli.Context) {
 			env[key] = value
 		}
 
-		serviceConfig := &registry.ServiceConfig{
-			Name:    repository,
-			Env:     env,
-			Version: tag,
-		}
+		serviceConfig := registry.NewServiceConfigWithEnv(repository, tag, env)
 
 		if strings.Contains(dockerContainer.Name, "_") {
 			app := strings.TrimPrefix(strings.Split(dockerContainer.Name, "_")[0], "/")

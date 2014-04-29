@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
@@ -51,17 +50,12 @@ func initRegistry(c *cli.Context) {
 
 // ensure the registry as a redis host, but only once
 func initRuntime(c *cli.Context) {
-	f := func() {
-
-		serviceRuntime = runtime.NewServiceRuntime(
-			"",
-			c.GlobalString("env"),
-			c.GlobalString("pool"),
-			c.GlobalString("redis"),
-		)
-	}
-
-	initOnce.Do(f)
+	serviceRuntime = runtime.NewServiceRuntime(
+		"",
+		c.GlobalString("env"),
+		c.GlobalString("pool"),
+		c.GlobalString("redis"),
+	)
 }
 
 func ensureAppParam(c *cli.Context, command string) string {
@@ -103,7 +97,7 @@ func appList(c *cli.Context) {
 	for _, app := range appList {
 		name := app.Name
 		environmentConfigured := app.Env != nil
-		versionDeployed := app.Version
+		versionDeployed := app.Version()
 		registered := serviceRegistry.CountInstances(name)
 
 		columns = append(columns, strings.Join([]string{
@@ -191,7 +185,7 @@ func appDeploy(c *cli.Context) {
 
 	image, err := serviceRuntime.InspectImage(version)
 	if image == nil && err == nil {
-		err := serviceRuntime.PullImage(registry, repository)
+		image, err = serviceRuntime.PullImage(registry, repository)
 		if err != nil {
 			log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
 			return
@@ -209,9 +203,12 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	svcCfg.Version = version
-	// TODO, the ID should be handled behinf the scenes
-	svcCfg.ID = time.Now().UnixNano()
+	svcCfg.SetVersion(version)
+
+	svcCfg.ClearPorts()
+	for k, _ := range image.Config.ExposedPorts {
+		svcCfg.AddPort(k.Port(), k.Proto())
+	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
@@ -264,7 +261,7 @@ func configList(c *cli.Context) {
 		return
 	}
 
-	for k, v := range cfg.Env {
+	for k, v := range cfg.Env() {
 		log.Printf("%s=%s\n", k, v)
 	}
 }
@@ -285,7 +282,7 @@ func configSet(c *cli.Context) {
 	}
 
 	if svcCfg == nil {
-		svcCfg = registry.NewServiceConfig(app, "", make(map[string]string))
+		svcCfg = registry.NewServiceConfig(app, "")
 	}
 
 	for _, arg := range c.Args().Tail() {
@@ -296,7 +293,7 @@ func configSet(c *cli.Context) {
 
 		}
 		values := strings.Split(arg, "=")
-		svcCfg.Env[strings.ToUpper(values[0])] = values[1]
+		svcCfg.EnvSet(strings.ToUpper(values[0]), values[1])
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
@@ -328,7 +325,7 @@ func configUnset(c *cli.Context) {
 	}
 
 	for _, arg := range c.Args().Tail() {
-		svcCfg.Env[strings.ToUpper(arg)] = ""
+		svcCfg.EnvSet(strings.ToUpper(arg), "")
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
@@ -356,7 +353,7 @@ func configGet(c *cli.Context) {
 	}
 
 	for _, arg := range c.Args().Tail() {
-		log.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env[strings.ToUpper(arg)])
+		log.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
 	}
 }
 
