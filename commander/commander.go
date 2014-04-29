@@ -40,7 +40,6 @@ func initOrDie() {
 }
 
 func startContainersIfNecessary() error {
-	// FIXME: This should list registered services from the service registry
 	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
 		log.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", *env, *pool, err)
@@ -72,7 +71,6 @@ func startContainersIfNecessary() error {
 
 		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
-		serviceRuntime.StopAllButLatest(*stopCutoff)
 	}
 	return nil
 }
@@ -147,6 +145,13 @@ func main() {
 
 	err := startContainersIfNecessary()
 	if err != nil && !*loop {
+		log.Printf("ERROR: Could not start containers: %s\n", err)
+		return
+	}
+
+	err = serviceRuntime.StopAllButLatest(*stopCutoff)
+	if err != nil && !*loop {
+		log.Printf("ERROR: Could not start containers: %s\n", err)
 		return
 	}
 
