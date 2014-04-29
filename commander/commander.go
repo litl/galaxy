@@ -113,7 +113,12 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 				log.Printf("ERROR: Could not stop containers: %s\n", err)
 			}
 		case <-ticker.C:
-			err := serviceRuntime.StopAllButLatest(*stopCutoff)
+			err := startContainersIfNecessary()
+			if err != nil {
+				log.Printf("ERROR: Could not start containers: %s\n", err)
+			}
+
+			err = serviceRuntime.StopAllButLatest(*stopCutoff)
 			if err != nil {
 				log.Printf("ERROR: Could not stop containers: %s\n", err)
 			}
