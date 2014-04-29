@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
@@ -12,7 +13,7 @@ import (
 )
 
 var (
-	stopCutoff      = flag.Int64("cutoff", 5*60, "Seconds to wait before stopping old containers")
+	stopCutoff      = flag.Int64("cutoff", 10, "Seconds to wait before stopping old containers")
 	app             = flag.String("app", "", "App to start")
 	redisHost       = flag.String("redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
 	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
@@ -71,38 +72,52 @@ func startContainersIfNecessary() error {
 
 		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
-		serviceRuntime.StopAllButLatest(serviceConfig.Version(), container, *stopCutoff)
+		serviceRuntime.StopAllButLatest(*stopCutoff)
 	}
 	return nil
 }
 
 func restartContainers(changedConfigs chan *registry.ConfigChange) {
+	ticker := time.NewTicker(10 * time.Second)
+
 	for {
 
-		changedConfig := <-changedConfigs
-		if changedConfig.Error != nil {
-			log.Printf("ERROR: Error watching changes: %s\n", changedConfig.Error)
-			continue
-		}
+		var changedConfig *registry.ConfigChange
+		select {
 
-		if changedConfig.ServiceConfig == nil {
-			continue
-		}
+		case changedConfig = <-changedConfigs:
+			if changedConfig.Error != nil {
+				log.Printf("ERROR: Error watching changes: %s\n", changedConfig.Error)
+				continue
+			}
 
-		if changedConfig.ServiceConfig.Version() == "" {
-			continue
-		}
+			if changedConfig.ServiceConfig == nil {
+				continue
+			}
 
-		log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
-		container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
-		if err != nil {
-			log.Printf("ERROR: Could not start %s: %s\n",
-				changedConfig.ServiceConfig.Version(), err)
-			continue
-		}
-		log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID)
+			if changedConfig.ServiceConfig.Version() == "" {
+				continue
+			}
 
-		serviceRuntime.StopAllButLatest(changedConfig.ServiceConfig.Version(), container, *stopCutoff)
+			log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
+			container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
+			if err != nil {
+				log.Printf("ERROR: Could not start %s: %s\n",
+					changedConfig.ServiceConfig.Version(), err)
+				continue
+			}
+			log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID)
+
+			err = serviceRuntime.StopAllButLatest(*stopCutoff)
+			if err != nil {
+				log.Printf("ERROR: Could not stop containers: %s\n", err)
+			}
+		case <-ticker.C:
+			err := serviceRuntime.StopAllButLatest(*stopCutoff)
+			if err != nil {
+				log.Printf("ERROR: Could not stop containers: %s\n", err)
+			}
+		}
 
 	}
 }
