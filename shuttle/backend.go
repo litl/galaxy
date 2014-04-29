@@ -2,11 +2,12 @@ package main
 
 import (
 	"io"
-	"log"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/litl/galaxy/log"
 )
 
 type Backend struct {
@@ -22,7 +23,7 @@ type Backend struct {
 	Conns     int64
 	Active    int64
 
-	// these are loaded from the service, se a backend doesn't need to acces
+	// these are loaded from the service, so a backend doesn't need to access
 	// the service struct at all.
 	dialTimeout   time.Duration
 	rwTimeout     time.Duration
@@ -61,6 +62,13 @@ type BackendConfig struct {
 	Addr      string `json:"address"`
 	CheckAddr string `json:"check_address"`
 	Weight    int    `json:"weight"`
+}
+
+func (b BackendConfig) Equal(other BackendConfig) bool {
+	if other.Weight == 0 {
+		other.Weight = 1
+	}
+	return b == other
 }
 
 func NewBackend(cfg BackendConfig) *Backend {
@@ -147,23 +155,32 @@ func (b *Backend) check() {
 	if c, e := net.DialTimeout("tcp", b.CheckAddr, b.dialTimeout); e == nil {
 		c.Close()
 	} else {
+		log.Debug("Check error:", e)
 		up = false
 	}
 
 	b.Lock()
 	defer b.Unlock()
 	if up {
+		log.Debugf("Check OK for %s/%s", b.Name, b.CheckAddr)
 		b.fallCount = 0
 		b.riseCount++
 		b.checkOK++
 		if b.riseCount >= b.rise {
+			if !b.up {
+				log.Debugf("Marking backend %s Up", b.Name)
+			}
 			b.up = true
 		}
 	} else {
+		log.Debugf("Check failed for %s/%s", b.Name, b.CheckAddr)
 		b.riseCount = 0
 		b.fallCount++
 		b.checkFail++
 		if b.fallCount >= b.fall {
+			if b.up {
+				log.Debugf("Marking backend %s Down", b.Name)
+			}
 			b.up = false
 		}
 	}
@@ -175,6 +192,7 @@ func (b *Backend) healthCheck() {
 	for {
 		select {
 		case <-b.stopCheck:
+			log.Debug("Stopping backend", b.Name)
 			t.Stop()
 			return
 		case <-t.C:
@@ -189,6 +207,13 @@ type closeReader interface {
 }
 
 func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
+	log.Debugf("Initiating proxy: %s/%s-%s/%s",
+		cliConn.RemoteAddr(),
+		cliConn.LocalAddr(),
+		srvConn.LocalAddr(),
+		srvConn.RemoteAddr(),
+	)
+
 	// Backend is a pointer receiver so we can get the address of the fields,
 	// but all updates will be done atomically.
 
@@ -198,7 +223,7 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 		rwTimeout: b.rwTimeout,
 	}
 
-	// TODO: No way to force shutdown. Do we need it, or hsould we always just
+	// TODO: No way to force shutdown. Do we need it, or should we always just
 	// let a connection run out?
 
 	atomic.AddInt64(&b.Conns, 1)
@@ -218,9 +243,11 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 	var waitFor chan bool
 	select {
 	case <-clientClosed:
+		log.Debugf("Client %s/%s closed connection", cliConn.RemoteAddr(), cliConn.LocalAddr())
 		bConn.CloseRead()
 		waitFor = backendClosed
 	case <-backendClosed:
+		log.Debugf("Server %s/%s closed connection", srvConn.RemoteAddr(), srvConn.LocalAddr())
 		cliConn.(closeReader).CloseRead()
 		waitFor = clientClosed
 	}

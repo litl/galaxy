@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"sync"
+
+	"github.com/litl/galaxy/log"
 )
 
 func loadConfig() {
@@ -26,6 +27,7 @@ func loadConfig() {
 			log.Println("config error:", err)
 			continue
 		}
+		log.Debug("loaded config from:", cfgPath)
 
 		for _, svcCfg := range svcs {
 			if e := Registry.AddService(svcCfg); e != nil {

@@ -1,12 +1,13 @@
 package main
 
 import (
-	"log"
 	"net"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/litl/galaxy/log"
 )
 
 var (
@@ -80,7 +81,31 @@ func (s ServiceConfig) Equal(other ServiceConfig) bool {
 	// just remove the backends and compare the rest
 	s.Backends = nil
 	other.Backends = nil
-	// TODO: write this out to remove reflect
+
+	// FIXME: Normalize default in one place!
+
+	if s.Balance != other.Balance {
+		if s.Balance == "" && other.Balance == "RR" {
+			other.Balance = ""
+		} else if s.Balance == "RR" && other.Balance == "" {
+			other.Balance = "RR"
+		}
+	}
+
+	if s.CheckInterval == 0 {
+		s.CheckInterval = 2000
+	}
+	if s.Rise == 0 {
+		s.Rise = 2
+	}
+	if s.Fall == 0 {
+		s.Fall = 2
+	}
+
+	// We handle backends separately
+	s.Backends = nil
+	other.Backends = nil
+
 	return reflect.DeepEqual(s, other)
 }
 
@@ -98,7 +123,7 @@ func NewService(cfg ServiceConfig) *Service {
 	}
 
 	if s.CheckInterval == 0 {
-		s.CheckInterval = 2
+		s.CheckInterval = 2000
 	}
 	if s.Rise == 0 {
 		s.Rise = 2
@@ -277,7 +302,7 @@ func (s *Service) connect(cliConn net.Conn) {
 	for _, b := range backends {
 		srvConn, err := net.DialTimeout("tcp", b.Addr, b.dialTimeout)
 		if err != nil {
-			log.Println("error connecting to backend:", err)
+			log.Printf("Error connecting to Backend %s/%s: %s", s.Name, b.Name, err)
 			atomic.AddInt64(&b.Errors, 1)
 			continue
 		}
@@ -286,7 +311,7 @@ func (s *Service) connect(cliConn net.Conn) {
 		return
 	}
 
-	log.Println("error: no backend for", s.Name)
+	log.Println("Error: no Backend for", s.Name)
 	cliConn.Close()
 }
 
@@ -296,6 +321,7 @@ func (s *Service) stop() {
 	s.Lock()
 	defer s.Unlock()
 
+	log.Debug("Stopping Service", s.Name)
 	for _, backend := range s.Backends {
 		backend.Stop()
 	}

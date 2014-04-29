@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/litl/galaxy/log"
 
 	"github.com/gorilla/mux"
 )
