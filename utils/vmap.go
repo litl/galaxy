@@ -141,12 +141,12 @@ func (v *VersionedMap) UnmarshalMap(serialized map[string]string) error {
 
 // MarshalExpiredMap returns historical entries that have been
 // superseded by newer values
-func (v *VersionedMap) MarshalExpiredMap() map[string]string {
+func (v *VersionedMap) MarshalExpiredMap(age int64) map[string]string {
 	result := make(map[string]string)
 	for key, entries := range v.values {
 		currentVersion := v.currentVersion(key)
 		for _, mapEntry := range entries {
-			if mapEntry.version >= currentVersion {
+			if mapEntry.version >= currentVersion-age {
 				continue
 			}
 			op := "s"

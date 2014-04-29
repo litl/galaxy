@@ -160,18 +160,45 @@ func (r *ServiceRegistry) saveVMap(key string, vmap *utils.VersionedMap) error {
 	defer conn.Close()
 
 	serialized := vmap.MarshalMap()
+	if len(serialized) == 0 {
+		return nil
+	}
+
+	redisArgs := redis.Args{}.Add(key).AddFlat(serialized)
+	created, err := redis.String(conn.Do("HMSET", redisArgs...))
+
+	if err != nil {
+		return err
+	}
+
+	if created != "OK" {
+		return errors.New("not saved")
+	}
+
+	r.gcVMap(key, vmap)
+	return nil
+}
+
+func (r *ServiceRegistry) gcVMap(key string, vmap *utils.VersionedMap) error {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	serialized := vmap.MarshalExpiredMap(5)
 	if len(serialized) > 0 {
-		redisArgs := redis.Args{}.Add(key).AddFlat(serialized)
-		created, err := redis.String(conn.Do("HMSET", redisArgs...))
+		keys := []string{}
+		for k, _ := range serialized {
+			keys = append(keys, k)
+		}
+		redisArgs := redis.Args{}.Add(key).AddFlat(keys)
+		deleted, err := redis.Int(conn.Do("HDEL", redisArgs...))
 
 		if err != nil {
 			return err
 		}
 
-		if created != "OK" {
-			return errors.New("not saved")
+		if deleted != 1 {
+			return errors.New("not deleted")
 		}
-
 	}
 	return nil
 }

@@ -151,7 +151,7 @@ func TestMarshalExpired(t *testing.T) {
 	vmap.Set("k2", "v1")
 	vmap.Set("k1", "v2")
 
-	old := vmap.MarshalExpiredMap()
+	old := vmap.MarshalExpiredMap(0)
 	if len(old) != 1 {
 		t.Fatalf("Expected 1 expired entry")
 	}
@@ -163,7 +163,7 @@ func TestMarshalExpired(t *testing.T) {
 	vmap.Set("k2", "v2")
 	vmap.Set("k2", "v3")
 
-	old = vmap.MarshalExpiredMap()
+	old = vmap.MarshalExpiredMap(0)
 	if len(old) != 3 {
 		t.Fatalf("Expected 3 expired entry")
 	}
@@ -179,5 +179,31 @@ func TestMarshalExpired(t *testing.T) {
 	if old["k2:s:2"] != "v2" {
 		t.Fatalf("Expected value not found. Got %#v", old)
 	}
+}
 
+func TestMarshalExpiredWithAge(t *testing.T) {
+	vmap := NewVersionedMap()
+	vmap.Set("k1", "v1")
+	vmap.Set("k1", "v2")
+	vmap.Set("k1", "v3")
+	vmap.Set("k1", "v4")
+	vmap.Set("k1", "v5")
+	vmap.Set("k1", "v6")
+
+	old := vmap.MarshalExpiredMap(2)
+	println(len(old))
+	if len(old) != 3 {
+		t.Fatalf("Expected 3 expired entry")
+	}
+
+	if old["k1:s:1"] != "v1" {
+		t.Fatalf("Expected value not found. Got %#v", old)
+	}
+
+	if old["k1:s:2"] != "v2" {
+		t.Fatalf("Expected value not found. Got %#v", old)
+	}
+	if old["k1:s:3"] != "v3" {
+		t.Fatalf("Expected value not found. Got %#v", old)
+	}
 }
