@@ -5,6 +5,7 @@ import (
 	"net"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,9 +31,9 @@ type Service struct {
 	Rcvd          int64
 	Errors        int64
 
-	// Next returns the backend to be used for a new connection according our
-	// load balancing algorithm
-	next func() *Backend
+	// Next returns the backends in priority order.
+	next func() []*Backend
+
 	// the last backend we used and the number of times we used it
 	lastBackend int
 	lastCount   int
@@ -263,17 +264,30 @@ func (s *Service) run() {
 				return
 			}
 
-			backend := s.next()
-
-			if backend == nil {
-				log.Println("error: no backend for", s.Name)
-				conn.Close()
-				continue
-			}
-
-			go backend.Proxy(conn)
+			go s.connect(conn)
 		}
 	}()
+}
+
+func (s *Service) connect(cliConn net.Conn) {
+	backends := s.next()
+
+	// Try the first backend given, but if that fails, cycle through them all
+	// to make a best effort to connect the client.
+	for _, b := range backends {
+		srvConn, err := net.DialTimeout("tcp", b.Addr, b.dialTimeout)
+		if err != nil {
+			log.Println("error connecting to backend:", err)
+			atomic.AddInt64(&b.Errors, 1)
+			continue
+		}
+
+		b.Proxy(srvConn, cliConn)
+		return
+	}
+
+	log.Println("error: no backend for", s.Name)
+	cliConn.Close()
 }
 
 // Stop the Service's Accept loop by closing the Listener,
