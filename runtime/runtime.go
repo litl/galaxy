@@ -351,7 +351,22 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 	// already running, grab the container details
 	if containerId != "" {
-		return s.ensureDockerClient().InspectContainer(containerId)
+		container, err := s.ensureDockerClient().InspectContainer(containerId)
+		if err != nil {
+			return nil, err
+		}
+
+		// check if container is the right version
+		if !strings.Contains(container.Name, "_") {
+			return container, nil
+		}
+
+		idPart := container.Name[strings.LastIndex(container.Name, "_")+1:]
+		id, _ := strconv.ParseInt(idPart, 10, 64)
+		if id != serviceConfig.ID() {
+			return s.Start(serviceConfig)
+		}
+		return container, nil
 	}
 	return s.Start(serviceConfig)
 }
