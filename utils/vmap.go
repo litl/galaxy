@@ -23,14 +23,18 @@ func NewVersionedMap() *VersionedMap {
 	}
 }
 
-func (v *VersionedMap) nextVersion(key string) int64 {
+func (v *VersionedMap) currentVersion(key string) int64 {
 	next := int64(0)
 	for _, mapEntry := range v.values[key] {
 		if mapEntry.version > next {
 			next = mapEntry.version
 		}
 	}
-	return next + 1
+	return next
+}
+
+func (v *VersionedMap) nextVersion(key string) int64 {
+	return v.currentVersion(key) + 1
 }
 
 func (v *VersionedMap) setVersion(key, value string, version int64) {
@@ -133,4 +137,26 @@ func (v *VersionedMap) UnmarshalMap(serialized map[string]string) error {
 		}
 	}
 	return nil
+}
+
+// MarshalExpiredMap returns historical entries that have been
+// superseded by newer values
+func (v *VersionedMap) MarshalExpiredMap() map[string]string {
+	result := make(map[string]string)
+	for key, entries := range v.values {
+		currentVersion := v.currentVersion(key)
+		for _, mapEntry := range entries {
+			if mapEntry.version >= currentVersion {
+				continue
+			}
+			op := "s"
+			if mapEntry.value == "" {
+				op = "u"
+			}
+			mapKey := strings.Join([]string{key, op, strconv.FormatInt(mapEntry.version, 10)}, ":")
+			result[mapKey] = mapEntry.value
+		}
+
+	}
+	return result
 }
