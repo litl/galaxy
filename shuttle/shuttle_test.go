@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	//log.SetFlags(log.LstdFlags | log.Lshortfile)
+	// log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetOutput(ioutil.Discard)
 }
 
@@ -127,7 +127,7 @@ func checkResp(addr, expected string, c Tester) {
 	}
 
 	if expected != "" && resp != expected {
-		c.Fatal("Expected", expected, ", got", resp)
+		c.Fatal("Expected ", expected, ", got ", resp)
 	}
 }
 
@@ -160,16 +160,16 @@ func (s *BasicSuite) TestWeightedRoundRobin(c *C) {
 	// so skip the tcp connection this time.
 
 	// one from the first server
-	c.Assert(s.service.next().Name, Equals, "backend_0")
+	c.Assert(s.service.next()[0].Name, Equals, "backend_0")
 	// A weight of 2 should return twice
-	c.Assert(s.service.next().Name, Equals, "backend_1")
-	c.Assert(s.service.next().Name, Equals, "backend_1")
+	c.Assert(s.service.next()[0].Name, Equals, "backend_1")
+	c.Assert(s.service.next()[0].Name, Equals, "backend_1")
 	// And a weight of 3 should return thrice
-	c.Assert(s.service.next().Name, Equals, "backend_2")
-	c.Assert(s.service.next().Name, Equals, "backend_2")
-	c.Assert(s.service.next().Name, Equals, "backend_2")
+	c.Assert(s.service.next()[0].Name, Equals, "backend_2")
+	c.Assert(s.service.next()[0].Name, Equals, "backend_2")
+	c.Assert(s.service.next()[0].Name, Equals, "backend_2")
 	// and once around or good measure
-	c.Assert(s.service.next().Name, Equals, "backend_0")
+	c.Assert(s.service.next()[0].Name, Equals, "backend_0")
 }
 
 func (s *BasicSuite) TestLeastConn(c *C) {
@@ -245,6 +245,23 @@ func (s *BasicSuite) TestFailedCheck(c *C) {
 	time.Sleep(800 * time.Millisecond)
 	stats = s.service.Stats()
 	c.Assert(stats.Backends[0].Up, Equals, true)
+}
+
+// Make sure the connection is re-dispatched when Dialing a backend fails
+func (s *BasicSuite) TestConnectAny(c *C) {
+	s.service.CheckInterval = 2000
+	s.service.Fall = 2
+	s.AddBackend(c)
+	s.AddBackend(c)
+
+	// kill the first server
+	s.servers[0].Stop()
+
+	stats := s.service.Stats()
+	c.Assert(stats.Backends[0].Up, Equals, true)
+
+	// Backend 0 still shows up, but we should get connected to backend 1
+	checkResp(s.service.Addr, s.servers[1].addr, c)
 }
 
 // Update a backend in place
@@ -349,6 +366,7 @@ func (s *BasicSuite) TestUpdateService(c *C) {
 }
 
 // Add backends and run response tests in parallel
+// FIXME: there's still some racy-ness in here somewhere.
 func (s *BasicSuite) TestParallel(c *C) {
 	var wg sync.WaitGroup
 

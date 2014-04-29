@@ -188,48 +188,29 @@ type closeReader interface {
 	CloseRead() error
 }
 
-func (b *Backend) Proxy(conn net.Conn) {
+func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 	// Backend is a pointer receiver so we can get the address of the fields,
 	// but all updates will be done atomically.
-	// We still lock b in case of a config update while starting the Proxy.
-	b.Lock()
-	addr := b.Addr
-	dialTimeout := b.dialTimeout
-	// pointer values for atomic updates
-	conns := &b.Conns
-	active := &b.Active
-	errorCount := &b.Errors
-	bytesSent := &b.Sent
-	bytesRcvd := &b.Rcvd
-	b.Unlock()
-
-	c, err := net.DialTimeout("tcp", addr, dialTimeout)
-	if err != nil {
-		log.Println("error connecting to backend", err)
-		conn.Close()
-		atomic.AddInt64(errorCount, 1)
-		return
-	}
 
 	// TODO: might not be TCP? (this would panic)
 	bConn := &timeoutConn{
-		TCPConn:   c.(*net.TCPConn),
+		TCPConn:   srvConn.(*net.TCPConn),
 		rwTimeout: b.rwTimeout,
 	}
 
 	// TODO: No way to force shutdown. Do we need it, or hsould we always just
 	// let a connection run out?
 
-	atomic.AddInt64(conns, 1)
-	atomic.AddInt64(active, 1)
-	defer atomic.AddInt64(active, -1)
+	atomic.AddInt64(&b.Conns, 1)
+	atomic.AddInt64(&b.Active, 1)
+	defer atomic.AddInt64(&b.Active, -1)
 
 	// channels to wait on close event
 	backendClosed := make(chan bool, 1)
 	clientClosed := make(chan bool, 1)
 
-	go broker(bConn, conn, clientClosed, bytesSent, errorCount)
-	go broker(conn, bConn, backendClosed, bytesRcvd, errorCount)
+	go broker(bConn, cliConn, clientClosed, &b.Sent, &b.Errors)
+	go broker(cliConn, bConn, backendClosed, &b.Rcvd, &b.Errors)
 
 	// wait for one half of the proxy to exit, then trigger a shutdown of the
 	// other half by calling CloseRead(). This will break the read loop in the
@@ -240,7 +221,7 @@ func (b *Backend) Proxy(conn net.Conn) {
 		bConn.CloseRead()
 		waitFor = backendClosed
 	case <-backendClosed:
-		conn.(closeReader).CloseRead()
+		cliConn.(closeReader).CloseRead()
 		waitFor = clientClosed
 	}
 	// wait for the other connection to close
