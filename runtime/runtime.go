@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
-	"strconv"
 	"strings"
 	"time"
 
@@ -121,7 +120,8 @@ func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
 	for _, serviceConfig := range serviceConfigs {
 		registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
-		latestName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID(), 10)
+		latestName := serviceConfig.ContainerName()
+
 		latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
 		_, ok := err.(*docker.NoSuchContainer)
 		// Expected container is not actually running. Skip it and leave old ones.
@@ -315,7 +315,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		}
 	}
 
-	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID(), 10)
+	containerName := serviceConfig.ContainerName()
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
 	_, ok := err.(*docker.NoSuchContainer)
 	if err != nil && !ok {
@@ -376,11 +376,10 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 			return container, nil
 		}
 
-		idPart := container.Name[strings.LastIndex(container.Name, "_")+1:]
-		id, _ := strconv.ParseInt(idPart, 10, 64)
-		if id != serviceConfig.ID() {
+		if strings.TrimPrefix(container.Name, "/") != serviceConfig.ContainerName() {
 			return s.Start(serviceConfig)
 		}
+
 		return container, nil
 	}
 	return s.Start(serviceConfig)
