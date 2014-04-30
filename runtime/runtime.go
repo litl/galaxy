@@ -188,13 +188,11 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
-	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
-
 	// see if we have the image locally
 	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
 
 	if err == docker.ErrNoSuchImage {
-		_, err := s.PullImage(registry, repository)
+		_, err := s.PullImage(serviceConfig.Version())
 		if err != nil {
 			return nil, err
 		}
@@ -284,13 +282,11 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 
 func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 
-	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
-
 	// see if we have the image locally
 	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
 
 	if err == docker.ErrNoSuchImage {
-		_, err := s.PullImage(registry, repository)
+		_, err := s.PullImage(serviceConfig.Version())
 		if err != nil {
 			return nil, err
 		}
@@ -378,13 +374,11 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
-	registry, repository, _ := utils.SplitDockerImage(img)
-
 	// see if we have the image locally
 	_, err := s.ensureDockerClient().InspectImage(img)
 
 	if err == docker.ErrNoSuchImage {
-		_, err = s.PullImage(registry, repository)
+		_, err = s.PullImage(img)
 		if err != nil {
 			return nil, err
 		}
@@ -478,7 +472,8 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 	return s.Start(serviceConfig)
 }
 
-func (s *ServiceRuntime) PullImage(registry, repository string) (*docker.Image, error) {
+func (s *ServiceRuntime) PullImage(version string) (*docker.Image, error) {
+	registry, repository, _ := utils.SplitDockerImage(version)
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
@@ -513,6 +508,6 @@ func (s *ServiceRuntime) PullImage(registry, repository string) (*docker.Image, 
 	if err != nil {
 		return nil, err
 	}
-	return s.ensureDockerClient().InspectImage(registry + "/" + repository)
+	return s.ensureDockerClient().InspectImage(version)
 
 }

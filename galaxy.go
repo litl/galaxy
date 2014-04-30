@@ -193,15 +193,10 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	registry, repository, _ := utils.SplitDockerImage(version)
-
-	image, err := serviceRuntime.InspectImage(version)
-	if image == nil && err == nil {
-		image, err = serviceRuntime.PullImage(registry, repository)
-		if err != nil {
-			log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
-			return
-		}
+	image, err := serviceRuntime.PullImage(version)
+	if err != nil {
+		log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
+		return
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
