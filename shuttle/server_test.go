@@ -3,12 +3,14 @@ package main
 import (
 	"io"
 	"net"
+	"sync"
 )
 
 type testServer struct {
 	addr     string
 	sig      string
 	listener net.Listener
+	wg       sync.WaitGroup
 }
 
 // Start a tcp server which responds with it's addr after every read.
@@ -23,14 +25,18 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 		return nil, err
 	}
 
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		for {
 			conn, err := s.listener.Accept()
 			if err != nil {
 				return
 			}
 
+			s.wg.Add(1)
 			go func() {
+				defer s.wg.Done()
 				defer conn.Close()
 				buff := make([]byte, 1024)
 				for {
@@ -55,4 +61,7 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 
 func (s *testServer) Stop() {
 	s.listener.Close()
+	// We may be imediately creating another identical server.
+	// Wait until all goroutines return to ensure we can bind again.
+	s.wg.Wait()
 }
