@@ -1,6 +1,9 @@
 package registry
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
 
 func TestSetVersion(t *testing.T) {
 	sc := NewServiceConfig("foo", "")
@@ -104,4 +107,17 @@ func TestID(t *testing.T) {
 	if sc.ID() < id {
 		t.Fail()
 	}
+}
+
+func TestContainerName(t *testing.T) {
+	sc := NewServiceConfig("foo", "registry.foo.com/foobar:abc234")
+	if sc.ContainerName() != "foo_"+strconv.FormatInt(sc.ID(), 10) {
+		t.Fatalf("Expected %s. Got %s", "foo_"+strconv.FormatInt(sc.ID(), 10), sc.ContainerName())
+	}
+	sc.EnvSet("biz", "baz")
+
+	if sc.ContainerName() != "foo_"+strconv.FormatInt(sc.ID(), 10) {
+		t.Fatalf("Expected %s. Got %s", "foo_"+strconv.FormatInt(sc.ID(), 10), sc.ContainerName())
+	}
+
 }

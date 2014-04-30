@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
-	"strconv"
 	"strings"
 	"time"
 
@@ -105,50 +104,66 @@ func (s *ServiceRuntime) IsRunning(img string) (string, error) {
 	return "", nil
 }
 
-func (s *ServiceRuntime) StopAllButLatest(img string, latest *docker.Container, stopCutoff int64) error {
-	imageParts := strings.Split(img, ":")
-	repository := imageParts[0]
+func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
+
+	serviceConfigs, err := s.serviceRegistry.ListApps()
+	if err != nil {
+		return err
+	}
 
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All:    false,
-		Before: latest.ID,
+		All: false,
 	})
 	if err != nil {
 		return err
 	}
-	for _, container := range containers {
 
-		if strings.HasPrefix(container.Image, repository) && container.ID != latest.ID &&
-			container.Created < (time.Now().Unix()-stopCutoff) {
+	for _, serviceConfig := range serviceConfigs {
+		registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
+		latestName := serviceConfig.ContainerName()
 
-			// HACK: Docker 0.9 gets zombie containers randomly.  The only way to remove
-			// them is to restart the docker daemon.  If we timeout once trying to stop
-			// one of these containers, blacklist it and leave it running
+		latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
+		_, ok := err.(*docker.NoSuchContainer)
+		// Expected container is not actually running. Skip it and leave old ones.
+		if err != nil && ok {
+			continue
+		}
 
-			if _, ok := blacklistedContainerId[container.ID]; ok {
-				log.Printf("Container %s blacklisted. Won't try to stop.\n", container.ID)
-				continue
-			}
+		for _, container := range containers {
 
-			log.Printf("Stopping container %s\n", container.ID)
-			c := make(chan error, 1)
-			go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
-			select {
-			case err := <-c:
-				if err != nil {
-					log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+			containerReg, containerRepo, _ := utils.SplitDockerImage(container.Image)
+			if containerReg == registry && containerRepo == repository && container.ID != latestContainer.ID &&
+				container.Created < (time.Now().Unix()-stopCutoff) {
+
+				// HACK: Docker 0.9 gets zombie containers randomly.  The only way to remove
+				// them is to restart the docker daemon.  If we timeout once trying to stop
+				// one of these containers, blacklist it and leave it running
+
+				if _, ok := blacklistedContainerId[container.ID]; ok {
+					log.Printf("Container %s blacklisted. Won't try to stop.\n", container.ID)
 					continue
 				}
-			case <-time.After(20 * time.Second):
-				blacklistedContainerId[container.ID] = true
-				log.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
-				continue
-			}
 
-			s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
-				ID:            container.ID,
-				RemoveVolumes: true,
-			})
+				log.Printf("Stopping container %s\n", container.ID)
+				c := make(chan error, 1)
+				go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
+				select {
+				case err := <-c:
+					if err != nil {
+						log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+						continue
+					}
+				case <-time.After(20 * time.Second):
+					blacklistedContainerId[container.ID] = true
+					log.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
+					continue
+				}
+
+				s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+					ID:            container.ID,
+					RemoveVolumes: true,
+				})
+			}
 		}
 	}
 
@@ -393,7 +408,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		}
 	}
 
-	containerName := serviceConfig.Name + "_" + strconv.FormatInt(serviceConfig.ID(), 10)
+	containerName := serviceConfig.ContainerName()
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
 	_, ok := err.(*docker.NoSuchContainer)
 	if err != nil && !ok {
@@ -444,7 +459,21 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 	// already running, grab the container details
 	if containerId != "" {
-		return s.ensureDockerClient().InspectContainer(containerId)
+		container, err := s.ensureDockerClient().InspectContainer(containerId)
+		if err != nil {
+			return nil, err
+		}
+
+		// check if container is the right version
+		if !strings.Contains(container.Name, "_") {
+			return container, nil
+		}
+
+		if strings.TrimPrefix(container.Name, "/") != serviceConfig.ContainerName() {
+			return s.Start(serviceConfig)
+		}
+
+		return container, nil
 	}
 	return s.Start(serviceConfig)
 }

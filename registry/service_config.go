@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/litl/galaxy/utils"
@@ -103,4 +104,8 @@ func (s *ServiceConfig) ID() int64 {
 		}
 	}
 	return id
+}
+
+func (s *ServiceConfig) ContainerName() string {
+	return s.Name + "_" + strconv.FormatInt(s.ID(), 10)
 }

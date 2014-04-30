@@ -42,18 +42,24 @@ func HumanDuration(d time.Duration) string {
 }
 
 func SplitDockerImage(img string) (string, string, string) {
-	if !strings.Contains(img, "/") {
-		return "", img, ""
+	index := 0
+	repository := img
+	var registry, tag string
+	if strings.Contains(img, "/") {
+		separator := strings.Index(img, "/")
+		registry = img[index:separator]
+		index = separator + 1
+		repository = img[index:]
 	}
-	parts := strings.Split(img, "/")
 
-	if !strings.Contains(parts[1], ":") {
-		return parts[0], parts[1], ""
+	if strings.Contains(img, ":") {
+		separator := strings.Index(img, ":")
+		repository = img[index:separator]
+		index = separator + 1
+		tag = img[index:]
 	}
 
-	imageParts := strings.Split(parts[1], ":")
-	// registry, repository, tag
-	return parts[0], imageParts[0], imageParts[1]
+	return registry, repository, tag
 }
 
 func StringInSlice(a string, list []string) bool {
