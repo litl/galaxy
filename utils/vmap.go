@@ -23,7 +23,21 @@ func NewVersionedMap() *VersionedMap {
 	}
 }
 
-func (v *VersionedMap) Set(key, value string, version int64) {
+func (v *VersionedMap) currentVersion(key string) int64 {
+	next := int64(0)
+	for _, mapEntry := range v.values[key] {
+		if mapEntry.version > next {
+			next = mapEntry.version
+		}
+	}
+	return next
+}
+
+func (v *VersionedMap) nextVersion(key string) int64 {
+	return v.currentVersion(key) + 1
+}
+
+func (v *VersionedMap) setVersion(key, value string, version int64) {
 	entries := v.values[key]
 	v.values[key] = append(entries, mapEntry{
 		value:   value,
@@ -31,12 +45,20 @@ func (v *VersionedMap) Set(key, value string, version int64) {
 	})
 }
 
-func (v *VersionedMap) UnSet(key string, version int64) {
+func (v *VersionedMap) unSetVersion(key string, version int64) {
 	entries := v.values[key]
 	v.values[key] = append(entries, mapEntry{
 		value:   "",
 		version: version,
 	})
+}
+
+func (v *VersionedMap) Set(key, value string) {
+	v.setVersion(key, value, v.nextVersion(key))
+}
+
+func (v *VersionedMap) UnSet(key string) {
+	v.unSetVersion(key, v.nextVersion(key))
 }
 
 func (v *VersionedMap) Get(key string) string {
@@ -109,10 +131,32 @@ func (v *VersionedMap) UnmarshalMap(serialized map[string]string) error {
 			return err
 		}
 		if parts[1] == "s" {
-			v.Set(parts[0], val, version)
+			v.setVersion(parts[0], val, version)
 		} else {
-			v.UnSet(parts[0], version)
+			v.unSetVersion(parts[0], version)
 		}
 	}
 	return nil
+}
+
+// MarshalExpiredMap returns historical entries that have been
+// superseded by newer values
+func (v *VersionedMap) MarshalExpiredMap(age int64) map[string]string {
+	result := make(map[string]string)
+	for key, entries := range v.values {
+		currentVersion := v.currentVersion(key)
+		for _, mapEntry := range entries {
+			if mapEntry.version >= currentVersion-age {
+				continue
+			}
+			op := "s"
+			if mapEntry.value == "" {
+				op = "u"
+			}
+			mapKey := strings.Join([]string{key, op, strconv.FormatInt(mapEntry.version, 10)}, ":")
+			result[mapKey] = mapEntry.value
+		}
+
+	}
+	return result
 }

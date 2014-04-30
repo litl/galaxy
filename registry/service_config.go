@@ -2,7 +2,6 @@ package registry
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/litl/galaxy/utils"
 )
@@ -32,7 +31,7 @@ func NewServiceConfigWithEnv(app, version string, env map[string]string) *Servic
 	svcCfg := NewServiceConfig(app, version)
 
 	for k, v := range env {
-		svcCfg.environmentVMap.Set(k, v, time.Now().UnixNano())
+		svcCfg.environmentVMap.Set(k, v)
 	}
 
 	return svcCfg
@@ -53,7 +52,7 @@ func (s *ServiceConfig) Env() map[string]string {
 
 func (s *ServiceConfig) EnvSet(key, value string) {
 	if s.environmentVMap.Get(key) != value {
-		s.environmentVMap.Set(key, value, time.Now().UnixNano())
+		s.environmentVMap.Set(key, value)
 	}
 }
 
@@ -67,7 +66,7 @@ func (s *ServiceConfig) Version() string {
 
 func (s *ServiceConfig) SetVersion(version string) {
 	if s.versionVMap.Get("version") != version {
-		s.versionVMap.Set("version", version, time.Now().UnixNano())
+		s.versionVMap.Set("version", version)
 	}
 }
 
@@ -84,12 +83,12 @@ func (s *ServiceConfig) Ports() map[string]string {
 
 func (s *ServiceConfig) ClearPorts() {
 	for _, k := range s.portsVMap.Keys() {
-		s.portsVMap.Set(k, "", time.Now().UnixNano())
+		s.portsVMap.Set(k, "")
 	}
 }
 
 func (s *ServiceConfig) AddPort(port, portType string) {
-	s.portsVMap.Set(port, portType, time.Now().UnixNano())
+	s.portsVMap.Set(port, portType)
 }
 
 func (s *ServiceConfig) ID() int64 {
