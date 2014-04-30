@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -26,8 +25,7 @@ var (
 )
 
 var config struct {
-	Host       string `toml:"host"`
-	PrivateKey string `toml:"private_key"`
+	Host string `toml:"host"`
 }
 
 // ensure the registry as a redis host, but only once
@@ -239,7 +237,26 @@ func appRun(c *cli.Context) {
 		return
 	}
 
-	_, err = serviceRuntime.StartInteractive(serviceConfig, c.Args()[1:])
+	_, err = serviceRuntime.RunCommand(serviceConfig, c.Args()[1:])
+	if err != nil {
+		log.Printf("ERROR: Could not start container: %s\n", err)
+		return
+	}
+}
+
+func appShell(c *cli.Context) {
+	initRegistry(c)
+	initRuntime(c)
+
+	app := ensureAppParam(c, "app:shell")
+
+	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+	if err != nil {
+		log.Printf("ERROR: Unable to run command: %s.\n", err)
+		return
+	}
+
+	_, err = serviceRuntime.StartInteractive(serviceConfig)
 	if err != nil {
 		log.Printf("ERROR: Could not start container: %s\n", err)
 		return
@@ -377,28 +394,8 @@ func login(c *cli.Context) {
 	if err != nil && os.IsNotExist(err) {
 		os.Mkdir(configDir, 0700)
 	}
-	availableKeys := findSSHKeys(currentUser.HomeDir)
-
-	if len(availableKeys) == 0 {
-		log.Printf("ERROR: No SSH private keys found.  Create one first.\n")
-		return
-	}
-
-	for i, key := range availableKeys {
-		log.Printf("%d) %s\n", i, key)
-	}
-
-	log.Printf("Select private key to use [0]: ")
-	var i int
-	fmt.Scanf("%d", &i)
-
-	if i < 0 || i > len(availableKeys) {
-		i = 0
-	}
-	log.Printf("Using %s\n", availableKeys[i])
 
 	config.Host = c.Args().First()
-	config.PrivateKey = availableKeys[i]
 
 	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
 	if err != nil {
@@ -565,6 +562,12 @@ func main() {
 			Usage:       "run a command in a container",
 			Action:      appRun,
 			Description: "app:run <app> <command>",
+		},
+		{
+			Name:        "app:shell",
+			Usage:       "run a bash shell in a container",
+			Action:      appShell,
+			Description: "app:shell <app>",
 		},
 		{
 			Name:        "config",
