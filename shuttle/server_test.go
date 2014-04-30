@@ -13,6 +13,8 @@ type testServer struct {
 	wg       sync.WaitGroup
 }
 
+// FIXME: this still sometimes fails to bind its port
+
 // Start a tcp server which responds with it's addr after every read.
 func NewTestServer(addr string, c Tester) (*testServer, error) {
 	s := &testServer{

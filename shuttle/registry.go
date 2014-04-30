@@ -84,7 +84,9 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool)
 		return service.start()
 	}
 
-	// FIXME: We loop over the Backends slice 3x. Probably a better way to do this
+	// Lots of looping here (including fetching the Config, but the cardinality
+	// of Backends shouldn't be very large, and the default RoundRobin balancing
+	// is much simpler with a slice.
 
 	// we're going to update just the backends for this config
 	// get a map of what's already running
