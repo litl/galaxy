@@ -171,7 +171,7 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 }
 
-func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
+func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
 	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
 
@@ -218,7 +218,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 	signal.Notify(c, os.Interrupt, os.Kill)
 	go func(s *ServiceRuntime, containerId string) {
 		<-c
-		log.Println("Stopping command")
+		log.Println("Stopping container...")
 		err := s.ensureDockerClient().StopContainer(containerId, 3)
 		if err != nil {
 			log.Printf("ERROR: Unable to stop container: %s", err)
@@ -256,6 +256,100 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 		Stream:       false,
 		Stdout:       true,
 		Stderr:       true,
+	})
+
+	if err != nil {
+		log.Printf("ERROR: Unable to attach to running container: %s", err.Error())
+	}
+
+	s.ensureDockerClient().WaitContainer(container.ID)
+
+	return container, err
+}
+
+func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+
+	registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
+
+	// see if we have the image locally
+	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
+
+	if err == docker.ErrNoSuchImage {
+		_, err := s.PullImage(registry, repository)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	envVars := []string{
+		"HOME=/",
+		"PATH=" + "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"HOSTNAME=" + "app",
+		"TERM=xterm",
+	}
+
+	for key, value := range serviceConfig.Env() {
+		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+	}
+
+	runCmd := []string{"/bin/bash", "-l", "-i"}
+
+	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
+		Config: &docker.Config{
+			Image:        serviceConfig.Version(),
+			Env:          envVars,
+			AttachStdout: true,
+			AttachStderr: true,
+			AttachStdin:  true,
+			Cmd:          runCmd,
+			OpenStdin:    true,
+			StdinOnce:    true,
+			Tty:          true,
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill)
+	go func(s *ServiceRuntime, containerId string) {
+		<-c
+		log.Println("Stopping container...")
+		err := s.ensureDockerClient().StopContainer(containerId, 3)
+		if err != nil {
+			log.Printf("ERROR: Unable to stop container: %s", err)
+		}
+		err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+			ID: containerId,
+		})
+		if err != nil {
+			log.Printf("ERROR: Unable to stop container: %s", err)
+		}
+
+	}(s, container.ID)
+
+	defer s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+		ID: container.ID,
+	})
+	err = s.ensureDockerClient().StartContainer(container.ID,
+		&docker.HostConfig{})
+
+	if err != nil {
+		return container, err
+	}
+
+	err = s.ensureDockerClient().AttachToContainer(docker.AttachToContainerOptions{
+		Container:    container.ID,
+		OutputStream: os.Stdout,
+		ErrorStream:  os.Stderr,
+		InputStream:  os.Stdin,
+		Logs:         true,
+		Stream:       true,
+		Stdout:       true,
+		Stderr:       true,
+		Stdin:        true,
 	})
 
 	if err != nil {

@@ -237,7 +237,26 @@ func appRun(c *cli.Context) {
 		return
 	}
 
-	_, err = serviceRuntime.StartInteractive(serviceConfig, c.Args()[1:])
+	_, err = serviceRuntime.RunCommand(serviceConfig, c.Args()[1:])
+	if err != nil {
+		log.Printf("ERROR: Could not start container: %s\n", err)
+		return
+	}
+}
+
+func appShell(c *cli.Context) {
+	initRegistry(c)
+	initRuntime(c)
+
+	app := ensureAppParam(c, "app:shell")
+
+	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+	if err != nil {
+		log.Printf("ERROR: Unable to run command: %s.\n", err)
+		return
+	}
+
+	_, err = serviceRuntime.StartInteractive(serviceConfig)
 	if err != nil {
 		log.Printf("ERROR: Could not start container: %s\n", err)
 		return
@@ -543,6 +562,12 @@ func main() {
 			Usage:       "run a command in a container",
 			Action:      appRun,
 			Description: "app:run <app> <command>",
+		},
+		{
+			Name:        "app:shell",
+			Usage:       "run a bash shell in a container",
+			Action:      appShell,
+			Description: "app:shell <app>",
 		},
 		{
 			Name:        "config",
