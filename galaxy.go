@@ -119,7 +119,12 @@ func appList(c *cli.Context) {
 
 func appCreate(c *cli.Context) {
 	initRegistry(c)
-	app := ensureAppParam(c, "app:delete")
+	app := c.Args().First()
+	if app == "" {
+		log.Println("ERROR: app name missing")
+		cli.ShowCommandHelp(c, "app:create")
+		os.Exit(1)
+	}
 
 	// Don't allow deleting runtime hosts entries
 	if app == "hosts" {
