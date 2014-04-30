@@ -63,6 +63,18 @@ func ensureAppParam(c *cli.Context, command string) string {
 		cli.ShowCommandHelp(c, command)
 		os.Exit(1)
 	}
+
+	exists, err := appExists(app)
+	if err != nil {
+		log.Printf("ERROR: can't deteremine if %s exists: %s\n", app, err)
+		os.Exit(1)
+	}
+
+	if !exists {
+		log.Printf("ERROR: %s does not exist. Create it first.\n", app)
+		os.Exit(1)
+	}
+
 	return app
 }
 
