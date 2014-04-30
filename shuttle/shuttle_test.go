@@ -3,13 +3,25 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/litl/galaxy/log"
 	. "gopkg.in/check.v1"
 )
+
+func init() {
+	debug = false
+
+	if debug {
+		log.DefaultLogger.Level = log.DEBUG
+	} else {
+		log.DefaultLogger = log.New(ioutil.Discard, "", 0)
+	}
+}
 
 // something that can wrap a gocheck.C testing.T or testing.B
 // Just add more methods as we need them.
