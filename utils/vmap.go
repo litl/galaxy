@@ -37,7 +37,7 @@ func (v *VersionedMap) nextVersion(key string) int64 {
 	return v.currentVersion(key) + 1
 }
 
-func (v *VersionedMap) setVersion(key, value string, version int64) {
+func (v *VersionedMap) SetVersion(key, value string, version int64) {
 	entries := v.values[key]
 	v.values[key] = append(entries, mapEntry{
 		value:   value,
@@ -45,7 +45,7 @@ func (v *VersionedMap) setVersion(key, value string, version int64) {
 	})
 }
 
-func (v *VersionedMap) unSetVersion(key string, version int64) {
+func (v *VersionedMap) UnSetVersion(key string, version int64) {
 	entries := v.values[key]
 	v.values[key] = append(entries, mapEntry{
 		value:   "",
@@ -54,11 +54,11 @@ func (v *VersionedMap) unSetVersion(key string, version int64) {
 }
 
 func (v *VersionedMap) Set(key, value string) {
-	v.setVersion(key, value, v.nextVersion(key))
+	v.SetVersion(key, value, v.nextVersion(key))
 }
 
 func (v *VersionedMap) UnSet(key string) {
-	v.unSetVersion(key, v.nextVersion(key))
+	v.UnSetVersion(key, v.nextVersion(key))
 }
 
 func (v *VersionedMap) Get(key string) string {
@@ -131,9 +131,9 @@ func (v *VersionedMap) UnmarshalMap(serialized map[string]string) error {
 			return err
 		}
 		if parts[1] == "s" {
-			v.setVersion(parts[0], val, version)
+			v.SetVersion(parts[0], val, version)
 		} else {
-			v.unSetVersion(parts[0], version)
+			v.UnSetVersion(parts[0], version)
 		}
 	}
 	return nil

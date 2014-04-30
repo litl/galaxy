@@ -121,3 +121,39 @@ func TestContainerName(t *testing.T) {
 	}
 
 }
+
+func TestIDAlwaysIncrements(t *testing.T) {
+
+	sc := NewServiceConfig("foo", "")
+
+	id := sc.ID()
+	sc.EnvSet("k1", "v1")
+	if sc.ID() <= id {
+		t.Fatalf("Expected version to increment")
+	}
+	id = sc.ID()
+
+	sc.EnvSet("k1", "v2")
+	if sc.ID() <= id {
+		t.Fatalf("Expected version to increment")
+	}
+	id = sc.ID()
+
+	sc.EnvSet("k1", "v3")
+	if sc.ID() <= id {
+		t.Fatalf("Expected version to increment")
+	}
+	id = sc.ID()
+
+	sc.SetVersion("blah")
+	if sc.ID() <= id {
+		t.Fatalf("Expected version to increment")
+	}
+	id = sc.ID()
+
+	sc.SetVersion("bar")
+	if sc.ID() <= id {
+		t.Fatalf("Expected version to increment")
+	}
+	id = sc.ID()
+}

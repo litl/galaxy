@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -30,20 +32,15 @@ var config struct {
 
 // ensure the registry as a redis host, but only once
 func initRegistry(c *cli.Context) {
-	f := func() {
+	serviceRegistry = registry.NewServiceRegistry(
+		c.GlobalString("env"),
+		c.GlobalString("pool"),
+		c.GlobalString("hostIp"),
+		uint64(c.Int("ttl")),
+		c.GlobalString("sshAddr"),
+	)
 
-		serviceRegistry = registry.NewServiceRegistry(
-			c.GlobalString("env"),
-			c.GlobalString("pool"),
-			c.GlobalString("hostIp"),
-			uint64(c.Int("ttl")),
-			c.GlobalString("sshAddr"),
-		)
-
-		serviceRegistry.Connect(c.GlobalString("redis"))
-	}
-
-	initOnce.Do(f)
+	serviceRegistry.Connect(c.GlobalString("redis"))
 }
 
 // ensure the registry as a redis host, but only once
@@ -63,6 +60,18 @@ func ensureAppParam(c *cli.Context, command string) string {
 		cli.ShowCommandHelp(c, command)
 		os.Exit(1)
 	}
+
+	exists, err := appExists(app)
+	if err != nil {
+		log.Printf("ERROR: can't deteremine if %s exists: %s\n", app, err)
+		os.Exit(1)
+	}
+
+	if !exists {
+		log.Printf("ERROR: %s does not exist. Create it first.\n", app)
+		os.Exit(1)
+	}
+
 	return app
 }
 
@@ -287,7 +296,18 @@ func configSet(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config:set")
 
-	if len(c.Args().Tail()) == 0 {
+	args := c.Args().Tail()
+	if len(args) == 0 {
+		bytes, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			log.Printf("ERROR: Unable to read stdin: %s.\n", err)
+			return
+
+		}
+		args = strings.Split(string(bytes), "\n")
+	}
+
+	if len(args) == 0 {
 		log.Printf("ERROR: No config values specified.\n")
 		return
 	}
@@ -302,7 +322,12 @@ func configSet(c *cli.Context) {
 		svcCfg = registry.NewServiceConfig(app, "")
 	}
 
-	for _, arg := range c.Args().Tail() {
+	for _, arg := range args {
+
+		if strings.TrimSpace(arg) == "" {
+			continue
+		}
+
 		if !strings.Contains(arg, "=") {
 			log.Printf("ERROR: bad config variable format: %s\n", arg)
 			cli.ShowCommandHelp(c, "config")
@@ -310,7 +335,7 @@ func configSet(c *cli.Context) {
 
 		}
 		values := strings.Split(arg, "=")
-		svcCfg.EnvSet(strings.ToUpper(values[0]), values[1])
+		svcCfg.EnvSet(strings.ToUpper(strings.TrimSpace(values[0])), strings.TrimSpace(values[1]))
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
@@ -370,7 +395,7 @@ func configGet(c *cli.Context) {
 	}
 
 	for _, arg := range c.Args().Tail() {
-		log.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
+		fmt.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
 	}
 }
 

@@ -52,7 +52,7 @@ func (s *ServiceConfig) Env() map[string]string {
 
 func (s *ServiceConfig) EnvSet(key, value string) {
 	if s.environmentVMap.Get(key) != value {
-		s.environmentVMap.Set(key, value)
+		s.environmentVMap.SetVersion(key, value, s.nextID())
 	}
 }
 
@@ -66,7 +66,7 @@ func (s *ServiceConfig) Version() string {
 
 func (s *ServiceConfig) SetVersion(version string) {
 	if s.versionVMap.Get("version") != version {
-		s.versionVMap.Set("version", version)
+		s.versionVMap.SetVersion("version", version, s.nextID())
 	}
 }
 
@@ -83,7 +83,7 @@ func (s *ServiceConfig) Ports() map[string]string {
 
 func (s *ServiceConfig) ClearPorts() {
 	for _, k := range s.portsVMap.Keys() {
-		s.portsVMap.Set(k, "")
+		s.portsVMap.SetVersion(k, "", s.nextID())
 	}
 }
 
@@ -107,4 +107,8 @@ func (s *ServiceConfig) ID() int64 {
 
 func (s *ServiceConfig) ContainerName() string {
 	return s.Name + "_" + strconv.FormatInt(s.ID(), 10)
+}
+
+func (s *ServiceConfig) nextID() int64 {
+	return s.ID() + 1
 }
