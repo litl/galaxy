@@ -189,13 +189,9 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
-	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
-
-	if err == docker.ErrNoSuchImage {
-		_, err := s.PullImage(serviceConfig.Version())
-		if err != nil {
-			return nil, err
-		}
+	_, err := s.PullImage(serviceConfig.Version())
+	if err != nil {
+		return nil, err
 	}
 
 	// setup env vars from etcd
@@ -283,13 +279,9 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 
 	// see if we have the image locally
-	_, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
-
-	if err == docker.ErrNoSuchImage {
-		_, err := s.PullImage(serviceConfig.Version())
-		if err != nil {
-			return nil, err
-		}
+	_, err := s.PullImage(serviceConfig.Version())
+	if err != nil {
+		return nil, err
 	}
 
 	envVars := []string{
@@ -375,13 +367,9 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 	// see if we have the image locally
-	_, err := s.ensureDockerClient().InspectImage(img)
-
-	if err == docker.ErrNoSuchImage {
-		_, err = s.PullImage(img)
-		if err != nil {
-			return nil, err
-		}
+	_, err := s.PullImage(img)
+	if err != nil {
+		return nil, err
 	}
 
 	// setup env vars from etcd
