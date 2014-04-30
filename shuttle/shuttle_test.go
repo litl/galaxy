@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"net"
 	"sync"
 	"testing"
@@ -12,11 +10,6 @@ import (
 
 	. "gopkg.in/check.v1"
 )
-
-func init() {
-	// log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.SetOutput(ioutil.Discard)
-}
 
 // something that can wrap a gocheck.C testing.T or testing.B
 // Just add more methods as we need them.

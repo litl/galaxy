@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
+
+	"github.com/litl/galaxy/log"
 )
 
 var (
@@ -42,7 +43,9 @@ func (s *ServiceRegistry) AddService(cfg ServiceConfig) error {
 	s.Lock()
 	defer s.Unlock()
 
+	log.Debug("Adding service:", cfg.Name)
 	if _, ok := s.svcs[cfg.Name]; ok {
+		log.Debug("Service already exists:", cfg.Name)
 		return ErrDuplicateService
 	}
 
@@ -60,8 +63,10 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool)
 	s.Lock()
 	defer s.Unlock()
 
+	log.Debug("Updating Service:", newCfg.Name)
 	service, ok := s.svcs[newCfg.Name]
 	if !ok {
+		log.Debug("Service not found:", newCfg.Name)
 		return ErrNoService
 	}
 
@@ -70,6 +75,7 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool)
 	// if we're not doing only the backends, just wipe the service and start fresh.
 	// No need to stop the service if nothing has changed though.
 	if !backendsOnly && !currentCfg.Equal(newCfg) {
+		log.Debug("Replacing Service:", service.Name)
 		delete(s.svcs, service.Name)
 		service.stop()
 
@@ -77,6 +83,8 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool)
 		s.svcs[service.Name] = service
 		return service.start()
 	}
+
+	// FIXME: We loop over the Backends slice 3x. Probably a better way to do this
 
 	// we're going to update just the backends for this config
 	// get a map of what's already running
@@ -89,18 +97,21 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool)
 	// Update changed backends, and add new ones.
 	for _, newBackend := range newCfg.Backends {
 		current, ok := currentBackends[newBackend.Name]
-		if ok && current == newBackend {
+		if ok && current.Equal(newBackend) {
+			log.Debugf("Backend %s/%s unchanged", service.Name, current.Name)
 			// no change for this one
 			delete(currentBackends, current.Name)
 			continue
 		}
 
+		log.Debugf("Adding Backend %s/%s", service.Name, current.Name)
 		service.add(NewBackend(current))
 		delete(currentBackends, current.Name)
 	}
 
 	// remove any left over backends
 	for name := range currentBackends {
+		log.Debugf("Removing Backend %s/%s", service.Name, name)
 		service.remove(name)
 	}
 	return nil
@@ -112,6 +123,7 @@ func (s *ServiceRegistry) RemoveService(name string) error {
 
 	svc, ok := s.svcs[name]
 	if ok {
+		log.Debugf("Removing Service %s", svc.Name)
 		delete(s.svcs, name)
 		svc.stop()
 		return nil
@@ -168,6 +180,7 @@ func (s *ServiceRegistry) AddBackend(svcName string, backendCfg BackendConfig) e
 		return ErrNoService
 	}
 
+	log.Debugf("Adding Backend %s/%s", service.Name, backendCfg.Name)
 	service.add(NewBackend(backendCfg))
 	return nil
 }
@@ -177,6 +190,7 @@ func (s *ServiceRegistry) RemoveBackend(svcName, backendName string) error {
 	s.Lock()
 	defer s.Unlock()
 
+	log.Debugf("Removing Backend %s/%s", svcName, backendName)
 	service, ok := s.svcs[svcName]
 	if !ok {
 		return ErrNoService

@@ -42,8 +42,8 @@ func RunShuttle(shuttleAddr string) {
 		// We need a map to populate the services,
 		// and a slice to serialize to a JSON array.
 		svcMap := make(map[string]*ServiceConfig)
-		var services []ServiceConfig
 		var reqJSON []byte
+		var resp *http.Response
 
 		allRegs, err := serviceRegistry.ListRegistrations()
 		if err != nil {
@@ -66,11 +66,10 @@ func RunShuttle(shuttleAddr string) {
 				service = &ServiceConfig{
 					Name:          svcName,
 					Addr:          "127.0.0.1:" + reg.ExternalPort,
-					Balance:       "RR",
-					CheckInterval: 2,
+					CheckInterval: 2000,
 					Fall:          2,
 					Rise:          3,
-					DialTimeout:   2,
+					DialTimeout:   2000,
 				}
 				svcMap[svcName] = service
 				log.Debugf("updating shuttle service %+v", service)
@@ -86,20 +85,22 @@ func RunShuttle(shuttleAddr string) {
 			service.Backends = append(service.Backends, backend)
 		}
 
-		// populate the slice for the JSON array
-		for _, svc := range svcMap {
-			services = append(services, *svc)
-		}
+		for name, service := range svcMap {
+			reqJSON, err = json.Marshal(service)
+			if err != nil {
+				log.Println("ERROR serializing services:", err)
+				continue
+			}
 
-		reqJSON, err = json.Marshal(services)
-		if err != nil {
-			log.Println("ERROR serializing services:", err)
-			goto SLEEP
-		}
+			resp, err = httpClient.Post(shuttleAddr+"/"+name, "application/json", bytes.NewReader(reqJSON))
+			if err != nil {
+				log.Println("ERROR updating shuttle config:", err)
+				continue
+			}
 
-		_, err = httpClient.Post(shuttleAddr, "application/json", bytes.NewReader(reqJSON))
-		if err != nil {
-			log.Println("ERROR updating shuttle config:", err)
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("ERROR: recieved %s from shuttle", resp.Status)
+			}
 		}
 
 	SLEEP:
