@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -299,7 +301,18 @@ func configSet(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config:set")
 
-	if len(c.Args().Tail()) == 0 {
+	args := c.Args().Tail()
+	if len(args) == 0 {
+		bytes, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			log.Printf("ERROR: Unable to read stdin: %s.\n", err)
+			return
+
+		}
+		args = strings.Split(string(bytes), "\n")
+	}
+
+	if len(args) == 0 {
 		log.Printf("ERROR: No config values specified.\n")
 		return
 	}
@@ -314,7 +327,12 @@ func configSet(c *cli.Context) {
 		svcCfg = registry.NewServiceConfig(app, "")
 	}
 
-	for _, arg := range c.Args().Tail() {
+	for _, arg := range args {
+
+		if strings.TrimSpace(arg) == "" {
+			continue
+		}
+
 		if !strings.Contains(arg, "=") {
 			log.Printf("ERROR: bad config variable format: %s\n", arg)
 			cli.ShowCommandHelp(c, "config")
@@ -322,7 +340,7 @@ func configSet(c *cli.Context) {
 
 		}
 		values := strings.Split(arg, "=")
-		svcCfg.EnvSet(strings.ToUpper(values[0]), values[1])
+		svcCfg.EnvSet(strings.ToUpper(strings.TrimSpace(values[0])), strings.TrimSpace(values[1]))
 	}
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
@@ -382,7 +400,7 @@ func configGet(c *cli.Context) {
 	}
 
 	for _, arg := range c.Args().Tail() {
-		log.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
+		fmt.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
 	}
 }
 
