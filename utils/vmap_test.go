@@ -6,11 +6,11 @@ import (
 
 func TestSet(t *testing.T) {
 	vmap := NewVersionedMap()
-	vmap.setVersion("k1", "v1", 2)
-	vmap.setVersion("k1", "v2", 1)
+	vmap.SetVersion("k1", "v1", 2)
+	vmap.SetVersion("k1", "v2", 1)
 	vmap.Set("k2", "v2")
-	vmap.setVersion("k2", "v3", 3)
-	vmap.setVersion("k2", "v4", 2)
+	vmap.SetVersion("k2", "v3", 3)
+	vmap.SetVersion("k2", "v4", 2)
 
 	if vmap.Get("k1") != "v1" {
 		t.Fail()
@@ -53,7 +53,7 @@ func TestUnsetConflict(t *testing.T) {
 	vmap := NewVersionedMap()
 	vmap.Set("k1", "v1")
 	vmap.Set("k1", "v2")
-	vmap.unSetVersion("k1", 2)
+	vmap.UnSetVersion("k1", 2)
 
 	if vmap.Get("k1") != "v2" {
 		t.Fail()
@@ -61,8 +61,8 @@ func TestUnsetConflict(t *testing.T) {
 
 	vmap = NewVersionedMap()
 	vmap.Set("k1", "v1")
-	vmap.unSetVersion("k1", 2)
-	vmap.setVersion("k1", "v2", 2)
+	vmap.UnSetVersion("k1", 2)
+	vmap.SetVersion("k1", "v2", 2)
 
 	if vmap.Get("k1") != "v2" {
 		t.Fail()
@@ -71,8 +71,8 @@ func TestUnsetConflict(t *testing.T) {
 	vmap = NewVersionedMap()
 	vmap.Set("k1", "v1")
 	vmap.UnSet("k1")
-	vmap.setVersion("k1", "v2", 2)
-	vmap.setVersion("k1", "v3", 2)
+	vmap.SetVersion("k1", "v2", 2)
+	vmap.SetVersion("k1", "v3", 2)
 
 	if vmap.Get("k1") != "v3" {
 		t.Fail()
@@ -84,7 +84,7 @@ func TestMarshalMap(t *testing.T) {
 	vmap := NewVersionedMap()
 	vmap.Set("k1", "v1")
 	vmap.Set("k1", "v2")
-	vmap.unSetVersion("k1", 2)
+	vmap.UnSetVersion("k1", 2)
 
 	vmap.Set("k2", "v1")
 	vmap.Set("k2", "v2")
@@ -138,7 +138,7 @@ func TestLatestversion(t *testing.T) {
 	vmap := NewVersionedMap()
 	vmap.Set("k1", "v1")
 	vmap.Set("k2", "v1")
-	vmap.setVersion("k2", "v2", 3)
+	vmap.SetVersion("k2", "v2", 3)
 
 	if vmap.LatestVersion() != 3 {
 		t.Fail()
@@ -191,7 +191,6 @@ func TestMarshalExpiredWithAge(t *testing.T) {
 	vmap.Set("k1", "v6")
 
 	old := vmap.MarshalExpiredMap(2)
-	println(len(old))
 	if len(old) != 3 {
 		t.Fatalf("Expected 3 expired entry")
 	}
