@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -16,14 +17,18 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 		username = "vagrant"
 	}
 
+	port := "22"
 	hostPort := strings.SplitN(host, ":", 2)
-	host, port := hostPort[0], hostPort[1]
+	if len(hostPort) > 1 {
+		host, port = hostPort[0], hostPort[1]
+	}
+
 	cmd := exec.Command("/usr/bin/ssh",
 		//"-i", config.PrivateKey,
 		"-o", "RequestTTY=yes",
 		username+"@"+host,
 		"-p", port,
-		"-C", "/bin/bash", "-i", "-l", "-c", "'"+command+"'")
+		"-C", "/bin/bash", "-i", "-l", "-c", "'source .bashrc && "+command+"'")
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -32,10 +37,10 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Connecting to %s...", host)
+	fmt.Printf("Connecting to %s...\n", host)
 	err = cmd.Wait()
 	if err != nil {
-		log.Printf("Command finished with error: %v", err)
+		fmt.Printf("Command finished with error: %v\n", err)
 	}
 
 }
