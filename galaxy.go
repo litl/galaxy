@@ -119,7 +119,12 @@ func appList(c *cli.Context) {
 
 func appCreate(c *cli.Context) {
 	initRegistry(c)
-	app := ensureAppParam(c, "app:delete")
+	app := c.Args().First()
+	if app == "" {
+		log.Println("ERROR: app name missing")
+		cli.ShowCommandHelp(c, "app:create")
+		os.Exit(1)
+	}
 
 	// Don't allow deleting runtime hosts entries
 	if app == "hosts" {
@@ -188,15 +193,10 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	registry, repository, _ := utils.SplitDockerImage(version)
-
-	image, err := serviceRuntime.InspectImage(version)
-	if image == nil && err == nil {
-		image, err = serviceRuntime.PullImage(registry, repository)
-		if err != nil {
-			log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
-			return
-		}
+	image, err := serviceRuntime.PullImage(version)
+	if err != nil {
+		log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
+		return
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
