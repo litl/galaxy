@@ -198,7 +198,6 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig,
 	}
 
 	runCmd := []string{"/bin/bash", "-c", strings.Join(cmd, " ")}
-	log.Printf("%#v\n", runCmd)
 
 	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{

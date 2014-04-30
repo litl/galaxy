@@ -1,18 +1,13 @@
 {
 	"ImportPath": "github.com/litl/galaxy",
-	"GoVersion": "go1.2",
+	"GoVersion": "go1.2.1",
 	"Packages": [
 		"./..."
 	],
 	"Deps": [
 		{
-			"ImportPath": "code.google.com/p/go.crypto/ssh",
-			"Comment": "null-191",
-			"Rev": "7aa593ce8ceaf0199504fff27455bbb60eedabc7"
-		},
-		{
 			"ImportPath": "github.com/BurntSushi/toml",
-			"Rev": "50ab0c35d35f5355cee28b0120b18dfbbd13ad36"
+			"Rev": "f87ce853111478914f0bcffa34d43a93643e6eda"
 		},
 		{
 			"ImportPath": "github.com/codegangsta/cli",
@@ -46,8 +41,8 @@
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
-			"Comment": "0.2.1-59-gff447df",
-			"Rev": "ff447df9b0d911b47618056b3ed9f84148fde765"
+			"Comment": "0.2.1-87-ge1b8930",
+			"Rev": "e1b8930d27aaa28b18a396b65c7df63014a1a9cd"
 		},
 		{
 			"ImportPath": "github.com/garyburd/redigo/redis",
@@ -65,10 +60,6 @@
 			"ImportPath": "github.com/ryanuber/columnize",
 			"Comment": "v1.1.0",
 			"Rev": "fef4ee9c9ecfb000e86ca19ac9cea7d58200d5b6"
-		},
-		{
-			"ImportPath": "github.com/wsxiaoys/terminal/color",
-			"Rev": "5668e431776a7957528361f90ce828266c69ed08"
 		},
 		{
 			"ImportPath": "gopkg.in/check.v1",
