@@ -54,7 +54,7 @@ func RunShuttle(shuttleAddr string) {
 		for _, reg := range allRegs {
 			pathParts := strings.Split(reg.Path, "/")
 			if len(pathParts) < 5 {
-				log.Println("Error, bad registration path: %s", pathParts)
+				log.Printf("Error, bad registration path: %s", pathParts)
 				continue
 			}
 
