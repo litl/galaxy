@@ -29,9 +29,11 @@ stats from all Services. Individual services can be queried by their name,
 can be queried directly as well via the path `service_name/backend_name`.
 
 Issuing a PUT with a json config to the service's endpoint will create, or
-replace that service. The listening port will be shutdown during this process,
-and existing backends will not be transferred to the new config. Backends can
-be included in the service's json, and configured separately.
+replace that service. If the service config is identical to the running config
+OR the query parameter `backends_only` is supplied, only the backends will be
+updated. Any changes to the running service require shutting down the listener,
+and starting a new service, which will create a very small period where
+connection may be rejected.
 
 	Service Configuration JSON format.
 	{
@@ -65,7 +67,6 @@ continue to run until the connection is closed.
 ## TODO
 
 - Connection limits (per service and/or per backend)
-- Attempt all backends before failing a new connection
 - Mark backend down after non-check connection failures (still requires checks to bring it back up)
 - Health check via http, or tcp call/resp pattern
 - Partial config updates without overwriting everything
