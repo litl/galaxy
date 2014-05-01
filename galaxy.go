@@ -223,7 +223,7 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 	if !updated {
-		log.Printf("%s NOT deployed.\n")
+		log.Printf("%s NOT deployed.", version)
 		return
 	}
 	log.Printf("Deployed %s.\n", version)
