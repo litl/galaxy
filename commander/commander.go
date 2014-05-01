@@ -21,6 +21,7 @@ var (
 	loop            bool
 	shuttleHost     string
 	debug           bool
+	loggedOnce      bool
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
@@ -73,9 +74,15 @@ func startContainersIfNecessary() error {
 		if started {
 			log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 		}
-		log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
+		if !(debug || loggedOnce) {
+			log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+		}
+
+		log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 	}
+
+	loggedOnce = true
 	return nil
 }
 
