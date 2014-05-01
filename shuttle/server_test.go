@@ -16,15 +16,13 @@ type testServer struct {
 
 // Start a tcp server which responds with it's addr after every read.
 func NewTestServer(addr string, c Tester) (*testServer, error) {
-	s := &testServer{
-		addr: addr,
-	}
+	s := &testServer{}
 
 	var err error
 
 	// try really hard to bind this so we don't fail tests
 	for i := 0; i < 3; i++ {
-		s.listener, err = net.Listen("tcp", s.addr)
+		s.listener, err = net.Listen("tcp", addr)
 		if err == nil {
 			break
 		}
@@ -36,6 +34,9 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	s.addr = s.listener.Addr().String()
+	c.Log("listning on", s.addr)
 
 	s.wg.Add(1)
 	go func() {
@@ -54,13 +55,13 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 				for {
 					if _, err := conn.Read(buff); err != nil {
 						if err != io.EOF {
-							c.Logf("test server '%s' error: %s", addr, err)
+							c.Logf("test server '%s' error: %s", s.addr, err)
 						}
 						return
 					}
-					if _, err := io.WriteString(conn, addr); err != nil {
+					if _, err := io.WriteString(conn, s.addr); err != nil {
 						if err != io.EOF {
-							c.Logf("test server '%s' error: %s", addr, err)
+							c.Logf("test server '%s' error: %s", s.addr, err)
 						}
 						return
 					}

@@ -45,9 +45,8 @@ var _ = Suite(&BasicSuite{})
 // needed.
 func mySetup(s *BasicSuite, t Tester) {
 	// start 4 possible backend servers
-	ports := []string{"2001", "2002", "2003", "2004"}
-	for _, p := range ports {
-		server, err := NewTestServer("127.0.0.1:"+p, t)
+	for i := 0; i < 4; i++ {
+		server, err := NewTestServer("127.0.0.1:0", t)
 		if err != nil {
 			t.Fatal(err)
 		}
