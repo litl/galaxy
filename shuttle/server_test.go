@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type testServer struct {
@@ -13,8 +14,6 @@ type testServer struct {
 	wg       sync.WaitGroup
 }
 
-// FIXME: this still sometimes fails to bind its port
-
 // Start a tcp server which responds with it's addr after every read.
 func NewTestServer(addr string, c Tester) (*testServer, error) {
 	s := &testServer{
@@ -22,7 +21,18 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 	}
 
 	var err error
-	s.listener, err = net.Listen("tcp", s.addr)
+
+	// try really hard to bind this so we don't fail tests
+	for i := 0; i < 3; i++ {
+		s.listener, err = net.Listen("tcp", s.addr)
+		if err == nil {
+			break
+		}
+		c.Log("Listen error:", err)
+		c.Log("Trying again in 1s...")
+		time.Sleep(time.Second)
+	}
+
 	if err != nil {
 		return nil, err
 	}

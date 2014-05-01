@@ -371,7 +371,6 @@ func (s *BasicSuite) TestUpdateService(c *C) {
 }
 
 // Add backends and run response tests in parallel
-// FIXME: there's still some racy-ness in here somewhere.
 func (s *BasicSuite) TestParallel(c *C) {
 	var wg sync.WaitGroup
 
