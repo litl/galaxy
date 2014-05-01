@@ -13,14 +13,14 @@ import (
 )
 
 var (
-	stopCutoff      = flag.Int64("cutoff", 10, "Seconds to wait before stopping old containers")
-	app             = flag.String("app", "", "App to start")
-	redisHost       = flag.String("redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
-	env             = flag.String("env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
-	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
-	loop            = flag.Bool("loop", false, "Run continously")
-	shuttleHost     = flag.String("shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
-	debug           = flag.Bool("debug", false, "verbose logging")
+	stopCutoff      int64
+	app             string
+	redisHost       string
+	env             string
+	pool            string
+	loop            bool
+	shuttleHost     string
+	debug           bool
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
@@ -29,32 +29,32 @@ var (
 func initOrDie() {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		*env,
-		*pool,
+		env,
+		pool,
 		"",
 		600,
 		"",
 	)
 
-	serviceRegistry.Connect(*redisHost)
-	serviceRuntime = runtime.NewServiceRuntime(*shuttleHost, *env, *pool, *redisHost)
+	serviceRegistry.Connect(redisHost)
+	serviceRuntime = runtime.NewServiceRuntime(shuttleHost, env, pool, redisHost)
 }
 
 func startContainersIfNecessary() error {
 	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
-		log.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", *env, *pool, err)
+		log.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 		return err
 	}
 
 	if len(serviceConfigs) == 0 {
-		log.Printf("No services configured for /%s/%s\n", *env, *pool)
+		log.Printf("No services configured for /%s/%s\n", env, pool)
 		return err
 	}
 
 	for _, serviceConfig := range serviceConfigs {
 
-		if *app != "" && serviceConfig.Name != *app {
+		if app != "" && serviceConfig.Name != app {
 			continue
 		}
 
@@ -110,7 +110,7 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 			}
 			log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID)
 
-			err = serviceRuntime.StopAllButLatest(*stopCutoff)
+			err = serviceRuntime.StopAllButLatest(stopCutoff)
 			if err != nil {
 				log.Printf("ERROR: Could not stop containers: %s\n", err)
 			}
@@ -120,7 +120,7 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 				log.Printf("ERROR: Could not start containers: %s\n", err)
 			}
 
-			err = serviceRuntime.StopAllButLatest(*stopCutoff)
+			err = serviceRuntime.StopAllButLatest(stopCutoff)
 			if err != nil {
 				log.Printf("ERROR: Could not stop containers: %s\n", err)
 			}
@@ -130,40 +130,49 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 }
 
 func main() {
+	flag.Int64Var(&stopCutoff, "cutoff", 10, "Seconds to wait before stopping old containers")
+	flag.StringVar(&app, "app", "", "App to start")
+	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
+	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", "dev"), "Environment namespace")
+	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
+	flag.BoolVar(&loop, "loop", false, "Run continously")
+	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
+	flag.BoolVar(&debug, "debug", false, "verbose logging")
+
 	flag.Parse()
 
-	if *env == "" {
+	if env == "" {
 		fmt.Println("Need an env")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	if *pool == "" {
+	if pool == "" {
 		fmt.Println("Need a pool")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	if *debug {
+	if debug {
 		log.DefaultLogger.Level = log.DEBUG
 	}
 
 	initOrDie()
-	serviceRegistry.CreatePool(*pool)
+	serviceRegistry.CreatePool(pool)
 
 	err := startContainersIfNecessary()
-	if err != nil && !*loop {
+	if err != nil && !loop {
 		log.Printf("ERROR: Could not start containers: %s\n", err)
 		return
 	}
 
-	err = serviceRuntime.StopAllButLatest(*stopCutoff)
-	if err != nil && !*loop {
+	err = serviceRuntime.StopAllButLatest(stopCutoff)
+	if err != nil && !loop {
 		log.Printf("ERROR: Could not start containers: %s\n", err)
 		return
 	}
 
-	if !*loop {
+	if !loop {
 		return
 	}
 
