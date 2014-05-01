@@ -20,6 +20,7 @@ var (
 	pool            = flag.String("pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	loop            = flag.Bool("loop", false, "Run continously")
 	shuttleHost     = flag.String("shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
+	debug           = flag.Bool("debug", false, "verbose logging")
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
@@ -62,14 +63,17 @@ func startContainersIfNecessary() error {
 			continue
 		}
 
-		container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
+		started, container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
 			log.Printf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version(), err)
 			return err
 		}
 
-		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+		if started {
+			log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+		}
+		log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
 	}
 	return nil
@@ -138,6 +142,10 @@ func main() {
 		fmt.Println("Need a pool")
 		flag.PrintDefaults()
 		os.Exit(1)
+	}
+
+	if *debug {
+		log.DefaultLogger.Level = log.DEBUG
 	}
 
 	initOrDie()

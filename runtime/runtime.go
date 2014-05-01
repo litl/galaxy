@@ -144,7 +144,7 @@ func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 					continue
 				}
 
-				log.Printf("Stopping container %s\n", container.ID)
+				log.Printf("Stopping %s container %s\n", container.Image, container.ID[0:12])
 				c := make(chan error, 1)
 				go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
 				select {
@@ -450,32 +450,35 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 
 }
 
-func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (bool, *docker.Container, error) {
 	img := serviceConfig.Version()
 	containerId, err := s.IsRunning(img)
 	if err != nil && err != docker.ErrNoSuchImage {
-		return nil, err
+		return false, nil, err
 	}
 
 	// already running, grab the container details
 	if containerId != "" {
 		container, err := s.ensureDockerClient().InspectContainer(containerId)
 		if err != nil {
-			return nil, err
+			return false, nil, err
 		}
 
 		// check if container is the right version
 		if !strings.Contains(container.Name, "_") {
-			return container, nil
+			return false, container, nil
 		}
 
 		if strings.TrimPrefix(container.Name, "/") != serviceConfig.ContainerName() {
-			return s.Start(serviceConfig)
+			container, err := s.Start(serviceConfig)
+			return true, container, err
 		}
 
-		return container, nil
+		return false, container, nil
 	}
-	return s.Start(serviceConfig)
+	container, err := s.Start(serviceConfig)
+	return true, container, err
+
 }
 
 func (s *ServiceRuntime) PullImage(registry, repository string) (*docker.Image, error) {
