@@ -27,9 +27,8 @@ func (s *HTTPSuite) TearDownSuite(c *C) {
 
 func (s *HTTPSuite) SetUpTest(c *C) {
 	// start 4 possible backend servers
-	ports := []string{"9001", "9002", "9003", "9004"}
-	for _, p := range ports {
-		server, err := NewTestServer("127.0.0.1:"+p, c)
+	for i := 0; i < 4; i++ {
+		server, err := NewTestServer("127.0.0.1:0", c)
 		if err != nil {
 			c.Fatal(err)
 		}
