@@ -157,3 +157,23 @@ func TestIDAlwaysIncrements(t *testing.T) {
 	}
 	id = sc.ID()
 }
+
+func TestIsContainerVersion(t *testing.T) {
+	sc := NewServiceConfig("foo", "foo:latest")
+	if !sc.IsContainerVersion("foo_1") {
+		t.Fatal("foo_1 is a valid name")
+	}
+
+	if sc.IsContainerVersion("foo_fail") {
+		t.Fatal("foo_fail is NOT a valid name")
+	}
+
+	if sc.IsContainerVersion("bar_1") {
+		t.Fatal("bar_1 is NOT a valid name")
+	}
+
+	if sc.IsContainerVersion("foo") {
+		t.Fatal("foo is NOT a valid name")
+	}
+
+}

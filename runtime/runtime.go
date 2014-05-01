@@ -131,6 +131,16 @@ func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
 		for _, container := range containers {
 
+			// We name all galaxy managed containers
+			if len(container.Names) == 0 {
+				continue
+			}
+
+			// Container name does match one that would be started w/ this service config
+			if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
+				continue
+			}
+
 			containerReg, containerRepo, _ := utils.SplitDockerImage(container.Image)
 			if containerReg == registry && containerRepo == repository && container.ID != latestContainer.ID &&
 				container.Created < (time.Now().Unix()-stopCutoff) {
@@ -297,19 +307,20 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 
 	runCmd := []string{"/bin/bash", "-l", "-i"}
 
-	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
-		Config: &docker.Config{
-			Image:        serviceConfig.Version(),
-			Env:          envVars,
-			AttachStdout: true,
-			AttachStderr: true,
-			AttachStdin:  true,
-			Cmd:          runCmd,
-			OpenStdin:    true,
-			StdinOnce:    true,
-			Tty:          true,
-		},
-	})
+	container, err := s.ensureDockerClient().CreateContainer(
+		docker.CreateContainerOptions{
+			Config: &docker.Config{
+				Image:        serviceConfig.Version(),
+				Env:          envVars,
+				AttachStdout: true,
+				AttachStderr: true,
+				AttachStdin:  true,
+				Cmd:          runCmd,
+				OpenStdin:    true,
+				StdinOnce:    true,
+				Tty:          true,
+			},
+		})
 
 	if err != nil {
 		return nil, err
