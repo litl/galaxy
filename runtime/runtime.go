@@ -458,7 +458,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 		}
 
 		// check if container is the right version
-		if !strings.Contains(container.Name, "_") {
+		if !serviceConfig.IsContainerVersion(container.Name) {
 			return false, container, nil
 		}
 
