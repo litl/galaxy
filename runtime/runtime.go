@@ -464,6 +464,15 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 }
 
 func (s *ServiceRuntime) PullImage(version string) (*docker.Image, error) {
+	image, err := s.ensureDockerClient().InspectImage(version)
+	if err != nil {
+		return nil, err
+	}
+
+	if image != nil {
+		return image, nil
+	}
+
 	registry, repository, _ := utils.SplitDockerImage(version)
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
@@ -495,7 +504,7 @@ func (s *ServiceRuntime) PullImage(version string) (*docker.Image, error) {
 		dockerAuth.Email = authCreds.Email
 	}
 
-	err := s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
+	err = s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
 	if err != nil {
 		return nil, err
 	}
