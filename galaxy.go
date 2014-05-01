@@ -502,7 +502,7 @@ func poolDelete(c *cli.Context) {
 }
 
 func runRemote() {
-	SSHCmd(config.Host, "galaxy "+strings.Join(os.Args[1:], " "), false, false)
+	utils.SSHCmd(config.Host, "galaxy "+strings.Join(os.Args[1:], " "), false, false)
 }
 
 func loadConfig() {
