@@ -6,6 +6,11 @@
 	],
 	"Deps": [
 		{
+			"ImportPath": "code.google.com/p/go.crypto/ssh",
+			"Comment": "null-200",
+			"Rev": "5478be1963aafa9025e9bf0837aff6013eb92e5b"
+		},
+		{
 			"ImportPath": "github.com/BurntSushi/toml",
 			"Rev": "f87ce853111478914f0bcffa34d43a93643e6eda"
 		},
