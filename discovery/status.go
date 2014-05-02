@@ -47,10 +47,11 @@ func status(c *cli.Context) {
 
 		serviceConfig := registry.NewServiceConfigWithEnv(repository, tag, env)
 
-		if strings.Contains(dockerContainer.Name, "_") {
-			app := strings.TrimPrefix(strings.Split(dockerContainer.Name, "_")[0], "/")
-			serviceConfig.Name = app
+		if !serviceConfig.IsContainerVersion(strings.TrimPrefix(dockerContainer.Name, "/")) {
+			continue
 		}
+		app := strings.TrimPrefix(strings.Split(dockerContainer.Name, "_")[0], "/")
+		serviceConfig.Name = app
 
 		existingConfig, err := serviceRegistry.GetServiceConfig(serviceConfig.Name)
 		if err != nil {
