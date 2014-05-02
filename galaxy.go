@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -287,9 +288,17 @@ func configList(c *cli.Context) {
 		return
 	}
 
-	for k, v := range cfg.Env() {
-		log.Printf("%s=%s\n", k, v)
+	keys := sort.StringSlice{}
+	for k, _ := range cfg.Env() {
+		keys = append(keys, k)
 	}
+
+	keys.Sort()
+
+	for _, k := range keys {
+		log.Printf("%s=%s\n", k, cfg.Env()[k])
+	}
+
 }
 
 func configSet(c *cli.Context) {
