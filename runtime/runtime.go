@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"strings"
@@ -326,48 +328,20 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 		return nil, err
 	}
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
-	go func(s *ServiceRuntime, containerId string) {
-		<-c
-		log.Println("Stopping container...")
-		err := s.ensureDockerClient().StopContainer(containerId, 3)
-		if err != nil {
-			log.Printf("ERROR: Unable to stop container: %s", err)
-		}
-		err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
-			ID: containerId,
-		})
-		if err != nil {
-			log.Printf("ERROR: Unable to stop container: %s", err)
-		}
+	// shell out to docker run to get signal forwarded and terminal setup correctly
+	cmd := exec.Command("docker", "run", "-rm", "-i", "-t", serviceConfig.Version(), "/bin/bash")
 
-	}(s, container.ID)
-
-	defer s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
-		ID: container.ID,
-	})
-	err = s.ensureDockerClient().StartContainer(container.ID,
-		&docker.HostConfig{})
-
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
 	if err != nil {
-		return container, err
+		log.Fatal(err)
 	}
 
-	err = s.ensureDockerClient().AttachToContainer(docker.AttachToContainerOptions{
-		Container:    container.ID,
-		OutputStream: os.Stdout,
-		ErrorStream:  os.Stderr,
-		InputStream:  os.Stdin,
-		Logs:         true,
-		Stream:       true,
-		Stdout:       true,
-		Stderr:       true,
-		Stdin:        true,
-	})
-
+	err = cmd.Wait()
 	if err != nil {
-		log.Printf("ERROR: Unable to attach to running container: %s", err.Error())
+		fmt.Printf("Command finished with error: %v\n", err)
 	}
 
 	s.ensureDockerClient().WaitContainer(container.ID)
