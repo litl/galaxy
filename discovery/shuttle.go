@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/registry"
 )
 
 type BackendConfig struct {
@@ -44,13 +45,42 @@ func RunShuttle(shuttleAddr string) {
 		svcMap := make(map[string]*ServiceConfig)
 		var reqJSON []byte
 		var resp *http.Response
+		var allRegs []registry.ServiceRegistration
+		var allApps []registry.ServiceConfig
+		var err error
 
-		allRegs, err := serviceRegistry.ListRegistrations()
+		allRegs, err = serviceRegistry.ListRegistrations()
 		if err != nil {
 			log.Println("Error getting registrations:", err)
 			goto SLEEP
 		}
 
+		// get all registered applications so we know what ports to listen on
+		allApps, err = serviceRegistry.ListApps("*")
+		if err != nil {
+			log.Println("Error listing apps:", err)
+			goto SLEEP
+		}
+
+		// Make a Service config to listen for every service in our env
+		for _, cfg := range allApps {
+			service, ok := svcMap[cfg.Name]
+			if !ok {
+				// TODO: make some of this configurable
+				service = &ServiceConfig{
+					Name:          cfg.Name,
+					Addr:          "127.0.0.1:" + cfg.EnvGet("PORT"),
+					CheckInterval: 2000,
+					Fall:          2,
+					Rise:          3,
+					DialTimeout:   2000,
+				}
+				svcMap[cfg.Name] = service
+				log.Debugf("updating shuttle service %+v", service)
+			}
+		}
+
+		// Add the all the backends we can find to the services
 		for _, reg := range allRegs {
 			pathParts := strings.Split(reg.Path, "/")
 			if len(pathParts) < 5 {
@@ -62,17 +92,8 @@ func RunShuttle(shuttleAddr string) {
 
 			service, ok := svcMap[svcName]
 			if !ok {
-				// TODO: make some of this configurable
-				service = &ServiceConfig{
-					Name:          svcName,
-					Addr:          "127.0.0.1:" + reg.ExternalPort,
-					CheckInterval: 2000,
-					Fall:          2,
-					Rise:          3,
-					DialTimeout:   2000,
-				}
-				svcMap[svcName] = service
-				log.Debugf("updating shuttle service %+v", service)
+				log.Printf("Found registration for unknown service %s:%s", service, reg)
+				continue
 			}
 
 			backend := BackendConfig{
@@ -85,6 +106,7 @@ func RunShuttle(shuttleAddr string) {
 			service.Backends = append(service.Backends, backend)
 		}
 
+		// POST each of the Services to shuttle
 		for name, service := range svcMap {
 			reqJSON, err = json.Marshal(service)
 			if err != nil {

@@ -95,7 +95,7 @@ func appExists(app string) (bool, error) {
 func appList(c *cli.Context) {
 	initRegistry(c)
 
-	appList, err := serviceRegistry.ListApps()
+	appList, err := serviceRegistry.ListApps("")
 	if err != nil {
 		log.Printf("ERROR: %s\n", err)
 		return
