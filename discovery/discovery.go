@@ -48,7 +48,7 @@ func initOrDie(c *cli.Context) {
 	}
 
 	if shuttle := c.GlobalString("shuttleAddr"); shuttle != "" {
-		go RunShuttle(shuttle)
+		go UpdateShuttle(shuttle)
 	}
 }
 

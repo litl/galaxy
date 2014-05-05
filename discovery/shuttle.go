@@ -50,9 +50,9 @@ func buildConfig() (map[string]*ServiceConfig, error) {
 	for _, cfg := range allApps {
 		port := cfg.EnvGet("PORT")
 		if port == "" {
-			// assign a random port when missing
-			// TODO: can we skip everything that has no port?
-			port = "0"
+			// no registered port, so don't proxy this service
+			log.Debugf("Service %s has no port", cfg.Name)
+			continue
 		}
 
 		service, ok := svcMap[cfg.Name]
@@ -79,6 +79,12 @@ func buildConfig() (map[string]*ServiceConfig, error) {
 			continue
 		}
 
+		if reg.ExternalIP == "" || reg.ExternalPort == "" {
+			// skipping a service we can't address
+			log.Debugf("Incomplete address %s:%s for %s", reg.ExternalIP, reg.ExternalPort, reg.Path)
+			continue
+		}
+
 		hostName, svcName := pathParts[3], pathParts[4]
 
 		service, ok := svcMap[svcName]
@@ -100,7 +106,7 @@ func buildConfig() (map[string]*ServiceConfig, error) {
 	return svcMap, nil
 }
 
-func RunShuttle(shuttleAddr string) {
+func UpdateShuttle(shuttleAddr string) {
 	shuttleAddr = "http://" + shuttleAddr
 	log.Printf("Updating shuttle at %s", shuttleAddr)
 
