@@ -108,7 +108,7 @@ func (s *ServiceRuntime) IsRunning(img string) (string, error) {
 
 func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
 	if err != nil {
 		return err
 	}
@@ -363,7 +363,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
 	if err != nil {
 		return nil, err
 	}

@@ -391,7 +391,7 @@ func (r *ServiceRegistry) CheckForChangesNow() {
 func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 	lastVersion := make(map[string]int64)
 	for {
-		serviceConfigs, err := r.ListApps()
+		serviceConfigs, err := r.ListApps("")
 		if err != nil {
 			changes <- &ConfigChange{
 				Error: err,
@@ -409,7 +409,7 @@ func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 
 	for {
 		<-r.pollCh
-		serviceConfigs, err := r.ListApps()
+		serviceConfigs, err := r.ListApps("")
 		if err != nil {
 			changes <- &ConfigChange{
 				Error: err,
@@ -660,7 +660,7 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 	return deletedOne, nil
 }
 
-func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
+func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -670,8 +670,12 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 		return nil, conn.Err()
 	}
 
+	if pool == "" {
+		pool = r.Pool
+	}
+
 	// TODO: convert to scan
-	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, r.Pool, "*", "environment")))
+	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, pool, "*", "environment")))
 	if err != nil {
 		return nil, err
 	}

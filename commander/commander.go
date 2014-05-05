@@ -42,7 +42,7 @@ func initOrDie() {
 }
 
 func startContainersIfNecessary() error {
-	serviceConfigs, err := serviceRegistry.ListApps()
+	serviceConfigs, err := serviceRegistry.ListApps("")
 	if err != nil {
 		log.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 		return err
