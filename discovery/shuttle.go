@@ -48,12 +48,19 @@ func buildConfig() (map[string]*ServiceConfig, error) {
 
 	// Make a Service config to listen for every service in our env
 	for _, cfg := range allApps {
+		port := cfg.EnvGet("PORT")
+		if port == "" {
+			// assign a random port when missing
+			// TODO: can we skip everything that has no port?
+			port = "0"
+		}
+
 		service, ok := svcMap[cfg.Name]
 		if !ok {
 			// TODO: make some of this configurable
 			service = &ServiceConfig{
 				Name:          cfg.Name,
-				Addr:          "127.0.0.1:" + cfg.EnvGet("PORT"),
+				Addr:          "127.0.0.1:" + port,
 				CheckInterval: 2000,
 				Fall:          2,
 				Rise:          3,
