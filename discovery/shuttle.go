@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
 )
 
 type BackendConfig struct {
@@ -30,6 +29,70 @@ type ServiceConfig struct {
 	DialTimeout   int             `json:"connect_timeout"`
 }
 
+// build our shuttle config from the current state of registered services.
+func buildConfig() (map[string]*ServiceConfig, error) {
+	svcMap := make(map[string]*ServiceConfig)
+
+	allRegs, err := serviceRegistry.ListRegistrations()
+	if err != nil {
+		log.Println("Error getting registrations:", err)
+		return nil, err
+	}
+
+	// get all registered applications so we know what ports to listen on
+	allApps, err := serviceRegistry.ListApps("*")
+	if err != nil {
+		log.Println("Error listing apps:", err)
+		return nil, err
+	}
+
+	// Make a Service config to listen for every service in our env
+	for _, cfg := range allApps {
+		service, ok := svcMap[cfg.Name]
+		if !ok {
+			// TODO: make some of this configurable
+			service = &ServiceConfig{
+				Name:          cfg.Name,
+				Addr:          "127.0.0.1:" + cfg.EnvGet("PORT"),
+				CheckInterval: 2000,
+				Fall:          2,
+				Rise:          3,
+				DialTimeout:   2000,
+			}
+			svcMap[cfg.Name] = service
+			log.Debugf("updating shuttle service %+v", service)
+		}
+	}
+
+	// Add the all the backends we can find to the services
+	for _, reg := range allRegs {
+		pathParts := strings.Split(reg.Path, "/")
+		if len(pathParts) < 5 {
+			log.Printf("Error, bad registration path: %s", pathParts)
+			continue
+		}
+
+		hostName, svcName := pathParts[3], pathParts[4]
+
+		service, ok := svcMap[svcName]
+		if !ok {
+			log.Printf("Found registration for unknown service %s:%s", service, reg)
+			continue
+		}
+
+		backend := BackendConfig{
+			Name: hostName,
+			Addr: reg.ExternalIP + ":" + reg.ExternalPort,
+		}
+		backend.CheckAddr = backend.Addr
+		log.Debugf("updating shuttle backend %+v", backend)
+
+		service.Backends = append(service.Backends, backend)
+	}
+
+	return svcMap, nil
+}
+
 func RunShuttle(shuttleAddr string) {
 	shuttleAddr = "http://" + shuttleAddr
 	log.Printf("Updating shuttle at %s", shuttleAddr)
@@ -39,82 +102,19 @@ func RunShuttle(shuttleAddr string) {
 	httpClient := &http.Client{Transport: transport}
 
 	for {
-		// These are declared up here due to the goto error handling.
-		// We need a map to populate the services,
-		// and a slice to serialize to a JSON array.
-		svcMap := make(map[string]*ServiceConfig)
-		var reqJSON []byte
-		var resp *http.Response
-		var allRegs []registry.ServiceRegistration
-		var allApps []registry.ServiceConfig
-		var err error
-
-		allRegs, err = serviceRegistry.ListRegistrations()
+		svcMap, err := buildConfig()
 		if err != nil {
-			log.Println("Error getting registrations:", err)
 			goto SLEEP
 		}
 
-		// get all registered applications so we know what ports to listen on
-		allApps, err = serviceRegistry.ListApps("*")
-		if err != nil {
-			log.Println("Error listing apps:", err)
-			goto SLEEP
-		}
-
-		// Make a Service config to listen for every service in our env
-		for _, cfg := range allApps {
-			service, ok := svcMap[cfg.Name]
-			if !ok {
-				// TODO: make some of this configurable
-				service = &ServiceConfig{
-					Name:          cfg.Name,
-					Addr:          "127.0.0.1:" + cfg.EnvGet("PORT"),
-					CheckInterval: 2000,
-					Fall:          2,
-					Rise:          3,
-					DialTimeout:   2000,
-				}
-				svcMap[cfg.Name] = service
-				log.Debugf("updating shuttle service %+v", service)
-			}
-		}
-
-		// Add the all the backends we can find to the services
-		for _, reg := range allRegs {
-			pathParts := strings.Split(reg.Path, "/")
-			if len(pathParts) < 5 {
-				log.Printf("Error, bad registration path: %s", pathParts)
-				continue
-			}
-
-			hostName, svcName := pathParts[3], pathParts[4]
-
-			service, ok := svcMap[svcName]
-			if !ok {
-				log.Printf("Found registration for unknown service %s:%s", service, reg)
-				continue
-			}
-
-			backend := BackendConfig{
-				Name: hostName,
-				Addr: reg.ExternalIP + ":" + reg.ExternalPort,
-			}
-			backend.CheckAddr = backend.Addr
-			log.Debugf("updating shuttle backend %+v", backend)
-
-			service.Backends = append(service.Backends, backend)
-		}
-
-		// POST each of the Services to shuttle
 		for name, service := range svcMap {
-			reqJSON, err = json.Marshal(service)
+			reqJSON, err := json.Marshal(service)
 			if err != nil {
 				log.Println("ERROR serializing services:", err)
 				continue
 			}
 
-			resp, err = httpClient.Post(shuttleAddr+"/"+name, "application/json", bytes.NewReader(reqJSON))
+			resp, err := httpClient.Post(shuttleAddr+"/"+name, "application/json", bytes.NewReader(reqJSON))
 			if err != nil {
 				log.Println("ERROR updating shuttle config:", err)
 				continue
