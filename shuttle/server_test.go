@@ -36,7 +36,7 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 	}
 
 	s.addr = s.listener.Addr().String()
-	c.Log("listning on", s.addr)
+	c.Log("listning on ", s.addr)
 
 	s.wg.Add(1)
 	go func() {
