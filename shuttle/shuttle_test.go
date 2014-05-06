@@ -194,11 +194,23 @@ func (s *BasicSuite) TestLeastConn(c *C) {
 	s.AddBackend(c)
 
 	// tie up 4 connections to the backends
+	buff := make([]byte, 64)
 	for i := 0; i < 4; i++ {
 		conn, e := net.Dial("tcp", s.service.Addr)
 		if e != nil {
 			c.Fatal(e)
 		}
+		// we need to make a call on this proxy to ensure the backend
+		// connection is complete.
+		if _, err := io.WriteString(conn, "connect\n"); err != nil {
+			c.Fatal(err)
+		}
+
+		n, err := conn.Read(buff)
+		if err != nil || n == 0 {
+			c.Fatal("no response from backend")
+		}
+
 		defer conn.Close()
 	}
 
