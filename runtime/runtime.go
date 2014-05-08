@@ -288,48 +288,38 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 	return container, err
 }
 
-func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) error {
 
 	// see if we have the image locally
 	_, err := s.PullImage(serviceConfig.Version())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	envVars := []string{
-		"HOME=/",
-		"PATH=" + "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"HOSTNAME=" + "app",
-		"TERM=xterm",
+	args := []string{
+		"run", "-rm", "-i",
 	}
-
 	for key, value := range serviceConfig.Env() {
-		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+		args = append(args, "-e")
+		args = append(args, strings.ToUpper(key)+"="+value)
 	}
 
-	runCmd := []string{"/bin/bash", "-l", "-i"}
-
-	container, err := s.ensureDockerClient().CreateContainer(
-		docker.CreateContainerOptions{
-			Config: &docker.Config{
-				Image:        serviceConfig.Version(),
-				Env:          envVars,
-				AttachStdout: true,
-				AttachStderr: true,
-				AttachStdin:  true,
-				Cmd:          runCmd,
-				OpenStdin:    true,
-				StdinOnce:    true,
-				Tty:          true,
-			},
-		})
-
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
+	for _, config := range serviceConfigs {
+		for port, _ := range config.Ports() {
+			args = append(args, "-e")
+			args = append(args, strings.ToUpper(config.Name)+"_ADDR_"+port+"="+s.shuttleHost+":"+port)
+		}
+	}
+
+	args = append(args, []string{"-t", serviceConfig.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
-	cmd := exec.Command("docker", "run", "-rm", "-i", "-t", serviceConfig.Version(), "/bin/bash")
+	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", serviceConfig.Version(), "/bin/bash")
+	cmd := exec.Command("docker", args...)
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -344,9 +334,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 		fmt.Printf("Command finished with error: %v\n", err)
 	}
 
-	s.ensureDockerClient().WaitContainer(container.ID)
-
-	return container, err
+	return err
 }
 
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {

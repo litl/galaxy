@@ -266,7 +266,7 @@ func appShell(c *cli.Context) {
 		return
 	}
 
-	_, err = serviceRuntime.StartInteractive(serviceConfig)
+	err = serviceRuntime.StartInteractive(serviceConfig)
 	if err != nil {
 		log.Printf("ERROR: Could not start container: %s\n", err)
 		return
