@@ -79,33 +79,6 @@ func (s *ServiceRuntime) InspectImage(image string) (*docker.Image, error) {
 	return s.ensureDockerClient().InspectImage(image)
 }
 
-func (s *ServiceRuntime) IsRunning(img string) (string, error) {
-
-	image, err := s.ensureDockerClient().InspectImage(img)
-	if err != nil {
-		return "", err
-	}
-
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	for _, container := range containers {
-		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-		if err != nil {
-			return "", err
-		}
-
-		if image.ID == dockerContainer.Image {
-			return container.ID, nil
-		}
-	}
-	return "", nil
-}
-
 func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
 	serviceConfigs, err := s.serviceRegistry.ListApps("")
@@ -406,34 +379,30 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 }
 
 func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (bool, *docker.Container, error) {
-	img := serviceConfig.Version()
-	containerId, err := s.IsRunning(img)
-	if err != nil && err != docker.ErrNoSuchImage {
+	container, err := s.ensureDockerClient().InspectContainer(serviceConfig.ContainerName())
+	_, ok := err.(*docker.NoSuchContainer)
+	// Expected container is not actually running. Skip it and leave old ones.
+	if (err != nil && ok) || container == nil {
+		container, err := s.Start(serviceConfig)
+		return true, container, err
+	}
+
+	if err != nil {
 		return false, nil, err
 	}
 
-	// already running, grab the container details
-	if containerId != "" {
-		container, err := s.ensureDockerClient().InspectContainer(containerId)
-		if err != nil {
-			return false, nil, err
-		}
-
-		containerName := strings.TrimPrefix(container.Name, "/")
-		// check if container is the right version
-		if !serviceConfig.IsContainerVersion(containerName) && serviceConfig.ContainerName() == container.Name {
-			return false, container, nil
-		}
-
-		if containerName != serviceConfig.ContainerName() {
-			container, err := s.Start(serviceConfig)
-			return true, container, err
-		}
-
+	containerName := strings.TrimPrefix(container.Name, "/")
+	// check if container is the right version
+	if !serviceConfig.IsContainerVersion(containerName) && serviceConfig.ContainerName() == container.Name {
 		return false, container, nil
 	}
-	container, err := s.Start(serviceConfig)
-	return true, container, err
+
+	if containerName != serviceConfig.ContainerName() {
+		container, err := s.Start(serviceConfig)
+		return true, container, err
+	}
+
+	return false, container, nil
 
 }
 
