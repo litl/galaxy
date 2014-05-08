@@ -419,12 +419,13 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 			return false, nil, err
 		}
 
+		containerName := strings.TrimPrefix(container.Name, "/")
 		// check if container is the right version
-		if !serviceConfig.IsContainerVersion(container.Name) {
+		if !serviceConfig.IsContainerVersion(containerName) && serviceConfig.ContainerName() == container.Name {
 			return false, container, nil
 		}
 
-		if strings.TrimPrefix(container.Name, "/") != serviceConfig.ContainerName() {
+		if containerName != serviceConfig.ContainerName() {
 			container, err := s.Start(serviceConfig)
 			return true, container, err
 		}
