@@ -174,7 +174,7 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
-	_, err := s.PullImage(serviceConfig.Version())
+	_, err := s.PullImage(serviceConfig.Version(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) error {
 
 	// see if we have the image locally
-	_, err := s.PullImage(serviceConfig.Version())
+	_, err := s.PullImage(serviceConfig.Version(), false)
 	if err != nil {
 		return err
 	}
@@ -313,7 +313,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 	// see if we have the image locally
-	_, err := s.PullImage(img)
+	_, err := s.PullImage(img, false)
 	if err != nil {
 		return nil, err
 	}
@@ -406,13 +406,13 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 }
 
-func (s *ServiceRuntime) PullImage(version string) (*docker.Image, error) {
+func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, error) {
 	image, err := s.ensureDockerClient().InspectImage(version)
 	if err != nil {
 		return nil, err
 	}
 
-	if image != nil {
+	if image != nil && !force {
 		return image, nil
 	}
 
