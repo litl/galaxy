@@ -194,7 +194,7 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	image, err := serviceRuntime.PullImage(version)
+	image, err := serviceRuntime.PullImage(version, c.Bool("force"))
 	if err != nil {
 		log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
 		return
@@ -266,7 +266,7 @@ func appShell(c *cli.Context) {
 		return
 	}
 
-	_, err = serviceRuntime.StartInteractive(serviceConfig)
+	err = serviceRuntime.StartInteractive(serviceConfig)
 	if err != nil {
 		log.Printf("ERROR: Could not start container: %s\n", err)
 		return
@@ -590,6 +590,9 @@ func main() {
 			Usage:       "deploy a new version of an app",
 			Action:      appDeploy,
 			Description: "app:deploy <app> <version>",
+			Flags: []cli.Flag{
+				cli.BoolFlag{Name: "force", Usage: "force pulling the image"},
+			},
 		},
 		{
 			Name:        "app:run",

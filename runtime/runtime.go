@@ -79,33 +79,6 @@ func (s *ServiceRuntime) InspectImage(image string) (*docker.Image, error) {
 	return s.ensureDockerClient().InspectImage(image)
 }
 
-func (s *ServiceRuntime) IsRunning(img string) (string, error) {
-
-	image, err := s.ensureDockerClient().InspectImage(img)
-	if err != nil {
-		return "", err
-	}
-
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	for _, container := range containers {
-		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-		if err != nil {
-			return "", err
-		}
-
-		if image.ID == dockerContainer.Image {
-			return container.ID, nil
-		}
-	}
-	return "", nil
-}
-
 func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
 	serviceConfigs, err := s.serviceRegistry.ListApps("")
@@ -201,7 +174,7 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
-	_, err := s.PullImage(serviceConfig.Version())
+	_, err := s.PullImage(serviceConfig.Version(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -288,48 +261,38 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 	return container, err
 }
 
-func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) error {
 
 	// see if we have the image locally
-	_, err := s.PullImage(serviceConfig.Version())
+	_, err := s.PullImage(serviceConfig.Version(), false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	envVars := []string{
-		"HOME=/",
-		"PATH=" + "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"HOSTNAME=" + "app",
-		"TERM=xterm",
+	args := []string{
+		"run", "-rm", "-i",
 	}
-
 	for key, value := range serviceConfig.Env() {
-		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+		args = append(args, "-e")
+		args = append(args, strings.ToUpper(key)+"="+value)
 	}
 
-	runCmd := []string{"/bin/bash", "-l", "-i"}
-
-	container, err := s.ensureDockerClient().CreateContainer(
-		docker.CreateContainerOptions{
-			Config: &docker.Config{
-				Image:        serviceConfig.Version(),
-				Env:          envVars,
-				AttachStdout: true,
-				AttachStderr: true,
-				AttachStdin:  true,
-				Cmd:          runCmd,
-				OpenStdin:    true,
-				StdinOnce:    true,
-				Tty:          true,
-			},
-		})
-
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
+	for _, config := range serviceConfigs {
+		for port, _ := range config.Ports() {
+			args = append(args, "-e")
+			args = append(args, strings.ToUpper(config.Name)+"_ADDR_"+port+"="+s.shuttleHost+":"+port)
+		}
+	}
+
+	args = append(args, []string{"-t", serviceConfig.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
-	cmd := exec.Command("docker", "run", "-rm", "-i", "-t", serviceConfig.Version(), "/bin/bash")
+	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", serviceConfig.Version(), "/bin/bash")
+	cmd := exec.Command("docker", args...)
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -344,15 +307,13 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 		fmt.Printf("Command finished with error: %v\n", err)
 	}
 
-	s.ensureDockerClient().WaitContainer(container.ID)
-
-	return container, err
+	return err
 }
 
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 	// see if we have the image locally
-	_, err := s.PullImage(img)
+	_, err := s.PullImage(img, false)
 	if err != nil {
 		return nil, err
 	}
@@ -418,43 +379,40 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 }
 
 func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (bool, *docker.Container, error) {
-	img := serviceConfig.Version()
-	containerId, err := s.IsRunning(img)
-	if err != nil && err != docker.ErrNoSuchImage {
+	container, err := s.ensureDockerClient().InspectContainer(serviceConfig.ContainerName())
+	_, ok := err.(*docker.NoSuchContainer)
+	// Expected container is not actually running. Skip it and leave old ones.
+	if (err != nil && ok) || container == nil {
+		container, err := s.Start(serviceConfig)
+		return true, container, err
+	}
+
+	if err != nil {
 		return false, nil, err
 	}
 
-	// already running, grab the container details
-	if containerId != "" {
-		container, err := s.ensureDockerClient().InspectContainer(containerId)
-		if err != nil {
-			return false, nil, err
-		}
-
-		// check if container is the right version
-		if !serviceConfig.IsContainerVersion(container.Name) {
-			return false, container, nil
-		}
-
-		if strings.TrimPrefix(container.Name, "/") != serviceConfig.ContainerName() {
-			container, err := s.Start(serviceConfig)
-			return true, container, err
-		}
-
+	containerName := strings.TrimPrefix(container.Name, "/")
+	// check if container is the right version
+	if !serviceConfig.IsContainerVersion(containerName) && serviceConfig.ContainerName() == container.Name {
 		return false, container, nil
 	}
-	container, err := s.Start(serviceConfig)
-	return true, container, err
+
+	if containerName != serviceConfig.ContainerName() {
+		container, err := s.Start(serviceConfig)
+		return true, container, err
+	}
+
+	return false, container, nil
 
 }
 
-func (s *ServiceRuntime) PullImage(version string) (*docker.Image, error) {
+func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, error) {
 	image, err := s.ensureDockerClient().InspectImage(version)
 	if err != nil {
 		return nil, err
 	}
 
-	if image != nil {
+	if image != nil && !force {
 		return image, nil
 	}
 
