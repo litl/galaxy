@@ -115,7 +115,7 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 					changedConfig.ServiceConfig.Version(), err)
 				continue
 			}
-			log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID)
+			log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID[0:12])
 
 			err = serviceRuntime.StopAllButLatest(stopCutoff)
 			if err != nil {
