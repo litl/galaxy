@@ -1,6 +1,8 @@
 .SILENT :
 .PHONY : commander shuttle discovery galaxy clean fmt test
 
+TAG:=`git describe --abbrev=0 --tags`
+
 all: commander shuttle discovery galaxy
 
 deps:
@@ -70,6 +72,8 @@ dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64 dis
 release-tarball:
 	echo "Building $$GOOS-$$GOARCH-latest.tar.gz"
 	tar -cvzf galaxy-$$GOOS-$$GOARCH-latest.tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle >/dev/null 2>&1
+	echo "Building $$GOOS-$$GOARCH-$(TAG).tar.gz"
+	cp galaxy-$$GOOS-$$GOARCH-latest.tar.gz galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz
 
 release-linux-amd64:
 	export GOOS="linux"; \
