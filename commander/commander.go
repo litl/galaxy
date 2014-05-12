@@ -22,6 +22,8 @@ var (
 	shuttleHost     string
 	debug           bool
 	loggedOnce      bool
+	version         bool
+	buildVersion    string
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
@@ -145,8 +147,14 @@ func main() {
 	flag.BoolVar(&loop, "loop", false, "Run continously")
 	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
+	flag.BoolVar(&version, "v", false, "display version info")
 
 	flag.Parse()
+
+	if version {
+		fmt.Println(buildVersion)
+		return
+	}
 
 	if env == "" {
 		fmt.Println("Need an env")

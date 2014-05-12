@@ -24,7 +24,8 @@ var (
 	serviceRuntime  *runtime.ServiceRuntime
 	serviceRegistry *registry.ServiceRegistry
 
-	initOnce sync.Once
+	initOnce     sync.Once
+	buildVersion string
 )
 
 var config struct {
@@ -548,6 +549,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
+	app.Version = buildVersion
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},

@@ -2,6 +2,7 @@
 .PHONY : commander shuttle discovery galaxy clean fmt test
 
 TAG:=`git describe --abbrev=0 --tags`
+LDFLAGS:=-X main.buildVersion `git describe --long`
 
 all: commander shuttle discovery galaxy
 
@@ -10,19 +11,19 @@ deps:
 
 commander:
 	echo "Building commander"
-	go install github.com/litl/galaxy/commander
+	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/commander
 
 shuttle:
 	echo "Building shuttle"
-	go install github.com/litl/galaxy/shuttle
+	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/shuttle
 
 discovery:
 	echo "Building discovery"
-	go install github.com/litl/galaxy/discovery
+	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/discovery
 
 galaxy:
 	echo "Building galaxy"
-	go install github.com/litl/galaxy
+	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy
 
 clean:
 	rm -f $(GOPATH)/bin/{commander,discovery,shuttle}
@@ -42,7 +43,7 @@ dist-init:
 
 dist-build: dist-init
 	echo "Compiling $$GOOS/$$GOARCH"
-	go build -o dist/$$GOOS/$$GOARCH/galaxy github.com/litl/galaxy
+	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/galaxy github.com/litl/galaxy
 	go build -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/commander
 	go build -o dist/$$GOOS/$$GOARCH/shuttle github.com/litl/galaxy/shuttle
 	go build -o dist/$$GOOS/$$GOARCH/discovery github.com/litl/galaxy/discovery

@@ -18,6 +18,7 @@ var (
 	client          *docker.Client
 	serviceRegistry *registry.ServiceRegistry
 	outputBuffer    *utils.OutputBuffer
+	buildVersion    string
 )
 
 func initOrDie(c *cli.Context) {
@@ -57,6 +58,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "discovery"
 	app.Usage = "discovery service registration"
+	app.Version = buildVersion
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "redis", Value: "127.0.0.1:6379", Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
