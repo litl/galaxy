@@ -94,7 +94,6 @@ func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 	}
 
 	for _, serviceConfig := range serviceConfigs {
-		registry, repository, _ := utils.SplitDockerImage(serviceConfig.Version())
 		latestName := serviceConfig.ContainerName()
 
 		latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
@@ -116,8 +115,7 @@ func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 				continue
 			}
 
-			containerReg, containerRepo, _ := utils.SplitDockerImage(container.Image)
-			if containerReg == registry && containerRepo == repository && container.ID != latestContainer.ID &&
+			if container.ID != latestContainer.ID &&
 				container.Created < (time.Now().Unix()-stopCutoff) {
 
 				// HACK: Docker 0.9 gets zombie containers randomly.  The only way to remove
@@ -313,7 +311,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 	// see if we have the image locally
-	_, err := s.PullImage(img, false)
+	image, err := s.PullImage(img, false)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +341,29 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		return nil, err
 	}
 
+	// Existing container is running or stopped.  If the image has changed, stop
+	// and re-create it.
+	if container != nil && container.Image != image.ID {
+		if container.State.Running {
+			log.Printf("Stopping %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+			err := s.ensureDockerClient().StopContainer(container.ID, 10)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		log.Printf("Removing %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+		err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+			ID: container.ID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		container = nil
+	}
+
 	if container == nil {
+		log.Printf("Creating %s version %s", serviceConfig.Name, serviceConfig.Version())
 		container, err = s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
 			Name: containerName,
 			Config: &docker.Config{
@@ -356,6 +376,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		}
 	}
 
+	log.Printf("Starting %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 	err = s.ensureDockerClient().StartContainer(container.ID,
 		&docker.HostConfig{
 			PublishAllPorts: true,
@@ -392,12 +413,22 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 	}
 
 	containerName := strings.TrimPrefix(container.Name, "/")
+
 	// check if container is the right version
-	if !serviceConfig.IsContainerVersion(containerName) && serviceConfig.ContainerName() == container.Name {
+	if !serviceConfig.IsContainerVersion(containerName) {
 		return false, container, nil
 	}
 
-	if containerName != serviceConfig.ContainerName() {
+	image, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
+	if err != nil {
+		return false, nil, err
+	}
+
+	imageDiffers := image.ID != container.Image
+	configDiffers := containerName != serviceConfig.ContainerName()
+	notRunning := !container.State.Running
+
+	if imageDiffers || configDiffers || notRunning {
 		container, err := s.Start(serviceConfig)
 		return true, container, err
 	}
