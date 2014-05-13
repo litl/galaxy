@@ -20,6 +20,10 @@ var (
 
 	// Debug logging
 	debug bool
+
+	// version flags
+	version      bool
+	buildVersion string
 )
 
 func init() {
@@ -27,6 +31,7 @@ func init() {
 	flag.StringVar(&defaultConfig, "config", "", "default config file")
 	flag.StringVar(&stateConfig, "state", "", "updated config which reflects the internal state")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
+	flag.BoolVar(&version, "v", false, "display version")
 
 	flag.Parse()
 }
@@ -34,6 +39,11 @@ func init() {
 func main() {
 	if debug {
 		log.DefaultLogger.Level = log.DEBUG
+	}
+
+	if version {
+		println(buildVersion)
+		return
 	}
 
 	loadConfig()
