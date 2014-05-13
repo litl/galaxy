@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/user"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -418,14 +417,14 @@ func login(c *cli.Context) {
 		return
 	}
 
-	currentUser, err := user.Current()
-	if err != nil {
-		log.Printf("ERROR: Unable to determine current user: %s\n", err)
+	homeDir := utils.HomeDir()
+	if homeDir == "" {
+		log.Println("ERROR: Unable to determine current home dir. Set $HOME.")
 		return
 	}
 
-	configDir := filepath.Join(currentUser.HomeDir, ".galaxy")
-	_, err = os.Stat(configDir)
+	configDir := filepath.Join(homeDir, ".galaxy")
+	_, err := os.Stat(configDir)
 	if err != nil && os.IsNotExist(err) {
 		os.Mkdir(configDir, 0700)
 	}
@@ -447,14 +446,16 @@ func login(c *cli.Context) {
 
 func logout(c *cli.Context) {
 	initRegistry(c)
-	currentUser, err := user.Current()
-	if err != nil {
-		log.Printf("ERROR: Unable to determine current user: %s\n", err)
+
+	homeDir := utils.HomeDir()
+	if homeDir == "" {
+		log.Println("ERROR: Unable to determine current home dir. Set $HOME")
 		return
 	}
-	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
 
-	_, err = os.Stat(configFile)
+	configFile := filepath.Join(homeDir, ".galaxy", "galaxy.toml")
+
+	_, err := os.Stat(configFile)
 	if err == nil {
 		err = os.Remove(configFile)
 		if err != nil {
@@ -517,14 +518,15 @@ func runRemote() {
 
 func loadConfig() {
 
-	currentUser, err := user.Current()
-	if err != nil {
-		log.Printf("ERROR: Unable to determine current user: %s\n", err)
+	homeDir := utils.HomeDir()
+	if homeDir == "" {
+		log.Println("ERROR: Unable to determine current home dir. Set $HOME.")
 		return
 	}
-	configFile := filepath.Join(currentUser.HomeDir, ".galaxy", "galaxy.toml")
 
-	_, err = os.Stat(configFile)
+	configFile := filepath.Join(homeDir, ".galaxy", "galaxy.toml")
+
+	_, err := os.Stat(configFile)
 	if err == nil {
 		if _, err := toml.DecodeFile(configFile, &config); err != nil {
 			log.Printf("ERROR: Unable to logout: %s\n", err)

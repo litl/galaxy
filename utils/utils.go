@@ -90,3 +90,7 @@ func GetEnv(name, defaultValue string) string {
 	}
 	return os.Getenv(name)
 }
+
+func HomeDir() string {
+	return os.Getenv("HOME")
+}
