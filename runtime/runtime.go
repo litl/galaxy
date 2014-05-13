@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"os/user"
 	"strings"
 	"time"
 
@@ -459,13 +458,13 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		pullOpts.Repository = registry + "/" + repository
 		pullOpts.Registry = registry
 
-		currentUser, err := user.Current()
-		if err != nil {
-			panic(err)
+		homeDir := utils.HomeDir()
+		if homeDir == "" {
+			return nil, errors.New("ERROR: Unable to determine current home dir. Set $HOME")
 		}
 
 		// use ~/.dockercfg
-		authConfig, err := auth.LoadConfig(currentUser.HomeDir)
+		authConfig, err := auth.LoadConfig(homeDir)
 		if err != nil {
 			panic(err)
 		}
