@@ -446,10 +446,12 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		return image, nil
 	}
 
-	registry, repository, _ := utils.SplitDockerImage(version)
+	registry, repository, tag := utils.SplitDockerImage(version)
+
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
+		Tag:          tag,
 		OutputStream: os.Stdout}
 
 	dockerAuth := docker.AuthConfiguration{}
@@ -457,6 +459,7 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 
 		pullOpts.Repository = registry + "/" + repository
 		pullOpts.Registry = registry
+		pullOpts.Tag = tag
 
 		homeDir := utils.HomeDir()
 		if homeDir == "" {
