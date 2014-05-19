@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 )
 
 func SSHCmd(host string, command string, background bool, debug bool) {
@@ -38,9 +39,22 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 		log.Fatal(err)
 	}
 	fmt.Printf("Connecting to %s...\n", host)
-	err = cmd.Wait()
-	if err != nil {
-		fmt.Printf("Command finished with error: %v\n", err)
+	if err := cmd.Wait(); err != nil {
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			// The program has exited with an exit code != 0
+
+			// This works on both Unix and Windows. Although package
+			// syscall is generally platform dependent, WaitStatus is
+			// defined for both Unix and Windows and in both cases has
+			// an ExitStatus() method with the same signature.
+			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				fmt.Printf("Command finished with error: %v\n", err)
+				os.Exit(status.ExitStatus())
+			}
+		} else {
+			fmt.Printf("Command finished with error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 }
