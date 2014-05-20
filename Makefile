@@ -36,7 +36,7 @@ test:
 
 dist-clean:
 	rm -rf dist
-	rm -f docker-gen-linux-*.tar.gz
+	rm -f galaxy-*.tar.gz
 
 dist-init:
 	mkdir -p dist/$$GOOS/$$GOARCH
@@ -71,10 +71,8 @@ dist-darwin-386:
 dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64 dist-darwin-386
 
 release-tarball:
-	echo "Building $$GOOS-$$GOARCH-latest.tar.gz"
-	tar -cvzf galaxy-$$GOOS-$$GOARCH-latest.tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle >/dev/null 2>&1
 	echo "Building $$GOOS-$$GOARCH-$(TAG).tar.gz"
-	cp galaxy-$$GOOS-$$GOARCH-latest.tar.gz galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz
+	tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle >/dev/null 2>&1
 
 release-linux-amd64:
 	export GOOS="linux"; \
