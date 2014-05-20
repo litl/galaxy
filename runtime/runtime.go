@@ -446,10 +446,12 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		return image, nil
 	}
 
-	registry, repository, _ := utils.SplitDockerImage(version)
+	registry, repository, tag := utils.SplitDockerImage(version)
+
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
+		Tag:          tag,
 		OutputStream: os.Stdout}
 
 	dockerAuth := docker.AuthConfiguration{}
@@ -457,6 +459,7 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 
 		pullOpts.Repository = registry + "/" + repository
 		pullOpts.Registry = registry
+		pullOpts.Tag = tag
 
 		homeDir := utils.HomeDir()
 		if homeDir == "" {
@@ -477,10 +480,20 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		dockerAuth.Email = authCreds.Email
 	}
 
-	err = s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
-	if err != nil {
-		return nil, err
+	retries := 0
+	for {
+		err = s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
+		if err != nil {
+			retries += 1
+			if retries >= 3 {
+				return nil, err
+			}
+			log.Printf("ERROR: error pulling image: %s", err)
+			continue
+		}
+		break
 	}
+
 	return s.ensureDockerClient().InspectImage(version)
 
 }
