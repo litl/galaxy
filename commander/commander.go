@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -21,7 +22,7 @@ var (
 	loop            bool
 	shuttleHost     string
 	debug           bool
-	loggedOnce      bool
+	runOnce         bool
 	version         bool
 	buildVersion    string
 	serviceConfigs  []*registry.ServiceConfig
@@ -46,7 +47,7 @@ func initOrDie() {
 func startContainersIfNecessary() error {
 	serviceConfigs, err := serviceRegistry.ListApps("")
 	if err != nil {
-		log.Printf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
+		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 		return err
 	}
 
@@ -62,13 +63,24 @@ func startContainersIfNecessary() error {
 		}
 
 		if serviceConfig.Version() == "" {
-			log.Printf("Skipping %s. No version configured.\n", serviceConfig.Name)
+			log.Warnf("Skipping %s. No version configured.\n", serviceConfig.Name)
 			continue
+		}
+
+		if !runOnce {
+			// err logged via pullImage. If pull fails, just start the image we have.
+			image, err := pullImage(&serviceConfig)
+			if image == nil {
+				continue
+			}
+			if err != nil {
+				log.Warnf("WARN: Using existing image %s for %s.\n", image.ID[0:12], serviceConfig.Version())
+			}
 		}
 
 		started, container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
-			log.Printf("ERROR: Could not determine if %s is running: %s\n",
+			log.Errorf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version(), err)
 			return err
 		}
@@ -77,15 +89,27 @@ func startContainersIfNecessary() error {
 			log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 		}
 
-		if !(debug || loggedOnce) {
+		if !(debug || runOnce) {
 			log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 		}
 
 		log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 	}
 
-	loggedOnce = true
+	runOnce = true
 	return nil
+}
+
+func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
+	log.Printf("Pulling %s\n", serviceConfig.Version())
+	image, err := serviceRuntime.PullImage(serviceConfig.Version(), true)
+	if err != nil {
+		log.Errorf("ERROR: Could not pull image %s: %s\n",
+			serviceConfig.Version(), err)
+		return image, err
+	}
+	log.Printf("Pulled %s\n", serviceConfig.Version())
+	return image, nil
 }
 
 func restartContainers(changedConfigs chan *registry.ConfigChange) {
@@ -98,7 +122,7 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 
 		case changedConfig = <-changedConfigs:
 			if changedConfig.Error != nil {
-				log.Printf("ERROR: Error watching changes: %s\n", changedConfig.Error)
+				log.Errorf("ERROR: Error watching changes: %s\n", changedConfig.Error)
 				continue
 			}
 
@@ -110,17 +134,16 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 				continue
 			}
 
-			_, err := serviceRuntime.PullImage(changedConfig.ServiceConfig.Version(), true)
+			_, err := pullImage(changedConfig.ServiceConfig)
 			if err != nil {
-				log.Printf("ERROR: Could not pull image %s: %s\n",
-					changedConfig.ServiceConfig.Version(), err)
+				// if we can't pull the image, leave whatever is running alone
 				continue
 			}
 
 			log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
 			container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
 			if err != nil {
-				log.Printf("ERROR: Could not start %s: %s\n",
+				log.Errorf("ERROR: Could not start %s: %s\n",
 					changedConfig.ServiceConfig.Version(), err)
 				continue
 			}
@@ -128,17 +151,17 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 
 			err = serviceRuntime.StopAllButLatest(stopCutoff)
 			if err != nil {
-				log.Printf("ERROR: Could not stop containers: %s\n", err)
+				log.Errorf("ERROR: Could not stop containers: %s\n", err)
 			}
 		case <-ticker.C:
 			err := startContainersIfNecessary()
 			if err != nil {
-				log.Printf("ERROR: Could not start containers: %s\n", err)
+				log.Errorf("ERROR: Could not start containers: %s\n", err)
 			}
 
 			err = serviceRuntime.StopAllButLatest(stopCutoff)
 			if err != nil {
-				log.Printf("ERROR: Could not stop containers: %s\n", err)
+				log.Errorf("ERROR: Could not stop containers: %s\n", err)
 			}
 		}
 
@@ -184,13 +207,13 @@ func main() {
 
 	err := startContainersIfNecessary()
 	if err != nil && !loop {
-		log.Printf("ERROR: Could not start containers: %s\n", err)
+		log.Errorf("ERROR: Could not start containers: %s\n", err)
 		return
 	}
 
 	err = serviceRuntime.StopAllButLatest(stopCutoff)
 	if err != nil && !loop {
-		log.Printf("ERROR: Could not start containers: %s\n", err)
+		log.Errorf("ERROR: Could not start containers: %s\n", err)
 		return
 	}
 

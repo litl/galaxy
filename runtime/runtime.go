@@ -452,7 +452,7 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
 		Tag:          tag,
-		OutputStream: os.Stdout}
+		OutputStream: log.DefaultLogger}
 
 	dockerAuth := docker.AuthConfiguration{}
 	if registry != "" && s.authConfig == nil {
@@ -486,9 +486,9 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		if err != nil {
 			retries += 1
 			if retries >= 3 {
-				return nil, err
+				return image, err
 			}
-			log.Printf("ERROR: error pulling image: %s", err)
+			log.Errorf("ERROR: error pulling image: %s", err)
 			continue
 		}
 		break

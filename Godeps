@@ -15,6 +15,10 @@
 			"Rev": "8f0575f520013467eb175a5dd30158ed816eeda9"
 		},
 		{
+			"ImportPath": "github.com/daviddengcn/go-colortext",
+			"Rev": "8386cd264821f95e9bc124a0a339560d1a899cad"
+		},
+		{
 			"ImportPath": "github.com/dotcloud/docker/dockerversion",
 			"Comment": "v0.10.0-91-g24c4c3e",
 			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
