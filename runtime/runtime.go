@@ -488,7 +488,7 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 			if retries >= 3 {
 				return image, err
 			}
-			log.Printf("ERROR: error pulling image: %s", err)
+			log.Errorf("ERROR: error pulling image: %s", err)
 			continue
 		}
 		break

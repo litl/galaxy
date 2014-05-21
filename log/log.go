@@ -4,6 +4,8 @@ import (
 	"io"
 	golog "log"
 	"os"
+
+	"github.com/daviddengcn/go-colortext"
 )
 
 const (
@@ -54,12 +56,69 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 
 func Debug(v ...interface{})                 { DefaultLogger.Debug(v...) }
 func Debugf(format string, v ...interface{}) { DefaultLogger.Debugf(format, v...) }
-func Fatal(v ...interface{})                 { DefaultLogger.Fatal(v...) }
-func Fatalf(format string, v ...interface{}) { DefaultLogger.Fatalf(format, v...) }
-func Fatalln(v ...interface{})               { DefaultLogger.Fatalln(v...) }
-func Panic(v ...interface{})                 { DefaultLogger.Panic(v...) }
-func Panicf(format string, v ...interface{}) { DefaultLogger.Panicf(format, v...) }
-func Panicln(v ...interface{})               { DefaultLogger.Panicln(v...) }
+func Fatal(v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Fatal(v...)
+	ct.ResetColor()
+}
+func Fatalf(format string, v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Fatalf(format, v...)
+	ct.ResetColor()
+}
+func Fatalln(v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Fatalln(v...)
+	ct.ResetColor()
+}
+func Panic(v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Panic(v...)
+	ct.ResetColor()
+}
+func Panicf(format string, v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Panicf(format, v...)
+	ct.ResetColor()
+}
+func Panicln(v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Panicln(v...)
+	ct.ResetColor()
+}
+
+func Error(v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Print(v...)
+	ct.ResetColor()
+}
+func Errorf(format string, v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Printf(format, v...)
+	ct.ResetColor()
+}
+func Errorln(v ...interface{}) {
+	ct.ChangeColor(ct.Red, true, ct.None, false)
+	DefaultLogger.Println(v...)
+	ct.ResetColor()
+}
+
+func Warn(v ...interface{}) {
+	ct.ChangeColor(ct.Yellow, true, ct.None, false)
+	DefaultLogger.Print(v...)
+	ct.ResetColor()
+}
+func Warnf(format string, v ...interface{}) {
+	ct.ChangeColor(ct.Yellow, true, ct.None, false)
+	DefaultLogger.Printf(format, v...)
+	ct.ResetColor()
+}
+func Warnln(v ...interface{}) {
+	ct.ChangeColor(ct.Yellow, true, ct.None, false)
+	DefaultLogger.Println(v...)
+	ct.ResetColor()
+}
+
 func Print(v ...interface{})                 { DefaultLogger.Print(v...) }
 func Printf(format string, v ...interface{}) { DefaultLogger.Printf(format, v...) }
 func Println(v ...interface{})               { DefaultLogger.Println(v...) }
