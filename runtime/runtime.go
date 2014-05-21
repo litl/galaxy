@@ -452,7 +452,7 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
 		Tag:          tag,
-		OutputStream: os.Stdout}
+		OutputStream: log.DefaultLogger}
 
 	dockerAuth := docker.AuthConfiguration{}
 	if registry != "" && s.authConfig == nil {

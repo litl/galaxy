@@ -44,6 +44,11 @@ func (l *Logger) Debugf(fmt string, v ...interface{}) {
 	l.Printf(fmt, v...)
 }
 
+func (l *Logger) Write(p []byte) (n int, err error) {
+	l.Print(string(p))
+	return len(p), nil
+}
+
 func Debug(v ...interface{})                 { DefaultLogger.Debug(v...) }
 func Debugf(format string, v ...interface{}) { DefaultLogger.Debugf(format, v...) }
 func Fatal(v ...interface{})                 { DefaultLogger.Fatal(v...) }
