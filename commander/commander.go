@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -21,7 +22,7 @@ var (
 	loop            bool
 	shuttleHost     string
 	debug           bool
-	loggedOnce      bool
+	runOnce         bool
 	version         bool
 	buildVersion    string
 	serviceConfigs  []*registry.ServiceConfig
@@ -66,6 +67,17 @@ func startContainersIfNecessary() error {
 			continue
 		}
 
+		if !runOnce {
+			// err logged via pullImage. If pull fails, just start the image we have.
+			image, err := pullImage(&serviceConfig)
+			if image == nil {
+				continue
+			}
+			if err != nil {
+				log.Printf("WARN: Using existing image %s for %s.\n", image.ID[0:12], serviceConfig.Version())
+			}
+		}
+
 		started, container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
 			log.Printf("ERROR: Could not determine if %s is running: %s\n",
@@ -77,15 +89,27 @@ func startContainersIfNecessary() error {
 			log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 		}
 
-		if !(debug || loggedOnce) {
+		if !(debug || runOnce) {
 			log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 		}
 
 		log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 	}
 
-	loggedOnce = true
+	runOnce = true
 	return nil
+}
+
+func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
+	log.Printf("Pulling %s\n", serviceConfig.Version())
+	image, err := serviceRuntime.PullImage(serviceConfig.Version(), true)
+	if err != nil {
+		log.Printf("ERROR: Could not pull image %s: %s\n",
+			serviceConfig.Version(), err)
+		return image, err
+	}
+	log.Printf("Pulled %s\n", serviceConfig.Version())
+	return image, nil
 }
 
 func restartContainers(changedConfigs chan *registry.ConfigChange) {
@@ -110,14 +134,11 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 				continue
 			}
 
-			log.Printf("Pulling %s\n", changedConfig.ServiceConfig.Version())
-			_, err := serviceRuntime.PullImage(changedConfig.ServiceConfig.Version(), true)
+			_, err := pullImage(changedConfig.ServiceConfig)
 			if err != nil {
-				log.Printf("ERROR: Could not pull image %s: %s\n",
-					changedConfig.ServiceConfig.Version(), err)
+				// if we can't pull the image, leave whatever is running alone
 				continue
 			}
-			log.Printf("Pulled %s\n", changedConfig.ServiceConfig.Version())
 
 			log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
 			container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
