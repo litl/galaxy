@@ -110,6 +110,13 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 				continue
 			}
 
+			_, err := serviceRuntime.PullImage(changedConfig.ServiceConfig.Version(), true)
+			if err != nil {
+				log.Printf("ERROR: Could not pull image %s: %s\n",
+					changedConfig.ServiceConfig.Version(), err)
+				continue
+			}
+
 			log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
 			container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
 			if err != nil {
