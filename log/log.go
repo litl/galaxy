@@ -45,6 +45,9 @@ func (l *Logger) Debugf(fmt string, v ...interface{}) {
 }
 
 func (l *Logger) Write(p []byte) (n int, err error) {
+	if l.Level < DEBUG {
+		return
+	}
 	l.Print(string(p))
 	return len(p), nil
 }
