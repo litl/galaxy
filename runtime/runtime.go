@@ -438,7 +438,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, error) {
 	image, err := s.ensureDockerClient().InspectImage(version)
-	if err != nil {
+	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
 	}
 
