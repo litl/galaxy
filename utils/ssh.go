@@ -11,13 +11,6 @@ import (
 
 func SSHCmd(host string, command string, background bool, debug bool) {
 
-	// Assuming the deployed hosts will have a galaxy user created at some
-	// point
-	username := "galaxy"
-	if strings.Contains(host, "127.0.0.1:2222") {
-		username = "vagrant"
-	}
-
 	port := "22"
 	hostPort := strings.SplitN(host, ":", 2)
 	if len(hostPort) > 1 {
@@ -27,7 +20,7 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 	cmd := exec.Command("/usr/bin/ssh",
 		//"-i", config.PrivateKey,
 		"-o", "RequestTTY=yes",
-		username+"@"+host,
+		host,
 		"-p", port,
 		"-C", "/bin/bash", "-i", "-l", "-c", "'source .bashrc && "+command+"'")
 
@@ -56,5 +49,4 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 			os.Exit(1)
 		}
 	}
-
 }

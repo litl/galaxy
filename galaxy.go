@@ -431,6 +431,9 @@ func login(c *cli.Context) {
 
 	config.Host = c.Args().First()
 
+	// This will exit if it fails
+	utils.SSHCmd(config.Host, "echo \"test\" > /dev/null", false, false)
+
 	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
 	if err != nil {
 		log.Printf("ERROR: Unable to create config file: %s\n", err)
