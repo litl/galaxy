@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -44,6 +45,39 @@ func initOrDie() {
 	serviceRuntime = runtime.NewServiceRuntime(shuttleHost, env, pool, redisHost)
 }
 
+func pullAllImages() error {
+	serviceConfigs, err := serviceRegistry.ListApps("")
+	if err != nil {
+		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
+		return err
+	}
+
+	if len(serviceConfigs) == 0 {
+		log.Printf("No services configured for /%s/%s\n", env, pool)
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, serviceConfig := range serviceConfigs {
+
+		wg.Add(1)
+		go func(serviceConfig registry.ServiceConfig) {
+			defer wg.Done()
+			// err logged via pullImage. If pull fails, just start the image we have.
+			image, err := pullImage(&serviceConfig)
+			if image == nil {
+				return
+			}
+			if err != nil {
+				log.Warnf("WARN: Using existing image %s for %s.\n", image.ID[0:12], serviceConfig.Version())
+			}
+
+		}(serviceConfig)
+	}
+	wg.Wait()
+	return nil
+}
+
 func startContainersIfNecessary() error {
 	serviceConfigs, err := serviceRegistry.ListApps("")
 	if err != nil {
@@ -57,7 +91,6 @@ func startContainersIfNecessary() error {
 	}
 
 	for _, serviceConfig := range serviceConfigs {
-
 		if app != "" && serviceConfig.Name != app {
 			continue
 		}
@@ -67,22 +100,11 @@ func startContainersIfNecessary() error {
 			continue
 		}
 
-		if !runOnce {
-			// err logged via pullImage. If pull fails, just start the image we have.
-			image, err := pullImage(&serviceConfig)
-			if image == nil {
-				continue
-			}
-			if err != nil {
-				log.Warnf("WARN: Using existing image %s for %s.\n", image.ID[0:12], serviceConfig.Version())
-			}
-		}
-
 		started, container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
 		if err != nil {
 			log.Errorf("ERROR: Could not determine if %s is running: %s\n",
 				serviceConfig.Version(), err)
-			return err
+			continue
 		}
 
 		if started {
@@ -205,7 +227,12 @@ func main() {
 	initOrDie()
 	serviceRegistry.CreatePool(pool)
 
-	err := startContainersIfNecessary()
+	err := pullAllImages()
+	if err != nil {
+		return
+	}
+
+	err = startContainersIfNecessary()
 	if err != nil && !loop {
 		log.Errorf("ERROR: Could not start containers: %s\n", err)
 		return

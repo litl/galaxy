@@ -438,7 +438,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, error) {
 	image, err := s.ensureDockerClient().InspectImage(version)
-	if err != nil {
+	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
 	}
 
@@ -482,13 +482,13 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 
 	retries := 0
 	for {
+		retries += 1
 		err = s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
 		if err != nil {
-			retries += 1
-			if retries >= 3 {
+			if retries > 3 {
 				return image, err
 			}
-			log.Errorf("ERROR: error pulling image: %s", err)
+			log.Errorf("ERROR: error pulling image %s. Attempt %d: %s", version, retries, err)
 			continue
 		}
 		break
