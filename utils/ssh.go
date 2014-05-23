@@ -49,5 +49,4 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 			os.Exit(1)
 		}
 	}
-
 }
