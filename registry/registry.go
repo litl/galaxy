@@ -3,7 +3,6 @@ package registry
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -25,17 +24,6 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
       switch to ORDERED SETS and log changes
 */
 
-type ServiceRegistration struct {
-	ExternalIP   string    `json:"EXTERNAL_IP",omitempty`
-	ExternalPort string    `json:"EXTERNAL_PORT",omitempty`
-	InternalIP   string    `json:"INTERNAL_IP",omitempty`
-	InternalPort string    `json:"INTERNAL_PORT",omitempty`
-	ContainerID  string    `json:"CONTAINER_ID"`
-	StartedAt    time.Time `json:"STARTED_AT"`
-	Expires      time.Time `json:"-"`
-	Path         string    `json:"-"`
-}
-
 type ServiceRegistry struct {
 	redisPool    redis.Pool
 	Env          string
@@ -52,28 +40,6 @@ type ServiceRegistry struct {
 type ConfigChange struct {
 	ServiceConfig *ServiceConfig
 	Error         error
-}
-
-func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
-	return s.ExternalIP == other.ExternalIP &&
-		s.ExternalPort == other.ExternalPort &&
-		s.InternalIP == other.InternalIP &&
-		s.InternalPort == other.InternalPort
-}
-
-func (s *ServiceRegistration) addr(ip, port string) string {
-	if ip != "" && port != "" {
-		return fmt.Sprint(ip, ":", port)
-	}
-	return ""
-
-}
-func (s *ServiceRegistration) ExternalAddr() string {
-	return s.addr(s.ExternalIP, s.ExternalPort)
-}
-
-func (s *ServiceRegistration) InternalAddr() string {
-	return s.addr(s.InternalIP, s.InternalPort)
 }
 
 func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
