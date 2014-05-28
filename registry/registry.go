@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"encoding/json"
 	"os"
 	"path"
 	"strings"
@@ -295,37 +294,4 @@ func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
 	}
 
 	return appList, nil
-}
-
-// TODO: get all ServiceRegistrations
-func (r *ServiceRegistry) ListRegistrations() ([]ServiceRegistration, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
-	// TODO: convert to scan
-	keys, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "*", "hosts", "*", "*")))
-	if err != nil {
-		return nil, err
-	}
-
-	var regList []ServiceRegistration
-	for _, key := range keys {
-
-		val, err := redis.Bytes(conn.Do("HGET", key, "location"))
-		if err != nil {
-			return nil, err
-		}
-
-		svcReg := ServiceRegistration{}
-		err = json.Unmarshal(val, &svcReg)
-		if err != nil {
-			return nil, err
-		}
-
-		svcReg.Path = key
-
-		regList = append(regList, svcReg)
-	}
-
-	return regList, nil
 }
