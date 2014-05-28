@@ -159,7 +159,7 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 	defer conn.Close()
 
 	// TODO: convert to SCAN
-	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, app, "*")))
+	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, app, "*")))
 	if err != nil {
 		return false, err
 	}
@@ -233,15 +233,15 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 	defer conn.Close()
 
 	deletedOne := false
-	deleted, err := conn.Do("DEL", path.Join(r.Env, r.Pool, app))
+	deleted, err := conn.Do("DEL", path.Join(r.Env, app))
 	if err != nil {
 		return false, err
 	}
 
 	deletedOne = deletedOne || deleted.(int64) == 1
 
-	for _, k := range []string{"environment", "version"} {
-		deleted, err = conn.Do("DEL", path.Join(r.Env, r.Pool, app, k))
+	for _, k := range []string{"environment", "version", "ports"} {
+		deleted, err = conn.Do("DEL", path.Join(r.Env, app, k))
 		if err != nil {
 			return false, err
 		}
@@ -266,7 +266,7 @@ func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
 	}
 
 	// TODO: convert to scan
-	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, pool, "*", "environment")))
+	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "*", "environment")))
 	if err != nil {
 		return nil, err
 	}
@@ -277,16 +277,16 @@ func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
 		parts := strings.Split(app, "/")
 
 		// app entries should be 3 parts, /env/pool/app
-		if len(parts) != 4 {
+		if len(parts) != 3 {
 			continue
 		}
 
 		// we don't want host keys
-		if parts[2] == "hosts" {
+		if parts[1] == "hosts" {
 			continue
 		}
 
-		cfg, err := r.GetServiceConfig(parts[2])
+		cfg, err := r.GetServiceConfig(parts[1])
 		if err != nil {
 			return nil, err
 		}
