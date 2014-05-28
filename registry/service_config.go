@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"path"
 	"strconv"
 	"strings"
 
@@ -133,4 +134,76 @@ func (s *ServiceConfig) IsContainerVersion(name string) bool {
 
 func (s *ServiceConfig) nextID() int64 {
 	return s.ID() + 1
+}
+
+func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	exists, err := r.AppExists(app)
+	if err != nil || !exists {
+		return nil, err
+	}
+
+	svcCfg := NewServiceConfig(path.Base(app), "")
+
+	err = r.loadVMap(path.Join(r.Env, r.Pool, app, "environment"), svcCfg.environmentVMap)
+	if err != nil {
+		return nil, err
+	}
+	err = r.loadVMap(path.Join(r.Env, r.Pool, app, "version"), svcCfg.versionVMap)
+	if err != nil {
+		return nil, err
+	}
+
+	err = r.loadVMap(path.Join(r.Env, r.Pool, app, "ports"), svcCfg.portsVMap)
+	if err != nil {
+		return nil, err
+	}
+
+	return svcCfg, nil
+}
+
+func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+
+	for k, v := range svcCfg.Env() {
+		if svcCfg.environmentVMap.Get(k) != v {
+			svcCfg.environmentVMap.Set(k, v)
+		}
+	}
+
+	for k, v := range svcCfg.Ports() {
+		if svcCfg.portsVMap.Get(k) != v {
+			svcCfg.portsVMap.Set(k, v)
+		}
+	}
+
+	//TODO: user MULTI/EXEC
+	err := r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "environment"),
+		svcCfg.environmentVMap)
+
+	if err != nil {
+		return false, err
+	}
+
+	err = r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "version"),
+		svcCfg.versionVMap)
+
+	if err != nil {
+		return false, err
+	}
+
+	err = r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "ports"),
+		svcCfg.portsVMap)
+
+	if err != nil {
+		return false, err
+	}
+
+	err = r.notifyChanged()
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
