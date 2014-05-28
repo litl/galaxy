@@ -1,8 +1,15 @@
 package registry
 
 import (
+	"encoding/json"
 	"fmt"
+	"path"
+	"strings"
 	"time"
+
+	"github.com/fsouza/go-dockerclient"
+	"github.com/garyburd/redigo/redis"
+	"github.com/litl/galaxy/utils"
 )
 
 type ServiceRegistration struct {
@@ -36,4 +43,111 @@ func (s *ServiceRegistration) ExternalAddr() string {
 
 func (s *ServiceRegistration) InternalAddr() string {
 	return s.addr(s.InternalIP, s.InternalPort)
+}
+
+func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
+	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
+
+	serviceRegistration := r.newServiceRegistration(container)
+
+	jsonReg, err := json.Marshal(serviceRegistration)
+	if err != nil {
+		return err
+	}
+
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	// TODO: use a compare-and-swap SCRIPT
+	_, err = conn.Do("HMSET", registrationPath, "location", jsonReg)
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.Do("EXPIRE", registrationPath, r.TTL)
+	if err != nil {
+		return err
+	}
+
+	statusLine := strings.Join([]string{
+		container.ID[0:12],
+		container.Config.Image,
+		serviceRegistration.ExternalAddr(),
+		serviceRegistration.InternalAddr(),
+		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+		"In " + utils.HumanDuration(time.Duration(r.TTL)*time.Second),
+	}, " | ")
+
+	r.OutputBuffer.Log(statusLine)
+
+	return nil
+}
+
+func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
+
+	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
+
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("DEL", registrationPath)
+	if err != nil {
+		return err
+	}
+
+	statusLine := strings.Join([]string{
+		container.ID[0:12],
+		container.Config.Image,
+		"",
+		"",
+		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+		"",
+	}, " | ")
+
+	r.OutputBuffer.Log(statusLine)
+
+	return nil
+}
+
+func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
+	desiredServiceRegistration := r.newServiceRegistration(container)
+	regPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
+
+	existingRegistration := ServiceRegistration{
+		Path: regPath,
+	}
+
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	val, err := conn.Do("HGET", regPath, "location")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if val != nil {
+		location, err := redis.Bytes(val, err)
+		err = json.Unmarshal(location, &existingRegistration)
+		if err != nil {
+			return nil, err
+		}
+
+		if existingRegistration.Equals(*desiredServiceRegistration) {
+			expires, err := redis.Int(conn.Do("TTL", regPath))
+			if err != nil {
+				return nil, err
+			}
+			existingRegistration.Expires = time.Now().Add(time.Duration(expires) * time.Second)
+			return &existingRegistration, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfig *ServiceConfig) (bool, error) {
+
+	reg, err := r.GetServiceRegistration(container, serviceConfig)
+	return reg != nil, err
 }
