@@ -274,17 +274,8 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 		args = append(args, strings.ToUpper(key)+"="+value)
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
-	if err != nil {
-		return err
-	}
-
-	for _, config := range serviceConfigs {
-		for port, _ := range config.Ports() {
-			args = append(args, "-e")
-			args = append(args, strings.ToUpper(config.Name)+"_ADDR_"+port+"="+s.shuttleHost+":"+port)
-		}
-	}
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 
 	args = append(args, []string{"-t", serviceConfig.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
@@ -321,17 +312,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
-	if err != nil {
-		return nil, err
-	}
-
-	for _, config := range serviceConfigs {
-		for port, _ := range config.Ports() {
-			// FIXME: Need a deterministic way to map local shuttle ports to remote services
-			envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR_"+port+"="+s.shuttleHost+":"+port)
-		}
-	}
+	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 
 	containerName := serviceConfig.ContainerName()
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
