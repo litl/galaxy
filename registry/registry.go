@@ -319,7 +319,6 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 	statusLine := strings.Join([]string{
 		container.ID[0:12],
-		registrationPath,
 		container.Config.Image,
 		serviceRegistration.ExternalAddr(),
 		serviceRegistration.InternalAddr(),
@@ -346,7 +345,6 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 
 	statusLine := strings.Join([]string{
 		container.ID[0:12],
-		"",
 		container.Config.Image,
 		"",
 		"",

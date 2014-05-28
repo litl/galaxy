@@ -22,7 +22,7 @@ func unregister(c *cli.Context) {
 	}
 
 	outputBuffer.Log(strings.Join([]string{
-		"CONTAINER ID", "REGISTRATION", "IMAGE",
+		"CONTAINER ID", "IMAGE",
 		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 

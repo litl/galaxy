@@ -23,7 +23,7 @@ func status(c *cli.Context) {
 	}
 
 	outputBuffer.Log(strings.Join([]string{
-		"CONTAINER ID", "REGISTRATION", "IMAGE",
+		"CONTAINER ID", "IMAGE",
 		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 
@@ -55,7 +55,6 @@ func status(c *cli.Context) {
 			if registered != nil {
 				outputBuffer.Log(strings.Join([]string{
 					container.ID[0:12],
-					registered.Path,
 					container.Image,
 					registered.ExternalAddr(),
 					registered.InternalAddr(),
@@ -65,7 +64,6 @@ func status(c *cli.Context) {
 			} else {
 				outputBuffer.Log(strings.Join([]string{
 					container.ID[0:12],
-					"",
 					container.Image,
 					"",
 					"",
