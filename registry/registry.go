@@ -3,6 +3,7 @@ package registry
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -25,10 +26,10 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
 */
 
 type ServiceRegistration struct {
-	ExternalIP   string    `json:"EXTERNAL_IP"`
-	ExternalPort string    `json:"EXTERNAL_PORT"`
-	InternalIP   string    `json:"INTERNAL_IP"`
-	InternalPort string    `json:"INTERNAL_PORT"`
+	ExternalIP   string    `json:"EXTERNAL_IP",omitempty`
+	ExternalPort string    `json:"EXTERNAL_PORT",omitempty`
+	InternalIP   string    `json:"INTERNAL_IP",omitempty`
+	InternalPort string    `json:"INTERNAL_PORT",omitempty`
 	ContainerID  string    `json:"CONTAINER_ID"`
 	StartedAt    time.Time `json:"STARTED_AT"`
 	Expires      time.Time `json:"-"`
@@ -58,6 +59,21 @@ func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
 		s.ExternalPort == other.ExternalPort &&
 		s.InternalIP == other.InternalIP &&
 		s.InternalPort == other.InternalPort
+}
+
+func (s *ServiceRegistration) addr(ip, port string) string {
+	if ip != "" && port != "" {
+		return fmt.Sprint(ip, ":", port)
+	}
+	return ""
+
+}
+func (s *ServiceRegistration) ExternalAddr() string {
+	return s.addr(s.ExternalIP, s.ExternalPort)
+}
+
+func (s *ServiceRegistration) InternalAddr() string {
+	return s.addr(s.InternalIP, s.InternalPort)
 }
 
 func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
@@ -125,12 +141,14 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	}
 
 	serviceRegistration := ServiceRegistration{
-		ExternalIP:   r.HostIP,
-		ExternalPort: externalPort,
-		InternalIP:   container.NetworkSettings.IPAddress,
-		InternalPort: internalPort,
-		ContainerID:  container.ID,
-		StartedAt:    container.Created,
+		ContainerID: container.ID,
+		StartedAt:   container.Created,
+	}
+	if externalPort != "" && internalPort != "" {
+		serviceRegistration.ExternalIP = r.HostIP
+		serviceRegistration.InternalIP = container.NetworkSettings.IPAddress
+		serviceRegistration.ExternalPort = externalPort
+		serviceRegistration.InternalPort = internalPort
 	}
 	return &serviceRegistration
 }
@@ -303,8 +321,8 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		container.ID[0:12],
 		registrationPath,
 		container.Config.Image,
-		serviceRegistration.ExternalIP + ":" + serviceRegistration.ExternalPort,
-		serviceRegistration.InternalIP + ":" + serviceRegistration.InternalPort,
+		serviceRegistration.ExternalAddr(),
+		serviceRegistration.InternalAddr(),
 		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
 		"In " + utils.HumanDuration(time.Duration(r.TTL)*time.Second),
 	}, " | ")
