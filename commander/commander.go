@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -57,24 +56,27 @@ func pullAllImages() error {
 		return err
 	}
 
-	var wg sync.WaitGroup
+	errChan := make(chan error)
 	for _, serviceConfig := range serviceConfigs {
-
-		wg.Add(1)
-		go func(serviceConfig registry.ServiceConfig) {
-			defer wg.Done()
-			// err logged via pullImage. If pull fails, just start the image we have.
-			image, err := pullImage(&serviceConfig)
-			if image == nil {
+		go func(serviceConfig registry.ServiceConfig, errChan chan error) {
+			// err logged via pullImage
+			_, err := pullImage(&serviceConfig)
+			if err != nil {
+				errChan <- err
 				return
 			}
-			if err != nil {
-				log.Warnf("WARN: Using existing image %s for %s.\n", image.ID[0:12], serviceConfig.Version())
-			}
+			errChan <- nil
 
-		}(serviceConfig)
+		}(serviceConfig, errChan)
 	}
-	wg.Wait()
+
+	for i := 0; i < len(serviceConfigs); i++ {
+		err := <-errChan
+		if err != nil {
+			// return the first error we got to signal that one of the pulls failed
+			return err
+		}
+	}
 	return nil
 }
 
@@ -229,6 +231,7 @@ func main() {
 
 	err := pullAllImages()
 	if err != nil {
+		log.Errorf("ERROR: Unable to pull images: %s. Exiting.", err)
 		return
 	}
 

@@ -429,6 +429,11 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 
 	registry, repository, tag := utils.SplitDockerImage(version)
 
+	// if there is not registry component, pull will always fail so don't try
+	if registry == "" {
+		return nil, nil
+	}
+
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
