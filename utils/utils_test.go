@@ -32,6 +32,20 @@ func TestSplitDockerImageWithRegistry(t *testing.T) {
 	}
 }
 
+func TestSplitDockerImageWithPublicRegistry(t *testing.T) {
+	registry, repository, tag := SplitDockerImage("username/ubuntu")
+
+	if registry != "username" {
+		t.Fail()
+	}
+	if repository != "ubuntu" {
+		t.Fail()
+	}
+	if tag != "" {
+		t.Fail()
+	}
+}
+
 func TestSplitDockerImageWithRegistryAndTag(t *testing.T) {
 	registry, repository, tag := SplitDockerImage("custom.registry/ubuntu:12.04")
 
