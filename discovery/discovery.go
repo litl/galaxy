@@ -60,9 +60,9 @@ func main() {
 	app.Usage = "discovery service registration"
 	app.Version = buildVersion
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "redis", Value: "127.0.0.1:6379", Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
 		cli.StringFlag{Name: "sshAddr", Value: "127.0.0.1:22", Usage: "hosts external ssh IP:port"},
 		cli.StringFlag{Name: "shuttleAddr", Usage: "shuttle http address"},

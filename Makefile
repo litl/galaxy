@@ -44,9 +44,9 @@ dist-init:
 dist-build: dist-init
 	echo "Compiling $$GOOS/$$GOARCH"
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/galaxy github.com/litl/galaxy
-	go build -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/commander
-	go build -o dist/$$GOOS/$$GOARCH/shuttle github.com/litl/galaxy/shuttle
-	go build -o dist/$$GOOS/$$GOARCH/discovery github.com/litl/galaxy/discovery
+	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/commander
+	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/shuttle github.com/litl/galaxy/shuttle
+	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/discovery github.com/litl/galaxy/discovery
 
 dist-linux-amd64:
 	export GOOS="linux"; \
