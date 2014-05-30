@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -539,6 +540,43 @@ func loadConfig() {
 
 }
 
+func pgPsql(c *cli.Context) {
+	initRegistry(c)
+	app := ensureAppParam(c, "pg:psql")
+
+	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+	if err != nil {
+		log.Printf("ERROR: Unable to run command: %s.\n", err)
+		return
+	}
+
+	database_url := serviceConfig.Env()["DATABASE_URL"]
+	if database_url == "" {
+		log.Printf("No DATABASE_URL configured.  Set one with config:set first.")
+		return
+	}
+
+	if !strings.HasPrefix(database_url, "postgres://") {
+		log.Printf("DATABASE_URL is not a postgres database.")
+		return
+	}
+
+	cmd := exec.Command("psql", database_url)
+
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		fmt.Printf("Command finished with error: %v\n", err)
+	}
+}
+
 func main() {
 
 	loadConfig()
@@ -655,6 +693,12 @@ func main() {
 			Usage:       "deletes a pool",
 			Action:      poolDelete,
 			Description: "pool:delete",
+		},
+		{
+			Name:        "pg:psql",
+			Usage:       "connect to database using psql",
+			Action:      pgPsql,
+			Description: "pg:psql <app>",
 		},
 	}
 	app.Run(os.Args)
