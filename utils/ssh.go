@@ -31,7 +31,7 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Connecting to %s...\n", host)
+	fmt.Fprintf(os.Stderr, "Connecting to %s...\n", host)
 	if err := cmd.Wait(); err != nil {
 		if exiterr, ok := err.(*exec.ExitError); ok {
 			// The program has exited with an exit code != 0
@@ -41,11 +41,11 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 			// defined for both Unix and Windows and in both cases has
 			// an ExitStatus() method with the same signature.
 			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-				fmt.Printf("Command finished with error: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Command finished with error: %v\n", err)
 				os.Exit(status.ExitStatus())
 			}
 		} else {
-			fmt.Printf("Command finished with error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Command finished with error: %v\n", err)
 			os.Exit(1)
 		}
 	}
