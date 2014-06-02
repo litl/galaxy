@@ -23,26 +23,21 @@ type ServiceRuntime struct {
 	dockerClient    *docker.Client
 	authConfig      *auth.ConfigFile
 	shuttleHost     string
+	statsdHost      string
 	serviceRegistry *registry.ServiceRegistry
 }
 
-func NewServiceRuntime(shuttleHost, env, pool, redisHost string) *ServiceRuntime {
+func NewServiceRuntime(shuttleHost, statsdHost, env, pool, redisHost string) *ServiceRuntime {
+	dockerZero, err := dockerBridgeIp()
+	if err != nil {
+		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
+	}
 	if shuttleHost == "" {
-		dockerZero, err := net.InterfaceByName("docker0")
-		if err != nil {
-			log.Fatalf("ERROR: Unable to find docker0 interface")
-		}
-		addrs, _ := dockerZero.Addrs()
-		for _, addr := range addrs {
-			ip, _, err := net.ParseCIDR(addr.String())
-			if err != nil {
-				log.Fatalf("ERROR: Unable to parse %s", addr.String())
-			}
-			if ip.DefaultMask() != nil {
-				shuttleHost = ip.String()
-				break
-			}
-		}
+		shuttleHost = dockerZero
+	}
+
+	if statsdHost == "" {
+		statsdHost = dockerZero + ":8125"
 	}
 
 	serviceRegistry := registry.NewServiceRegistry(
@@ -56,9 +51,28 @@ func NewServiceRuntime(shuttleHost, env, pool, redisHost string) *ServiceRuntime
 
 	return &ServiceRuntime{
 		shuttleHost:     shuttleHost,
+		statsdHost:      statsdHost,
 		serviceRegistry: serviceRegistry,
 	}
 
+}
+
+func dockerBridgeIp() (string, error) {
+	dockerZero, err := net.InterfaceByName("docker0")
+	if err != nil {
+		return "", err
+	}
+	addrs, _ := dockerZero.Addrs()
+	for _, addr := range addrs {
+		ip, _, err := net.ParseCIDR(addr.String())
+		if err != nil {
+			return "", err
+		}
+		if ip.DefaultMask() != nil {
+			return ip.String(), nil
+		}
+	}
+	return "", errors.New("unable to find docker0 interface")
 }
 
 func (s *ServiceRuntime) ensureDockerClient() *docker.Client {
@@ -276,6 +290,8 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 
 	args = append(args, []string{"-t", serviceConfig.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
@@ -292,7 +308,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 
 	err = cmd.Wait()
 	if err != nil {
-		fmt.Printf("Command finished with error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Command finished with error: %v\n", err)
 	}
 
 	return err
@@ -313,6 +329,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	}
 
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
+	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 
 	containerName := serviceConfig.ContainerName()
 	container, err := s.ensureDockerClient().InspectContainer(containerName)

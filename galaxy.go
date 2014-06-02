@@ -49,6 +49,7 @@ func initRegistry(c *cli.Context) {
 func initRuntime(c *cli.Context) {
 	serviceRuntime = runtime.NewServiceRuntime(
 		"",
+		"",
 		c.GlobalString("env"),
 		c.GlobalString("pool"),
 		c.GlobalString("redis"),
