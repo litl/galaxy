@@ -293,6 +293,15 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 
+	publicDns, err := ec2PublicHostname()
+	if err != nil {
+		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
+		publicDns = "127.0.0.1"
+	}
+
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("PUBLIC_HOSTNAME=%s", publicDns))
+
 	args = append(args, []string{"-t", serviceConfig.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
 	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", serviceConfig.Version(), "/bin/bash")
@@ -330,6 +339,12 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
+	publicDns, err := ec2PublicHostname()
+	if err != nil {
+		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
+		publicDns = "127.0.0.1"
+	}
+	envVars = append(envVars, fmt.Sprintf("PUBLIC_HOSTNAME=%s", publicDns))
 
 	containerName := serviceConfig.ContainerName()
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
