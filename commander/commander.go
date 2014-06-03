@@ -165,6 +165,15 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 				continue
 			}
 
+			if changedConfig.Restart {
+				err := serviceRuntime.Stop(changedConfig.ServiceConfig)
+				if err != nil {
+					log.Errorf("ERROR: Could not stop %s: %s\n",
+						changedConfig.ServiceConfig.Version(), err)
+					continue
+				}
+			}
+
 			log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
 			container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
 			if err != nil {
@@ -253,10 +262,9 @@ func main() {
 		return
 	}
 
-	restartChan := make(chan *registry.ConfigChange, 10)
 	cancelChan := make(chan struct{})
 	// do we need to cancel ever?
 
-	serviceRegistry.Watch(restartChan, cancelChan)
+	restartChan := serviceRegistry.Watch(cancelChan)
 	restartContainers(restartChan)
 }

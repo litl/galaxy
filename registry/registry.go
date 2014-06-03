@@ -36,6 +36,7 @@ type ServiceRegistry struct {
 
 type ConfigChange struct {
 	ServiceConfig *ServiceConfig
+	Restart       bool
 	Error         error
 }
 

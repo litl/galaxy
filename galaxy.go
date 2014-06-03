@@ -232,6 +232,18 @@ func appDeploy(c *cli.Context) {
 	log.Printf("Deployed %s.\n", version)
 }
 
+func appRestart(c *cli.Context) {
+	initRegistry(c)
+
+	app := ensureAppParam(c, "app:restart")
+
+	err := serviceRegistry.NotifyRestart(app)
+	if err != nil {
+		log.Printf("ERROR: Could not restart %s: %s\n", app, err)
+		return
+	}
+}
+
 func appRun(c *cli.Context) {
 	initRegistry(c)
 	initRuntime(c)
@@ -639,6 +651,12 @@ func main() {
 			Flags: []cli.Flag{
 				cli.BoolFlag{Name: "force", Usage: "force pulling the image"},
 			},
+		},
+		{
+			Name:        "app:restart",
+			Usage:       "restart an app",
+			Action:      appRestart,
+			Description: "app:restart <app>",
 		},
 		{
 			Name:        "app:run",
