@@ -1,23 +1,27 @@
 package registry
 
 import (
+	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
 
+var restartChan chan *ConfigChange
+
 func (r *ServiceRegistry) CheckForChangesNow() {
 	r.pollCh <- true
 }
 
-func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
+func (r *ServiceRegistry) checkForChanges() {
 	lastVersion := make(map[string]int64)
 	for {
 		serviceConfigs, err := r.ListApps("")
 		if err != nil {
-			changes <- &ConfigChange{
+			restartChan <- &ConfigChange{
 				Error: err,
 			}
 			time.Sleep(5 * time.Second)
@@ -35,7 +39,7 @@ func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 		<-r.pollCh
 		serviceConfigs, err := r.ListApps("")
 		if err != nil {
-			changes <- &ConfigChange{
+			restartChan <- &ConfigChange{
 				Error: err,
 			}
 			continue
@@ -44,7 +48,7 @@ func (r *ServiceRegistry) checkForChanges(changes chan *ConfigChange) {
 			changeCopy := changedConfig
 			if changedConfig.ID() != lastVersion[changedConfig.Name] {
 				lastVersion[changedConfig.Name] = changedConfig.ID()
-				changes <- &ConfigChange{
+				restartChan <- &ConfigChange{
 					ServiceConfig: &changeCopy,
 				}
 			}
@@ -64,6 +68,32 @@ func (r *ServiceRegistry) checkForChangePeriodically(stop chan struct{}) {
 			r.CheckForChangesNow()
 		}
 	}
+}
+
+func (r *ServiceRegistry) restartApp(app string) {
+	serviceConfig, err := r.GetServiceConfig(app)
+	if err != nil {
+		restartChan <- &ConfigChange{
+			Error: err,
+		}
+		return
+	}
+
+	restartChan <- &ConfigChange{
+		Restart:       true,
+		ServiceConfig: serviceConfig,
+	}
+}
+
+func (r *ServiceRegistry) NotifyRestart(app string) error {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+	// TODO: received count ignored, use it somehow?
+	_, err := redis.Int(conn.Do("PUBLISH", "galaxy", fmt.Sprintf("restart %s", app)))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *ServiceRegistry) notifyChanged() error {
@@ -119,9 +149,14 @@ func (r *ServiceRegistry) subscribeChanges() {
 			for {
 				switch n := psc.Receive().(type) {
 				case redis.Message:
-					if string(n.Data) == "config" {
+					msg := string(n.Data)
+					if msg == "config" {
 						log.Printf("Config changed. Re-deploying containers.\n")
 						r.CheckForChangesNow()
+					} else if strings.HasPrefix(msg, "restart") {
+						parts := strings.Split(msg, " ")
+						app := parts[1]
+						r.restartApp(app)
 					} else {
 						log.Printf("Ignoring notification: %s %s\n", n.Channel, n.Data)
 					}
@@ -143,8 +178,10 @@ func (r *ServiceRegistry) subscribeChanges() {
 	}
 }
 
-func (r *ServiceRegistry) Watch(changes chan *ConfigChange, stop chan struct{}) {
-	go r.checkForChanges(changes)
+func (r *ServiceRegistry) Watch(stop chan struct{}) chan *ConfigChange {
+	restartChan = make(chan *ConfigChange, 10)
+	go r.checkForChanges()
 	go r.checkForChangePeriodically(stop)
 	go r.subscribeChanges()
+	return restartChan
 }

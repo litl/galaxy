@@ -92,6 +92,45 @@ func (s *ServiceRuntime) InspectImage(image string) (*docker.Image, error) {
 	return s.ensureDockerClient().InspectImage(image)
 }
 
+func (s *ServiceRuntime) Stop(serviceConfig *registry.ServiceConfig) error {
+	latestName := serviceConfig.ContainerName()
+	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
+	_, ok := err.(*docker.NoSuchContainer)
+	// Expected container is not actually running. Skip it and leave old ones.
+	if err != nil && ok {
+		return nil
+	}
+
+	return s.stopContainer(latestContainer)
+}
+
+func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
+	if _, ok := blacklistedContainerId[container.ID]; ok {
+		log.Printf("Container %s blacklisted. Won't try to stop.\n", container.ID)
+		return nil
+	}
+
+	log.Printf("Stopping %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
+	c := make(chan error, 1)
+	go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
+	select {
+	case err := <-c:
+		if err != nil {
+			log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+			return err
+		}
+	case <-time.After(20 * time.Second):
+		blacklistedContainerId[container.ID] = true
+		log.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
+		return nil
+	}
+
+	return s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+		ID:            container.ID,
+		RemoveVolumes: true,
+	})
+
+}
 func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
 	serviceConfigs, err := s.serviceRegistry.ListApps("")
@@ -130,35 +169,12 @@ func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
 			if container.ID != latestContainer.ID &&
 				container.Created < (time.Now().Unix()-stopCutoff) {
-
-				// HACK: Docker 0.9 gets zombie containers randomly.  The only way to remove
-				// them is to restart the docker daemon.  If we timeout once trying to stop
-				// one of these containers, blacklist it and leave it running
-
-				if _, ok := blacklistedContainerId[container.ID]; ok {
-					log.Printf("Container %s blacklisted. Won't try to stop.\n", container.ID)
+				dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
+				if err != nil {
+					log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
 					continue
 				}
-
-				log.Printf("Stopping %s container %s\n", container.Image, container.ID[0:12])
-				c := make(chan error, 1)
-				go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
-				select {
-				case err := <-c:
-					if err != nil {
-						log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
-						continue
-					}
-				case <-time.After(20 * time.Second):
-					blacklistedContainerId[container.ID] = true
-					log.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
-					continue
-				}
-
-				s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
-					ID:            container.ID,
-					RemoveVolumes: true,
-				})
+				s.stopContainer(dockerContainer)
 			}
 		}
 	}
