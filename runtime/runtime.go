@@ -40,6 +40,8 @@ func NewServiceRuntime(shuttleHost, statsdHost, env, pool, redisHost string) *Se
 		statsdHost = dockerZero + ":8125"
 	}
 
+	statsdHost = utils.GetEnv("GALAXY_STATSD_HOST", statsdHost)
+
 	serviceRegistry := registry.NewServiceRegistry(
 		env,
 		pool,
