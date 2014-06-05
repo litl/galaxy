@@ -210,7 +210,7 @@ func main() {
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", "web"), "Pool namespace")
 	flag.BoolVar(&loop, "loop", false, "Run continously")
 	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
-	flag.StringVar(&statsdHost, "statsdAddr", "", "IP where containers can reach a statsd service. Defaults to docker0 IP:8125.")
+	flag.StringVar(&statsdHost, "statsdAddr", utils.GetEnv("GALAXY_STATSD_HOST", ""), "IP where containers can reach a statsd service. Defaults to docker0 IP:8125.")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version info")
 
