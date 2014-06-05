@@ -201,7 +201,8 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
-	_, err := s.PullImage(serviceConfig.Version(), false)
+	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
+	_, err := s.PullImage(serviceConfig.Version(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +292,8 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) error {
 
 	// see if we have the image locally
-	_, err := s.PullImage(serviceConfig.Version(), false)
+	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
+	_, err := s.PullImage(serviceConfig.Version(), true)
 	if err != nil {
 		return err
 	}
