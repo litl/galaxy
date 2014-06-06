@@ -422,6 +422,24 @@ func configGet(c *cli.Context) {
 	}
 }
 
+// Return the path for the config directory, and create it if it doesn't exist
+func cfgDir() string {
+	homeDir := utils.HomeDir()
+	if homeDir == "" {
+		log.Fatal("ERROR: Unable to determine current home dir. Set $HOME.")
+	}
+
+	configDir := filepath.Join(homeDir, ".galaxy")
+	_, err := os.Stat(configDir)
+	if err != nil && os.IsNotExist(err) {
+		err = os.Mkdir(configDir, 0700)
+		if err != nil {
+			log.Fatal("ERROR: cannot create config directory:", err)
+		}
+	}
+	return configDir
+}
+
 func login(c *cli.Context) {
 	initRegistry(c)
 
@@ -431,18 +449,7 @@ func login(c *cli.Context) {
 		return
 	}
 
-	homeDir := utils.HomeDir()
-	if homeDir == "" {
-		log.Println("ERROR: Unable to determine current home dir. Set $HOME.")
-		return
-	}
-
-	configDir := filepath.Join(homeDir, ".galaxy")
-	_, err := os.Stat(configDir)
-	if err != nil && os.IsNotExist(err) {
-		os.Mkdir(configDir, 0700)
-	}
-
+	configDir := cfgDir()
 	config.Host = c.Args().First()
 
 	// This will exit if it fails
@@ -464,13 +471,7 @@ func login(c *cli.Context) {
 func logout(c *cli.Context) {
 	initRegistry(c)
 
-	homeDir := utils.HomeDir()
-	if homeDir == "" {
-		log.Println("ERROR: Unable to determine current home dir. Set $HOME")
-		return
-	}
-
-	configFile := filepath.Join(homeDir, ".galaxy", "galaxy.toml")
+	configFile := filepath.Join(cfgDir(), "galaxy.toml")
 
 	_, err := os.Stat(configFile)
 	if err == nil {
@@ -534,14 +535,7 @@ func runRemote() {
 }
 
 func loadConfig() {
-
-	homeDir := utils.HomeDir()
-	if homeDir == "" {
-		log.Println("ERROR: Unable to determine current home dir. Set $HOME.")
-		return
-	}
-
-	configFile := filepath.Join(homeDir, ".galaxy", "galaxy.toml")
+	configFile := filepath.Join(cfgDir(), "galaxy.toml")
 
 	_, err := os.Stat(configFile)
 	if err == nil {
