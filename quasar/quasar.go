@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -52,7 +53,6 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 		vhosts := serviceConfig.Env()["VIRTUAL_HOST"]
 
 		for _, vhost := range strings.Split(vhosts, ",") {
-
 			addr := fmt.Sprint(r.ExternalIP, ":", r.ExternalPort)
 			url := "http://" + addr
 			liveVhosts[vhost] = append(liveVhosts[vhost], url)
@@ -97,6 +97,10 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 func removeBackends(liveVhosts map[string][]string) {
 	// Remove backends that are no longer registered
 	for k, _ := range balancers {
+
+		if k == "" {
+			continue
+		}
 		balancer := balancers[k]
 		endpoints := balancer.GetEndpoints()
 		for _, endpoint := range endpoints {
@@ -135,6 +139,38 @@ func updateRoutes() {
 		removeBackends(liveVhosts)
 		time.Sleep(10 * time.Second)
 	}
+}
+
+func adminHandler(w http.ResponseWriter, r *http.Request) {
+	if len(balancers) == 0 {
+		w.WriteHeader(503)
+		return
+	}
+	for k, _ := range balancers {
+		balancer := balancers[k]
+		endpoints := balancer.GetEndpoints()
+		fmt.Fprintf(w, "%s\n", k)
+		for _, endpoint := range endpoints {
+			fmt.Fprintf(w, "  %s\t%d\t%d\t%0.2f\n", endpoint.GetUrl(), endpoint.GetOriginalWeight(), endpoint.GetEffectiveWeight(), endpoint.GetMeter().GetRate())
+		}
+	}
+}
+
+func statusHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.Host)
+		if err != nil {
+			log.Warningf("%s", err)
+			h.ServeHTTP(w, r)
+			return
+		}
+
+		if _, exists := balancers[host]; !exists {
+			adminHandler(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 func main() {
@@ -189,12 +225,11 @@ func main() {
 	// Proxy acts as http handler:
 	server := &http.Server{
 		Addr:           listenAddr,
-		Handler:        proxy,
+		Handler:        statusHandler(proxy),
 		ReadTimeout:    60 * time.Second,
 		WriteTimeout:   60 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
 	log.Errorf("%s", server.ListenAndServe())
-
 }
