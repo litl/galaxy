@@ -13,6 +13,7 @@ import (
 )
 
 type ServiceRegistration struct {
+	Name         string    `json:"NAME",omitempty`
 	ExternalIP   string    `json:"EXTERNAL_IP",omitempty`
 	ExternalPort string    `json:"EXTERNAL_PORT",omitempty`
 	InternalIP   string    `json:"INTERNAL_IP",omitempty`
@@ -49,6 +50,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
 	serviceRegistration := r.newServiceRegistration(container)
+	serviceRegistration.Name = serviceConfig.Name
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
@@ -171,7 +173,9 @@ func (r *ServiceRegistry) ListRegistrations() ([]ServiceRegistration, error) {
 			return nil, err
 		}
 
-		svcReg := ServiceRegistration{}
+		svcReg := ServiceRegistration{
+			Name: path.Base(key),
+		}
 		err = json.Unmarshal(val, &svcReg)
 		if err != nil {
 			return nil, err

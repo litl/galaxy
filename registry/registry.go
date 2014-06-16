@@ -98,9 +98,9 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	//How should we handle a service that exposes multiple ports
 	//as well as tcp vs udp ports.
 	var externalPort, internalPort string
-	for k, _ := range container.NetworkSettings.Ports {
-		externalPort = k.Port()
-		internalPort = externalPort
+	for k, v := range container.NetworkSettings.Ports {
+		externalPort = v[0].HostPort
+		internalPort = k.Port()
 		break
 	}
 

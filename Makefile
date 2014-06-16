@@ -1,10 +1,10 @@
 .SILENT :
-.PHONY : commander shuttle discovery galaxy clean fmt test
+.PHONY : commander shuttle discovery galaxy quasar clean fmt test
 
 TAG:=`git describe --abbrev=0 --tags`
 LDFLAGS:=-X main.buildVersion `git describe --long`
 
-all: commander shuttle discovery galaxy
+all: commander shuttle discovery galaxy quasar
 
 deps:
 	godep restore
@@ -24,6 +24,10 @@ discovery:
 galaxy:
 	echo "Building galaxy"
 	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy
+
+quasar:
+	echo "Building quasar"
+	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/quasar
 
 clean:
 	rm -f $(GOPATH)/bin/{commander,discovery,shuttle}
