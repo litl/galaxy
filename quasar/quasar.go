@@ -164,11 +164,15 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, _, err := net.SplitHostPort(r.Host)
-		if err != nil {
-			log.Warningf("%s", err)
-			h.ServeHTTP(w, r)
-			return
+		var err error
+		host := r.Host
+		if strings.Contains(host, ":") {
+			host, _, err = net.SplitHostPort(r.Host)
+			if err != nil {
+				log.Warningf("%s", err)
+				h.ServeHTTP(w, r)
+				return
+			}
 		}
 
 		if _, exists := balancers[host]; !exists {
