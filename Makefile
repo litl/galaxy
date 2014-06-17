@@ -77,7 +77,7 @@ dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64 dis
 
 release-tarball:
 	echo "Building $$GOOS-$$GOARCH-$(TAG).tar.gz"
-	tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle >/dev/null 2>&1
+	tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle quasar >/dev/null 2>&1
 
 release-linux-amd64:
 	export GOOS="linux"; \
