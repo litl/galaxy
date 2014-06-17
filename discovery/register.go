@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"strings"
 	"time"
 
@@ -48,13 +47,14 @@ func register(c *cli.Context) {
 					continue
 				}
 
-				err = serviceRegistry.RegisterService(dockerContainer, &serviceConfig)
+				registration, err := serviceRegistry.RegisterService(dockerContainer, &serviceConfig)
 				if err != nil {
 					log.Printf("ERROR: Could not register %s: %s\n",
 						serviceConfig.Name, err)
-					os.Exit(1)
+					continue
 				}
-				log.Printf("Registered %s as %s", dockerContainer.ID[0:12], serviceConfig.Name)
+				log.Printf("Registered %s as %s at %s", dockerContainer.ID[0:12], serviceConfig.Name,
+					registration.ExternalAddr())
 
 			}
 		}
