@@ -46,7 +46,7 @@ func (s *ServiceRegistration) InternalAddr() string {
 	return s.addr(s.InternalIP, s.InternalPort)
 }
 
-func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
+func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
 	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
 	serviceRegistration := r.newServiceRegistration(container)
@@ -54,7 +54,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	conn := r.redisPool.Get()
@@ -63,12 +63,12 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	// TODO: use a compare-and-swap SCRIPT
 	_, err = conn.Do("HMSET", registrationPath, "location", jsonReg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_, err = conn.Do("EXPIRE", registrationPath, r.TTL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	statusLine := strings.Join([]string{
@@ -82,7 +82,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 	r.OutputBuffer.Log(statusLine)
 
-	return nil
+	return serviceRegistration, nil
 }
 
 func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {

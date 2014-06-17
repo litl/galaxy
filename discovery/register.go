@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 func register(c *cli.Context) {
 
 	initOrDie(c)
+	var lastLogged int64
 
 	for {
 
@@ -35,6 +35,7 @@ func register(c *cli.Context) {
 				c.GlobalString("pool"), err)
 		}
 
+		registered := false
 		for _, serviceConfig := range serviceConfigs {
 			for _, container := range containers {
 				dockerContainer, err := client.InspectContainer(container.ID)
@@ -48,17 +49,25 @@ func register(c *cli.Context) {
 					continue
 				}
 
-				err = serviceRegistry.RegisterService(dockerContainer, &serviceConfig)
+				registration, err := serviceRegistry.RegisterService(dockerContainer, &serviceConfig)
 				if err != nil {
 					log.Printf("ERROR: Could not register %s: %s\n",
 						serviceConfig.Name, err)
-					os.Exit(1)
+					continue
 				}
-				log.Printf("Registered %s as %s", dockerContainer.ID[0:12], serviceConfig.Name)
 
+				if lastLogged == 0 || time.Now().UnixNano()-lastLogged > (60*time.Second).Nanoseconds() {
+					log.Printf("Registered %s as %s at %s", dockerContainer.ID[0:12], serviceConfig.Name,
+						registration.ExternalAddr())
+					registered = true
+
+				}
 			}
 		}
 
+		if registered {
+			lastLogged = time.Now().UnixNano()
+		}
 		if !c.Bool("loop") {
 			break
 		}
