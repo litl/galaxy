@@ -28,6 +28,7 @@ var (
 	version         bool
 	buildVersion    string
 	listenAddr      string
+	redisHost       string
 )
 
 type RequestLogger struct{}
@@ -177,6 +178,7 @@ func main() {
 
 	flag.StringVar(&listenAddr, "http", "127.0.0.1:8080", "http server address")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
+	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
 	flag.BoolVar(&version, "v", false, "display version info")
 
 	flag.Parse()
@@ -201,7 +203,7 @@ func main() {
 		"",
 	)
 
-	serviceRegistry.Connect("127.0.0.1:6379")
+	serviceRegistry.Connect(redisHost)
 
 	outputBuffer := &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer
