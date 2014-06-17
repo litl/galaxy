@@ -209,14 +209,7 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 		return nil, err
 	}
 
-	// setup env vars from etcd
-	envVars := []string{
-		"HOME=/",
-		"PATH=" + "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"HOSTNAME=" + "app",
-		"TERM=xterm",
-	}
-
+	envVars := []string{}
 	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
