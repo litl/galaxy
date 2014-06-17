@@ -29,7 +29,7 @@ quasar:
 	echo "Building quasar"
 	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/quasar
 
-clean:
+clean: dist-clean
 	rm -f $(GOPATH)/bin/{commander,discovery,shuttle}
 
 fmt:
@@ -51,6 +51,7 @@ dist-build: dist-init
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/commander
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/shuttle github.com/litl/galaxy/shuttle
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/discovery github.com/litl/galaxy/discovery
+	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/quasar github.com/litl/galaxy/quasar
 
 dist-linux-amd64:
 	export GOOS="linux"; \

@@ -61,6 +61,19 @@
 			"Rev": "270c42505a11c779b5a5aaecfa5ec717adac996e"
 		},
 		{
+			"ImportPath": "github.com/mailgun/gotools-log",
+			"Rev": "da2af22c05c9bd65fe86def9dda80c1a2110e06c"
+		},
+		{
+			"ImportPath": "github.com/mailgun/gotools-time",
+			"Rev": "82801ed53d1e7c010e946201bc74548924ebae5d"
+		},
+		{
+			"ImportPath": "github.com/mailgun/vulcan",
+			"Comment": "v0.1-156-gc643c1c",
+			"Rev": "c643c1ce79593884def4018760fad367e361e33b"
+		},
+		{
 			"ImportPath": "github.com/ryanuber/columnize",
 			"Comment": "v1.1.0",
 			"Rev": "fef4ee9c9ecfb000e86ca19ac9cea7d58200d5b6"
