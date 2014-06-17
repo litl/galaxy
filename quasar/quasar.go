@@ -54,6 +54,11 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 		vhosts := serviceConfig.Env()["VIRTUAL_HOST"]
 
 		for _, vhost := range strings.Split(vhosts, ",") {
+
+			if vhost == "" {
+				continue
+			}
+
 			addr := fmt.Sprint(r.ExternalIP, ":", r.ExternalPort)
 			url := "http://" + addr
 			liveVhosts[vhost] = append(liveVhosts[vhost], url)
