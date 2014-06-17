@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/garyburd/redigo/redis"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -147,17 +146,6 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	}
 
 	svcCfg := NewServiceConfig(path.Base(app), "")
-
-	// rename all old key formats to the new one.  This can removed
-	// in the future.
-	for _, key := range []string{"environment", "version", "ports"} {
-		oldEnv := path.Join(r.Env, r.Pool, app, key)
-		newEnv := path.Join(r.Env, app, key)
-		_, err := redis.String(conn.Do("RENAME", oldEnv, newEnv))
-		if err != nil && err.Error() != "ERR no such key" {
-			return nil, err
-		}
-	}
 
 	err = r.loadVMap(path.Join(r.Env, app, "environment"), svcCfg.environmentVMap)
 	if err != nil {
