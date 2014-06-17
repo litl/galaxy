@@ -1,5 +1,5 @@
 .SILENT :
-.PHONY : commander shuttle discovery galaxy quasar clean fmt test
+.PHONY : commander shuttle discovery galaxy quasar clean fmt test upload-release
 
 TAG:=`git describe --abbrev=0 --tags`
 LDFLAGS:=-X main.buildVersion `git describe --long`
@@ -77,7 +77,7 @@ dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64 dis
 
 release-tarball:
 	echo "Building $$GOOS-$$GOARCH-$(TAG).tar.gz"
-	tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle quasar >/dev/null 2>&1
+	GZIP=-9 tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle quasar >/dev/null 2>&1
 
 release-linux-amd64:
 	export GOOS="linux"; \
@@ -100,4 +100,14 @@ release-darwin-386:
 	$(MAKE) release-tarball
 
 release: deps dist release-linux-amd64 release-linux-386 release-darwin-amd64 release-darwin-386
+
+upload-release: release
+	aws s3 cp galaxy-darwin-amd64-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-darwin-amd64-$(TAG).tar.gz --acl public-read
+	aws s3 cp galaxy-darwin-386-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-darwin-386-$(TAG).tar.gz --acl public-read
+	aws s3 cp galaxy-linux-amd64-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-linux-amd64-$(TAG).tar.gz --acl public-read
+	aws s3 cp galaxy-linux-386-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-linux-386-$(TAG).tar.gz --acl public-read
+	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-darwin-amd64-$(TAG).tar.gz
+	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-darwin-386-$(TAG).tar.gz
+	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-linux-amd64-$(TAG).tar.gz
+	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-linux-386-$(TAG).tar.gz
 
