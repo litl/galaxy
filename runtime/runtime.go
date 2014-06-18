@@ -470,6 +470,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, error) {
 	image, err := s.ensureDockerClient().InspectImage(version)
+
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
 	}
@@ -479,11 +480,6 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 	}
 
 	registry, repository, tag := utils.SplitDockerImage(version)
-
-	// if there is not registry component, pull will always fail so don't try
-	if registry == "" {
-		return nil, nil
-	}
 
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
@@ -522,6 +518,12 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		retries += 1
 		err = s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
 		if err != nil {
+
+			// Don't retry 404, they'll never succeed
+			if err.Error() == "HTTP code: 404" {
+				return image, nil
+			}
+
 			if retries > 3 {
 				return image, err
 			}
