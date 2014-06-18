@@ -62,8 +62,8 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 			addr := fmt.Sprint(r.ExternalIP, ":", r.ExternalPort)
 			url := "http://" + addr
 			liveVhosts[vhost] = append(liveVhosts[vhost], url)
-
 			balancer := balancers[vhost]
+
 			if balancer == nil {
 				// Create a round robin load balancer with some endpoints
 				balancer, err = roundrobin.NewRoundRobin()
@@ -73,7 +73,10 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 				}
 
 				// Create a http location with the load balancer we've just added
-				loc, err := httploc.NewLocation(r.Name, balancer)
+				loc, err := httploc.NewLocationWithOptions(r.Name, balancer,
+					httploc.Options{
+						TrustForwardHeader: true,
+					})
 				if err != nil {
 					log.Errorf("Error: %s", err)
 					continue
