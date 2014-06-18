@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -29,6 +30,8 @@ var (
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
 	serviceRuntime  *runtime.ServiceRuntime
+	workerChans     map[string]chan string
+	wg              sync.WaitGroup
 )
 
 func initOrDie() {
@@ -43,6 +46,16 @@ func initOrDie() {
 
 	serviceRegistry.Connect(redisHost)
 	serviceRuntime = runtime.NewServiceRuntime(shuttleHost, statsdHost, env, pool, redisHost)
+
+	serviceConfigs, err := serviceRegistry.ListApps("")
+	if err != nil {
+		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
+	}
+
+	workerChans = make(map[string]chan string)
+	for _, serviceConfig := range serviceConfigs {
+		workerChans[serviceConfig.Name] = make(chan string)
+	}
 }
 
 func pullAllImages() error {
@@ -81,64 +94,126 @@ func pullAllImages() error {
 	return nil
 }
 
-func startContainersIfNecessary() error {
-	serviceConfigs, err := serviceRegistry.ListApps("")
-	if err != nil {
-		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
-		return err
-	}
-
-	if len(serviceConfigs) == 0 {
-		log.Printf("No services configured for /%s/%s\n", env, pool)
-		return err
-	}
-
-	for _, serviceConfig := range serviceConfigs {
-		if app != "" && serviceConfig.Name != app {
-			continue
-		}
-
-		if serviceConfig.Version() == "" {
-			log.Warnf("Skipping %s. No version configured.\n", serviceConfig.Name)
-			continue
-		}
-
-		started, container, err := serviceRuntime.StartIfNotRunning(&serviceConfig)
-		if err != nil {
-			log.Errorf("ERROR: Could not determine if %s is running: %s\n",
-				serviceConfig.Version(), err)
-			continue
-		}
-
-		if started {
-			log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-		}
-
-		if !(debug || runOnce) {
-			log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-		}
-
-		log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-	}
-
-	runOnce = true
-	return nil
-}
-
 func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
-	log.Printf("Pulling %s\n", serviceConfig.Version())
+	log.Printf("Pulling %s version %s\n", serviceConfig.Name, serviceConfig.Version())
 	image, err := serviceRuntime.PullImage(serviceConfig.Version(), true)
-	if err != nil {
+	if image == nil || err != nil {
 		log.Errorf("ERROR: Could not pull image %s: %s\n",
 			serviceConfig.Version(), err)
-		return image, err
+		return nil, err
 	}
 	log.Printf("Pulled %s\n", serviceConfig.Version())
 	return image, nil
 }
 
-func restartContainers(changedConfigs chan *registry.ConfigChange) {
+func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
+	started, container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
+	if err != nil {
+		log.Errorf("ERROR: Could not start containers: %s\n", err)
+		return
+	}
+
+	if started {
+		log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+	}
+
+	if logStatus && !debug {
+		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+	}
+
+	log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+
+	err = serviceRuntime.StopAllButLatestService(serviceConfig, stopCutoff)
+	if err != nil {
+		log.Errorf("ERROR: Could not stop containers: %s\n", err)
+	}
+}
+
+func restartContainers(app string, cmdChan chan string) {
+	wg.Add(1)
+	defer wg.Done()
+	logOnce := true
+
 	ticker := time.NewTicker(10 * time.Second)
+
+	for {
+
+		select {
+
+		case cmd := <-cmdChan:
+			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				continue
+			}
+
+			if serviceConfig.Version() == "" {
+				continue
+			}
+
+			if cmd == "deploy" {
+				_, err = pullImage(serviceConfig)
+				if err != nil {
+					// if we can't pull the image, leave whatever is running alone
+					continue
+				}
+
+			}
+
+			if cmd == "restart" {
+				err := serviceRuntime.Stop(serviceConfig)
+				if err != nil {
+					log.Errorf("ERROR: Could not stop %s: %s\n",
+						serviceConfig.Version(), err)
+					continue
+				}
+			}
+
+			startService(serviceConfig, logOnce)
+			logOnce = false
+		case <-ticker.C:
+
+			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				continue
+			}
+
+			if serviceConfig == nil {
+				log.Errorf("%s no longer exists.  Stopping worker.", app)
+				return
+			}
+
+			if serviceConfig.Version() == "" {
+				continue
+			}
+
+			started, container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
+			if err != nil {
+				log.Errorf("ERROR: Could not start containers: %s\n", err)
+				continue
+			}
+
+			if started {
+				log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+			}
+
+			log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+
+			err = serviceRuntime.StopAllButLatestService(serviceConfig, stopCutoff)
+			if err != nil {
+				log.Errorf("ERROR: Could not stop containers: %s\n", err)
+			}
+		}
+
+		if !loop {
+			return
+		}
+
+	}
+}
+
+func monitorService(changedConfigs chan *registry.ConfigChange) {
 
 	for {
 
@@ -155,51 +230,27 @@ func restartContainers(changedConfigs chan *registry.ConfigChange) {
 				continue
 			}
 
-			if changedConfig.ServiceConfig.Version() == "" {
-				continue
-			}
+			ch, ok := workerChans[changedConfig.ServiceConfig.Name]
+			if !ok {
+				name := changedConfig.ServiceConfig.Name
+				ch := make(chan string)
+				workerChans[name] = ch
+				go restartContainers(name, ch)
+				ch <- "deploy"
 
-			_, err := pullImage(changedConfig.ServiceConfig)
-			if err != nil {
-				// if we can't pull the image, leave whatever is running alone
+				log.Printf("Started new worker for %s\n", name)
 				continue
 			}
 
 			if changedConfig.Restart {
-				err := serviceRuntime.Stop(changedConfig.ServiceConfig)
-				if err != nil {
-					log.Errorf("ERROR: Could not stop %s: %s\n",
-						changedConfig.ServiceConfig.Version(), err)
-					continue
-				}
-			}
-
-			log.Printf("Restarting %s\n", changedConfig.ServiceConfig.Name)
-			container, err := serviceRuntime.Start(changedConfig.ServiceConfig)
-			if err != nil {
-				log.Errorf("ERROR: Could not start %s: %s\n",
-					changedConfig.ServiceConfig.Version(), err)
-				continue
-			}
-			log.Printf("Restarted %s as: %s\n", changedConfig.ServiceConfig.Version(), container.ID[0:12])
-
-			err = serviceRuntime.StopAllButLatest(stopCutoff)
-			if err != nil {
-				log.Errorf("ERROR: Could not stop containers: %s\n", err)
-			}
-		case <-ticker.C:
-			err := startContainersIfNecessary()
-			if err != nil {
-				log.Errorf("ERROR: Could not start containers: %s\n", err)
-			}
-
-			err = serviceRuntime.StopAllButLatest(stopCutoff)
-			if err != nil {
-				log.Errorf("ERROR: Could not stop containers: %s\n", err)
+				log.Printf("Restarting %s", changedConfig.ServiceConfig.Name)
+				ch <- "restart"
+			} else {
+				ch <- "deploy"
 			}
 		}
-
 	}
+
 }
 
 func main() {
@@ -240,31 +291,17 @@ func main() {
 	initOrDie()
 	serviceRegistry.CreatePool(pool)
 
-	err := pullAllImages()
-	if err != nil {
-		log.Errorf("ERROR: Unable to pull images: %s. Exiting.", err)
-		return
+	for app, ch := range workerChans {
+		go restartContainers(app, ch)
+		ch <- "deploy"
 	}
 
-	err = startContainersIfNecessary()
-	if err != nil && !loop {
-		log.Errorf("ERROR: Could not start containers: %s\n", err)
-		return
+	if loop {
+		cancelChan := make(chan struct{})
+		// do we need to cancel ever?
+
+		restartChan := serviceRegistry.Watch(cancelChan)
+		monitorService(restartChan)
 	}
-
-	err = serviceRuntime.StopAllButLatest(stopCutoff)
-	if err != nil && !loop {
-		log.Errorf("ERROR: Could not start containers: %s\n", err)
-		return
-	}
-
-	if !loop {
-		return
-	}
-
-	cancelChan := make(chan struct{})
-	// do we need to cancel ever?
-
-	restartChan := serviceRegistry.Watch(cancelChan)
-	restartContainers(restartChan)
+	wg.Wait()
 }
