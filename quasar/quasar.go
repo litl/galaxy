@@ -81,7 +81,7 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 				loc.GetObserverChain().Add("logger", &RequestLogger{})
 
 				router.SetRouter(vhost, &route.ConstRouter{Location: loc})
-
+				log.Infof("Creating balancer for %s", vhost)
 				balancers[vhost] = balancer
 			}
 
@@ -90,7 +90,7 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 				continue
 			}
 			endpoint := endpoint.MustParseUrl(url)
-			log.Infof("Adding %s endpoint %s", r.Name, endpoint.GetUrl())
+			log.Infof("Adding %s endpoint %s", vhost, endpoint.GetUrl())
 			err := balancer.AddEndpoint(endpoint)
 			if err != nil {
 				log.Warningf("%s", err)
@@ -119,14 +119,16 @@ func removeBackends(liveVhosts map[string][]string) {
 				}
 			}
 			if !exists {
-				log.Infof("Removing endpoint %s", endpoint.GetUrl())
+				log.Infof("Removing %s endpoint %s", k, endpoint.GetUrl())
 				balancer.RemoveEndpoint(endpoint)
 			}
 		}
 
 		endpoints = balancer.GetEndpoints()
 		if len(endpoints) == 0 {
+			log.Infof("Removing balancer for %s", k)
 			delete(balancers, k)
+			router.RemoveRouter(k)
 			continue
 		}
 
