@@ -33,11 +33,21 @@ var (
 
 type RequestLogger struct{}
 
-func (r *RequestLogger) ObserveRequest(req request.Request) {
-	log.Infof("%s %s", req.GetHttpRequest().Host, req)
-}
+func (r *RequestLogger) ObserveRequest(req request.Request) {}
 
-func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) {}
+func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) {
+	err := ""
+	if a.GetError() != nil {
+		err = " err=" + a.GetError().Error()
+	}
+	log.Infof("id=%d method=%s clientIp=%s url=%s backend=%s status=%d duration=%s%s",
+		req.GetId(),
+		req.GetHttpRequest().Method,
+		req.GetHttpRequest().RemoteAddr,
+		req.GetHttpRequest().Host+req.GetHttpRequest().RequestURI,
+		a.GetEndpoint(),
+		a.GetResponse().StatusCode, a.GetDuration(), err)
+}
 
 var balancers map[string]*roundrobin.RoundRobin
 
