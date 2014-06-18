@@ -105,6 +105,8 @@ func addBackends(registrations []registry.ServiceRegistration) map[string][]stri
 
 func removeBackends(liveVhosts map[string][]string) {
 	// Remove backends that are no longer registered
+
+	remove := []string{}
 	for k, _ := range balancers {
 
 		if k == "" {
@@ -129,12 +131,14 @@ func removeBackends(liveVhosts map[string][]string) {
 
 		endpoints = balancer.GetEndpoints()
 		if len(endpoints) == 0 {
-			log.Infof("Removing balancer for %s", k)
-			delete(balancers, k)
-			router.RemoveRouter(k)
-			continue
+			remove = append(remove, k)
 		}
+	}
 
+	for _, v := range remove {
+		log.Infof("Removing balancer for %s", v)
+		delete(balancers, v)
+		router.RemoveRouter(v)
 	}
 }
 
