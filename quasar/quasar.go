@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,16 +38,22 @@ func (r *RequestLogger) ObserveRequest(req request.Request) {}
 
 func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) {
 	err := ""
+	statusCode := ""
 	if a.GetError() != nil {
 		err = " err=" + a.GetError().Error()
 	}
-	log.Infof("id=%d method=%s clientIp=%s url=%s backend=%s status=%d duration=%s%s",
+
+	if a.GetResponse() != nil {
+		statusCode = " status=" + strconv.FormatInt(int64(a.GetResponse().StatusCode), 10)
+	}
+
+	log.Infof("id=%d method=%s clientIp=%s url=%s backend=%s%s duration=%s%s",
 		req.GetId(),
 		req.GetHttpRequest().Method,
 		req.GetHttpRequest().RemoteAddr,
 		req.GetHttpRequest().Host+req.GetHttpRequest().RequestURI,
 		a.GetEndpoint(),
-		a.GetResponse().StatusCode, a.GetDuration(), err)
+		statusCode, a.GetDuration(), err)
 }
 
 var balancers map[string]*roundrobin.RoundRobin
