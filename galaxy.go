@@ -197,7 +197,7 @@ func appDeploy(c *cli.Context) {
 	}
 
 	image, err := serviceRuntime.PullImage(version, c.Bool("force"))
-	if err != nil {
+	if image == nil || err != nil {
 		log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
 		return
 	}
