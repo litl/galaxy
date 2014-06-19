@@ -47,6 +47,8 @@ func (r *ServiceRegistry) checkForChanges() {
 		for _, changedConfig := range serviceConfigs {
 			changeCopy := changedConfig
 			if changedConfig.ID() != lastVersion[changedConfig.Name] {
+				log.Printf("%s changed from %d to %d", changedConfig.Name,
+					lastVersion[changedConfig.Name], changedConfig.ID())
 				lastVersion[changedConfig.Name] = changedConfig.ID()
 				restartChan <- &ConfigChange{
 					ServiceConfig: &changeCopy,
