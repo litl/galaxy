@@ -87,8 +87,8 @@ func TestPorts(t *testing.T) {
 func TestID(t *testing.T) {
 	sc := NewServiceConfig("foo", "")
 	id := sc.ID()
-	if id != 0 {
-		t.Fail()
+	if id != 1 {
+		t.Fatalf("id should be 1. Got %d", id)
 	}
 
 	sc.SetVersion("foo")
