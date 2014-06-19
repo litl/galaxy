@@ -126,19 +126,16 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 		log.Printf("ERROR: Timed out trying to stop container. Zombie?. Blacklisting: %s\n", container.ID)
 		return nil
 	}
+	log.Printf("Stopped %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
 
 	return s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 		ID:            container.ID,
 		RemoveVolumes: true,
 	})
-
 }
-func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
-	if err != nil {
-		return err
-	}
+func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.ServiceConfig, stopCutoff int64) error {
+	latestName := serviceConfig.ContainerName()
 
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
 		All: false,
@@ -147,38 +144,47 @@ func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 		return err
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		latestName := serviceConfig.ContainerName()
+	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
+	_, ok := err.(*docker.NoSuchContainer)
+	// Expected container is not actually running. Skip it and leave old ones.
+	if err != nil && ok {
+		return nil
+	}
 
-		latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
-		_, ok := err.(*docker.NoSuchContainer)
-		// Expected container is not actually running. Skip it and leave old ones.
-		if err != nil && ok {
+	for _, container := range containers {
+
+		// We name all galaxy managed containers
+		if len(container.Names) == 0 {
 			continue
 		}
 
-		for _, container := range containers {
-
-			// We name all galaxy managed containers
-			if len(container.Names) == 0 {
-				continue
-			}
-
-			// Container name does match one that would be started w/ this service config
-			if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
-				continue
-			}
-
-			if container.ID != latestContainer.ID &&
-				container.Created < (time.Now().Unix()-stopCutoff) {
-				dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-				if err != nil {
-					log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
-					continue
-				}
-				s.stopContainer(dockerContainer)
-			}
+		// Container name does match one that would be started w/ this service config
+		if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
+			continue
 		}
+
+		if container.ID != latestContainer.ID &&
+			container.Created < (time.Now().Unix()-stopCutoff) {
+			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
+			if err != nil {
+				log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
+				continue
+			}
+			s.stopContainer(dockerContainer)
+		}
+	}
+	return nil
+}
+
+func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
+
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	if err != nil {
+		return err
+	}
+
+	for _, serviceConfig := range serviceConfigs {
+		s.StopAllButLatestService(&serviceConfig, stopCutoff)
 	}
 
 	return nil
@@ -464,6 +470,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, error) {
 	image, err := s.ensureDockerClient().InspectImage(version)
+
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
 	}
@@ -473,11 +480,6 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 	}
 
 	registry, repository, tag := utils.SplitDockerImage(version)
-
-	// if there is not registry component, pull will always fail so don't try
-	if registry == "" {
-		return nil, nil
-	}
 
 	// No, pull it down locally
 	pullOpts := docker.PullImageOptions{
@@ -516,6 +518,12 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		retries += 1
 		err = s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
 		if err != nil {
+
+			// Don't retry 404, they'll never succeed
+			if err.Error() == "HTTP code: 404" {
+				return image, nil
+			}
+
 			if retries > 3 {
 				return image, err
 			}

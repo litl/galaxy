@@ -101,7 +101,7 @@ release-darwin-386:
 
 release: deps dist release-linux-amd64 release-linux-386 release-darwin-amd64 release-darwin-386
 
-upload-release: release
+upload-release:
 	aws s3 cp galaxy-darwin-amd64-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-darwin-amd64-$(TAG).tar.gz --acl public-read
 	aws s3 cp galaxy-darwin-386-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-darwin-386-$(TAG).tar.gz --acl public-read
 	aws s3 cp galaxy-linux-amd64-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-linux-amd64-$(TAG).tar.gz --acl public-read
