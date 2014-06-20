@@ -208,7 +208,7 @@ func (s *ServiceRegistry) Stats() []ServiceStat {
 	s.Lock()
 	defer s.Unlock()
 
-	var stats []ServiceStat
+	stats := []ServiceStat{}
 	for _, service := range s.svcs {
 		stats = append(stats, service.Stats())
 	}
