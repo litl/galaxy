@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/litl/galaxy/utils"
-	log "github.com/mailgun/gotools-log"
+
+	"github.com/litl/galaxy/log"
+	gotoolslog "github.com/mailgun/gotools-log"
 	"github.com/mailgun/vulcan"
 	"github.com/mailgun/vulcan/endpoint"
 	"github.com/mailgun/vulcan/loadbalance/roundrobin"
@@ -43,7 +45,7 @@ func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) 
 		statusCode = " status=" + strconv.FormatInt(int64(a.GetResponse().StatusCode), 10)
 	}
 
-	log.Infof("id=%d method=%s clientIp=%s url=%s backend=%s%s duration=%s%s",
+	log.Printf("id=%d method=%s clientIp=%s url=%s backend=%s%s duration=%s%s",
 		req.GetId(),
 		req.GetHttpRequest().Method,
 		req.GetHttpRequest().RemoteAddr,
@@ -81,7 +83,7 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 		loc.GetObserverChain().Add("logger", &RequestLogger{})
 
 		s.router.SetRouter(vhost, &route.ConstRouter{Location: loc})
-		log.Infof("Creating balancer for %s", vhost)
+		log.Printf("Creating balancer for %s", vhost)
 		s.balancers[vhost] = balancer
 	}
 
@@ -90,7 +92,7 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 		return nil
 	}
 	endpoint := endpoint.MustParseUrl(url)
-	log.Infof("Adding %s endpoint %s", vhost, endpoint.GetUrl())
+	log.Printf("Adding %s endpoint %s", vhost, endpoint.GetUrl())
 	err = balancer.AddEndpoint(endpoint)
 	if err != nil {
 		return err
@@ -108,7 +110,7 @@ func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
 	if endpoint == nil {
 		return nil
 	}
-	log.Infof("Removing %s endpoint %s", vhost, endpoint.GetUrl())
+	log.Printf("Removing %s endpoint %s", vhost, endpoint.GetUrl())
 	balancer.RemoveEndpoint(endpoint)
 
 	endpoints := balancer.GetEndpoints()
@@ -137,7 +139,7 @@ func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
 
 // Removes a virtual host router
 func (s *HTTPRouter) RemoveRouter(vhost string) {
-	log.Infof("Removing balancer for %s", vhost)
+	log.Printf("Removing balancer for %s", vhost)
 	delete(s.balancers, vhost)
 	s.router.RemoveRouter(vhost)
 }
@@ -164,7 +166,7 @@ func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
 		if strings.Contains(host, ":") {
 			host, _, err = net.SplitHostPort(r.Host)
 			if err != nil {
-				log.Warningf("%s", err)
+				log.Warnf("%s", err)
 				h.ServeHTTP(w, r)
 				return
 			}
@@ -179,12 +181,13 @@ func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
 }
 
 func (s *HTTPRouter) Start() {
-	// init the logging package
-	log.Init([]*log.LogConfig{
-		&log.LogConfig{Name: "console"},
+
+	// init the vulcan logging
+	gotoolslog.Init([]*gotoolslog.LogConfig{
+		&gotoolslog.LogConfig{Name: "console"},
 	})
 
-	log.Infof("Listening at %s", listenAddr)
+	log.Printf("Listening at %s", listenAddr)
 
 	s.router = hostroute.NewHostRouter()
 
