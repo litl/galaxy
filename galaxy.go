@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -579,6 +580,25 @@ func pgPsql(c *cli.Context) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	// Ignore SIGINT while the process is running
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt)
+
+	defer func() {
+		signal.Stop(ch)
+		close(ch)
+	}()
+
+	go func() {
+		for {
+			_, ok := <-ch
+			if !ok {
+				break
+			}
+		}
+	}()
+
 	err = cmd.Start()
 	if err != nil {
 		log.Fatal(err)
