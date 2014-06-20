@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"sync"
 
 	"github.com/litl/galaxy/log"
 )
@@ -18,16 +19,21 @@ var (
 	// Listen address for the http server.
 	listenAddr string
 
+	// Listen address for the http server.
+	adminListenAddr string
+
 	// Debug logging
 	debug bool
 
 	// version flags
 	version      bool
 	buildVersion string
+	wg           sync.WaitGroup
 )
 
 func init() {
-	flag.StringVar(&listenAddr, "http", "127.0.0.1:9090", "http server address")
+	flag.StringVar(&listenAddr, "http", "127.0.0.1:8080", "http server address")
+	flag.StringVar(&adminListenAddr, "admin", "127.0.0.1:9090", "admin http server address")
 	flag.StringVar(&defaultConfig, "config", "", "default config file")
 	flag.StringVar(&stateConfig, "state", "", "updated config which reflects the internal state")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
@@ -47,5 +53,8 @@ func main() {
 	}
 
 	loadConfig()
-	startHTTPServer()
+	wg.Add(2)
+	go startAdminHTTPServer()
+	go startHTTPServer()
+	wg.Wait()
 }

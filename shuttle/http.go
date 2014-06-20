@@ -1,188 +1,212 @@
 package main
 
 import (
-	"encoding/json"
-	"io/ioutil"
+	"fmt"
 	"net"
 	"net/http"
-	"os"
+	"strconv"
 	"strings"
+	"time"
 
-	"github.com/litl/galaxy/log"
-
-	"github.com/gorilla/mux"
+	"github.com/litl/galaxy/utils"
+	log "github.com/mailgun/gotools-log"
+	"github.com/mailgun/vulcan"
+	"github.com/mailgun/vulcan/endpoint"
+	"github.com/mailgun/vulcan/loadbalance/roundrobin"
+	"github.com/mailgun/vulcan/location/httploc"
+	"github.com/mailgun/vulcan/request"
+	"github.com/mailgun/vulcan/route"
+	"github.com/mailgun/vulcan/route/hostroute"
 )
 
-func getConfig(w http.ResponseWriter, r *http.Request) {
-	w.Write(marshal(Registry.Config()))
+var (
+	httpRouter *HTTPRouter
+)
+
+type RequestLogger struct{}
+
+type HTTPRouter struct {
+	router    *hostroute.HostRouter
+	balancers map[string]*roundrobin.RoundRobin
 }
 
-func getStats(w http.ResponseWriter, r *http.Request) {
-	if len(Registry.Config()) == 0 {
-		w.WriteHeader(503)
+func (r *RequestLogger) ObserveRequest(req request.Request) {}
+
+func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) {
+	err := ""
+	statusCode := ""
+	if a.GetError() != nil {
+		err = " err=" + a.GetError().Error()
 	}
-	w.Write(marshal(Registry.Stats()))
+
+	if a.GetResponse() != nil {
+		statusCode = " status=" + strconv.FormatInt(int64(a.GetResponse().StatusCode), 10)
+	}
+
+	log.Infof("id=%d method=%s clientIp=%s url=%s backend=%s%s duration=%s%s",
+		req.GetId(),
+		req.GetHttpRequest().Method,
+		req.GetHttpRequest().RemoteAddr,
+		req.GetHttpRequest().Host+req.GetHttpRequest().RequestURI,
+		a.GetEndpoint(),
+		statusCode, a.GetDuration(), err)
 }
 
-func getService(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+func NewHTTPRouter() *HTTPRouter {
+	return &HTTPRouter{
+		balancers: make(map[string]*roundrobin.RoundRobin),
+	}
+}
 
-	serviceStats, err := Registry.ServiceStats(vars["service"])
+func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
+
+	var err error
+	balancer := s.balancers[vhost]
+
+	if balancer == nil {
+		// Create a round robin load balancer with some endpoints
+		balancer, err = roundrobin.NewRoundRobin()
+		if err != nil {
+			return err
+		}
+
+		// Create a http location with the load balancer we've just added
+		loc, err := httploc.NewLocationWithOptions(name, balancer,
+			httploc.Options{
+				TrustForwardHeader: true,
+			})
+		if err != nil {
+			return err
+		}
+		loc.GetObserverChain().Add("logger", &RequestLogger{})
+
+		s.router.SetRouter(vhost, &route.ConstRouter{Location: loc})
+		log.Infof("Creating balancer for %s", vhost)
+		s.balancers[vhost] = balancer
+	}
+
+	// Already registered?
+	if balancer.FindEndpointByUrl(url) != nil {
+		return nil
+	}
+	endpoint := endpoint.MustParseUrl(url)
+	log.Infof("Adding %s endpoint %s", vhost, endpoint.GetUrl())
+	err = balancer.AddEndpoint(endpoint)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		return err
+	}
+	return nil
+}
+
+func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
+	balancer := s.balancers[vhost]
+	if balancer == nil {
+		return nil
+	}
+
+	endpoint := balancer.FindEndpointByUrl(url)
+	if endpoint == nil {
+		return nil
+	}
+	log.Infof("Removing %s endpoint %s", vhost, endpoint.GetUrl())
+	balancer.RemoveEndpoint(endpoint)
+
+	endpoints := balancer.GetEndpoints()
+	if len(endpoints) == 0 {
+		s.RemoveRouter(vhost)
+	}
+	return nil
+}
+
+// Remove all backends for vhost that are not listed in addrs
+func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
+	// Remove backends that are no longer registered
+
+	balancer := s.balancers[vhost]
+	if balancer == nil {
 		return
 	}
 
-	w.Write(marshal(serviceStats))
-}
-
-// Update a service and/or backends.
-// Adding a `backends_only` query parameter will prevent the service from being
-// shutdown and replaced if the ServiceConfig is not identical..
-func postService(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer r.Body.Close()
-
-	svcCfg := ServiceConfig{Name: vars["service"]}
-	err = json.Unmarshal(body, &svcCfg)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if Registry.GetService(svcCfg.Name) == nil {
-		log.Printf("service %s doesn't exist, adding", svcCfg.Name)
-		if e := Registry.AddService(svcCfg); e != nil {
-			http.Error(w, e.Error(), http.StatusInternalServerError)
-			return
+	endpoints := balancer.GetEndpoints()
+	for _, endpoint := range endpoints {
+		if !utils.StringInSlice(endpoint.GetUrl().String(), addrs) {
+			s.RemoveBackend(vhost, endpoint.GetUrl().String())
 		}
 	}
-
-	if e := Registry.UpdateService(svcCfg); e != nil {
-		log.Printf("unable to update service %s", svcCfg.Name)
-		http.Error(w, e.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	go writeStateConfig()
-	w.Write(marshal(Registry.Config()))
 }
 
-func deleteService(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	err := Registry.RemoveService(vars["service"])
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	go writeStateConfig()
-	w.Write(marshal(Registry.Config()))
+// Removes a virtual host router
+func (s *HTTPRouter) RemoveRouter(vhost string) {
+	log.Infof("Removing balancer for %s", vhost)
+	delete(s.balancers, vhost)
+	s.router.RemoveRouter(vhost)
 }
 
-func getBackend(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	serviceName := vars["service"]
-	backendName := vars["backend"]
-
-	backend, err := Registry.BackendStats(serviceName, backendName)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+func (s *HTTPRouter) adminHandler(w http.ResponseWriter, r *http.Request) {
+	if len(s.balancers) == 0 {
+		w.WriteHeader(503)
 		return
 	}
-
-	w.Write(marshal(backend))
+	for k, _ := range s.balancers {
+		balancer := s.balancers[k]
+		endpoints := balancer.GetEndpoints()
+		fmt.Fprintf(w, "%s\n", k)
+		for _, endpoint := range endpoints {
+			fmt.Fprintf(w, "  %s\t%d\t%d\t%0.2f\n", endpoint.GetUrl(), endpoint.GetOriginalWeight(), endpoint.GetEffectiveWeight(), endpoint.GetMeter().GetRate())
+		}
+	}
 }
 
-func postBackend(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer r.Body.Close()
-
-	backendName := vars["backend"]
-	serviceName := vars["service"]
-
-	backendCfg := BackendConfig{Name: backendName}
-	err = json.Unmarshal(body, &backendCfg)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := Registry.AddBackend(serviceName, backendCfg); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	go writeStateConfig()
-	w.Write(marshal(Registry.Config()))
-}
-
-func deleteBackend(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-
-	serviceName := vars["service"]
-	backendName := vars["backend"]
-
-	if err := Registry.RemoveBackend(serviceName, backendName); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	go writeStateConfig()
-	w.Write(marshal(Registry.Config()))
-}
-
-func addHandlers() {
-	r := mux.NewRouter()
-	r.HandleFunc("/", getStats).Methods("GET")
-	r.HandleFunc("/_config", getConfig).Methods("GET")
-	r.HandleFunc("/{service}", getService).Methods("GET")
-	r.HandleFunc("/{service}", postService).Methods("PUT", "POST")
-	r.HandleFunc("/{service}", deleteService).Methods("DELETE")
-	r.HandleFunc("/{service}/{backend}", getBackend).Methods("GET")
-	r.HandleFunc("/{service}/{backend}", postBackend).Methods("PUT", "POST")
-	r.HandleFunc("/{service}/{backend}", deleteBackend).Methods("DELETE")
-	http.Handle("/", r)
-}
-
-func startHTTPServer() {
-	addHandlers()
-	log.Println("shuttle listening on", listenAddr)
-
-	netw := "tcp"
-
-	if strings.HasPrefix(listenAddr, "/") {
-		netw = "unix"
-
-		// remove our old socket if we left it lying around
-		if stats, err := os.Stat(listenAddr); err == nil {
-			if stats.Mode()&os.ModeSocket != 0 {
-				os.Remove(listenAddr)
+func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		host := r.Host
+		if strings.Contains(host, ":") {
+			host, _, err = net.SplitHostPort(r.Host)
+			if err != nil {
+				log.Warningf("%s", err)
+				h.ServeHTTP(w, r)
+				return
 			}
 		}
 
-		defer os.Remove(listenAddr)
-	}
+		if _, exists := s.balancers[host]; !exists {
+			s.adminHandler(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
 
-	listener, err := net.Listen(netw, listenAddr)
+func (s *HTTPRouter) Start() {
+	// init the logging package
+	log.Init([]*log.LogConfig{
+		&log.LogConfig{Name: "console"},
+	})
+
+	log.Infof("Listening at %s", listenAddr)
+
+	s.router = hostroute.NewHostRouter()
+
+	proxy, err := vulcan.NewProxy(s.router)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error: %s", err)
 	}
 
-	http.Serve(listener, nil)
+	// Proxy acts as http handler:
+	server := &http.Server{
+		Addr:           listenAddr,
+		Handler:        s.statusHandler(proxy),
+		ReadTimeout:    60 * time.Second,
+		WriteTimeout:   60 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	log.Errorf("%s", server.ListenAndServe())
+}
+
+func startHTTPServer() {
+	defer wg.Done()
+	httpRouter = NewHTTPRouter()
+	httpRouter.Start()
 }
