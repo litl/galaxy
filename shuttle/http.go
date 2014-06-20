@@ -50,11 +50,6 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	backendsOnly := false
-	if r.FormValue("backends_only") != "" {
-		backendsOnly = true
-	}
-
 	svcCfg := ServiceConfig{Name: vars["service"]}
 	err = json.Unmarshal(body, &svcCfg)
 	if err != nil {
@@ -63,13 +58,18 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if e := Registry.UpdateService(svcCfg, backendsOnly); e != nil {
-		// we can probably distinguish between 4xx and 5xx errors here at some point.
+	if Registry.GetService(svcCfg.Name) == nil {
 		log.Printf("service %s doesn't exist, adding", svcCfg.Name)
 		if e := Registry.AddService(svcCfg); e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+
+	if e := Registry.UpdateService(svcCfg); e != nil {
+		log.Printf("unable to update service %s", svcCfg.Name)
+		http.Error(w, e.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	go writeStateConfig()

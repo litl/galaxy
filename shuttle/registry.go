@@ -59,7 +59,7 @@ func (s *ServiceRegistry) AddService(cfg ServiceConfig) error {
 // Replacing a configuration will shutdown the existing service, and start a
 // new one, which will cause the listening socket to be temporarily
 // unavailable.
-func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool) error {
+func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -71,18 +71,6 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool)
 	}
 
 	currentCfg := service.Config()
-
-	// if we're not doing only the backends, just wipe the service and start fresh.
-	// No need to stop the service if nothing has changed though.
-	if !backendsOnly && !currentCfg.Equal(newCfg) {
-		log.Debug("Replacing Service:", service.Name)
-		delete(s.svcs, service.Name)
-		service.stop()
-
-		service = NewService(newCfg)
-		s.svcs[service.Name] = service
-		return service.start()
-	}
 
 	// Lots of looping here (including fetching the Config, but the cardinality
 	// of Backends shouldn't be very large, and the default RoundRobin balancing
@@ -106,9 +94,8 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig, backendsOnly bool)
 			continue
 		}
 
-		log.Debugf("Adding Backend %s/%s", service.Name, current.Name)
-		service.add(NewBackend(current))
-		delete(currentBackends, current.Name)
+		log.Debugf("Adding Backend %s/%s", service.Name, newBackend.Name)
+		service.add(NewBackend(newBackend))
 	}
 
 	// remove any left over backends

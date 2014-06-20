@@ -366,7 +366,7 @@ func (s *BasicSuite) TestUpdateService(c *C) {
 	}
 
 	// Now update the service
-	if err := Registry.UpdateService(svcCfg, false); err != nil {
+	if err := Registry.UpdateService(svcCfg); err != nil {
 		c.Fatal(err)
 	}
 
@@ -374,7 +374,8 @@ func (s *BasicSuite) TestUpdateService(c *C) {
 	if svc == nil {
 		c.Fatal(ErrNoService)
 	}
-	c.Assert(svc.Addr, Equals, "127.0.0.1:9425")
+	// Addr cannot be updated.  Ensure it's the same as before.
+	c.Assert(svc.Addr, Equals, "127.0.0.1:9324")
 
 	if err := Registry.RemoveService("Update"); err != nil {
 		c.Fatal(err)
