@@ -18,6 +18,9 @@ func getConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func getStats(w http.ResponseWriter, r *http.Request) {
+	if len(Registry.Config()) == 0 {
+		w.WriteHeader(503)
+	}
 	w.Write(marshal(Registry.Stats()))
 }
 
