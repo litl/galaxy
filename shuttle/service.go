@@ -20,6 +20,7 @@ type Service struct {
 	sync.Mutex
 	Name          string
 	Addr          string
+	VirtualHosts  []string
 	Backends      []*Backend
 	Balance       string
 	CheckInterval int
@@ -47,6 +48,7 @@ type Service struct {
 type ServiceStat struct {
 	Name          string        `json:"name"`
 	Addr          string        `json:"address"`
+	VirtualHosts  []string      `json:"virtual_hosts"`
 	Backends      []BackendStat `json:"backends"`
 	Balance       string        `json:"balance"`
 	CheckInterval int           `json:"check_interval"`
@@ -66,6 +68,7 @@ type ServiceStat struct {
 type ServiceConfig struct {
 	Name          string          `json:"name"`
 	Addr          string          `json:"address"`
+	VirtualHosts  []string        `json:"virtual_hosts"`
 	Backends      []BackendConfig `json:"backends"`
 	Balance       string          `json:"balance"`
 	CheckInterval int             `json:"check_interval"`
@@ -117,6 +120,7 @@ func NewService(cfg ServiceConfig) *Service {
 		CheckInterval: cfg.CheckInterval,
 		Fall:          cfg.Fall,
 		Rise:          cfg.Rise,
+		VirtualHosts:  cfg.VirtualHosts,
 		ClientTimeout: time.Duration(cfg.ClientTimeout) * time.Millisecond,
 		ServerTimeout: time.Duration(cfg.ServerTimeout) * time.Millisecond,
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
@@ -155,6 +159,7 @@ func (s *Service) Stats() ServiceStat {
 	stats := ServiceStat{
 		Name:          s.Name,
 		Addr:          s.Addr,
+		VirtualHosts:  s.VirtualHosts,
 		Balance:       s.Balance,
 		CheckInterval: s.CheckInterval,
 		Fall:          s.Fall,
@@ -183,6 +188,7 @@ func (s *Service) Config() ServiceConfig {
 	config := ServiceConfig{
 		Name:          s.Name,
 		Addr:          s.Addr,
+		VirtualHosts:  s.VirtualHosts,
 		Balance:       s.Balance,
 		CheckInterval: s.CheckInterval,
 		Fall:          s.Fall,
