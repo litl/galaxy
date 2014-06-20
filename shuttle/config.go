@@ -17,21 +17,21 @@ func loadConfig() {
 
 		cfgData, err := ioutil.ReadFile(cfgPath)
 		if err != nil {
-			log.Println("error reading config:", err)
+			log.Warnln("Error reading config:", err)
 			continue
 		}
 
 		var svcs []ServiceConfig
 		err = json.Unmarshal(cfgData, &svcs)
 		if err != nil {
-			log.Println("config error:", err)
+			log.Warnln("Config error:", err)
 			continue
 		}
-		log.Debug("loaded config from:", cfgPath)
+		log.Debug("Loaded config from:", cfgPath)
 
 		for _, svcCfg := range svcs {
 			if e := Registry.AddService(svcCfg); e != nil {
-				log.Println("service error:", e)
+				log.Println("Unabled to add service %s: error:", svcCfg.Name, e)
 			}
 		}
 	}

@@ -187,13 +187,13 @@ func (s *HTTPRouter) Start() {
 		&gotoolslog.LogConfig{Name: "console"},
 	})
 
-	log.Printf("Listening at %s", listenAddr)
+	log.Printf("HTTP server listening at %s", listenAddr)
 
 	s.router = hostroute.NewHostRouter()
 
 	proxy, err := vulcan.NewProxy(s.router)
 	if err != nil {
-		log.Fatalf("Error: %s", err)
+		log.Fatalf("ERROR: %s", err)
 	}
 
 	// Proxy acts as http handler:

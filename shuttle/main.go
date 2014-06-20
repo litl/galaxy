@@ -52,6 +52,7 @@ func main() {
 		return
 	}
 
+	log.Printf("Starting shuttle %s", buildVersion)
 	loadConfig()
 	wg.Add(2)
 	go startAdminHTTPServer()

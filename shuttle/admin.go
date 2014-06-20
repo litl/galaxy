@@ -44,7 +44,7 @@ func postService(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Println(err)
+		log.Errorln(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -53,13 +53,13 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	svcCfg := ServiceConfig{Name: vars["service"]}
 	err = json.Unmarshal(body, &svcCfg)
 	if err != nil {
-		log.Println(err)
+		log.Errorln(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if Registry.GetService(svcCfg.Name) == nil {
-		log.Printf("service %s doesn't exist, adding", svcCfg.Name)
+		log.Printf("Service %s doesn't exist, adding", svcCfg.Name)
 		if e := Registry.AddService(svcCfg); e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return
@@ -67,7 +67,7 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if e := Registry.UpdateService(svcCfg); e != nil {
-		log.Printf("unable to update service %s", svcCfg.Name)
+		log.Errorln("Unable to update service %s", svcCfg.Name)
 		http.Error(w, e.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -124,7 +124,7 @@ func postBackend(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Println(err)
+		log.Errorln(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -136,7 +136,7 @@ func postBackend(w http.ResponseWriter, r *http.Request) {
 	backendCfg := BackendConfig{Name: backendName}
 	err = json.Unmarshal(body, &backendCfg)
 	if err != nil {
-		log.Println(err)
+		log.Errorln(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -196,7 +196,7 @@ func addHandlers() {
 func startAdminHTTPServer() {
 	defer wg.Done()
 	addHandlers()
-	log.Println("shuttle listening on", adminListenAddr)
+	log.Println("Admin server listening on", adminListenAddr)
 
 	netw := "tcp"
 
@@ -215,7 +215,7 @@ func startAdminHTTPServer() {
 
 	listener, err := net.Listen(netw, adminListenAddr)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	http.Serve(listener, nil)

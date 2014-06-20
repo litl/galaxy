@@ -267,6 +267,7 @@ func (s *Service) remove(name string) bool {
 func (s *Service) start() (err error) {
 	s.Lock()
 	defer s.Unlock()
+	log.Println("Starting service", s.Name)
 
 	s.listener, err = newTimeoutListener(s.Addr, s.ClientTimeout)
 	if err != nil {
@@ -288,7 +289,7 @@ func (s *Service) run() {
 			conn, err := s.listener.Accept()
 			if err != nil {
 				if err, ok := err.(*net.OpError); ok && err.Temporary() {
-					log.Println("warning:", err)
+					log.Warnln("WARN:", err)
 					continue
 				}
 				// we must be getting shut down
@@ -308,7 +309,7 @@ func (s *Service) connect(cliConn net.Conn) {
 	for _, b := range backends {
 		srvConn, err := net.DialTimeout("tcp", b.Addr, b.dialTimeout)
 		if err != nil {
-			log.Printf("Error connecting to Backend %s/%s: %s", s.Name, b.Name, err)
+			log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, b.Name, err)
 			atomic.AddInt64(&b.Errors, 1)
 			continue
 		}
@@ -317,7 +318,7 @@ func (s *Service) connect(cliConn net.Conn) {
 		return
 	}
 
-	log.Println("Error: no Backend for", s.Name)
+	log.Errorf("ERROR: no backend for", s.Name)
 	cliConn.Close()
 }
 
@@ -327,7 +328,7 @@ func (s *Service) stop() {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Debug("Stopping Service", s.Name)
+	log.Println("Stopping Service", s.Name)
 	for _, backend := range s.Backends {
 		backend.Stop()
 	}
