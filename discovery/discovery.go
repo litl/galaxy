@@ -65,7 +65,7 @@ func main() {
 		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
 		cli.StringFlag{Name: "sshAddr", Value: "127.0.0.1:22", Usage: "hosts external ssh IP:port"},
-		cli.StringFlag{Name: "shuttleAddr", Usage: "shuttle http address"},
+		cli.StringFlag{Name: "shuttleAddr", Value: "127.0.0.1:9090", Usage: "shuttle http address"},
 	}
 
 	app.Commands = []cli.Command{

@@ -15,7 +15,7 @@ import (
 	"github.com/ryanuber/columnize"
 )
 
-func registerShuttle() {
+func registerShuttle(c *cli.Context) {
 
 	registrations, err := serviceRegistry.ListRegistrations()
 	if err != nil {
@@ -62,7 +62,7 @@ func registerShuttle() {
 			continue
 		}
 
-		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:9090/%s", k), "application/jsoN",
+		resp, err := http.Post(fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), k), "application/jsoN",
 			bytes.NewBuffer(js))
 		if err != nil {
 			log.Errorf("ERROR: Registerring backend with shuttle: %s", err)
@@ -140,7 +140,7 @@ func register(c *cli.Context) {
 			lastLogged = time.Now().UnixNano()
 		}
 
-		registerShuttle()
+		registerShuttle(c)
 
 		if !c.Bool("loop") {
 			break
