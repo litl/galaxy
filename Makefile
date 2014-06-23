@@ -30,7 +30,11 @@ quasar:
 	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/quasar
 
 clean: dist-clean
-	rm -f $(GOPATH)/bin/{commander,discovery,shuttle}
+	rm -f $(GOPATH)/bin/commander
+	rm -f $(GOPATH)/bin/discovery
+	rm -f $(GOPATH)/bin/shuttle
+	rm -f $(GOPATH)/bin/quasar
+	rm -f $(GOPATH)/bin/galaxy
 
 fmt:
 	go fmt github.com/litl/galaxy/...
