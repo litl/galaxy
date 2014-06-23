@@ -11,21 +11,9 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
+	shuttle "github.com/litl/galaxy/shuttle/client"
 	"github.com/ryanuber/columnize"
 )
-
-//FIXME: Make shuttle importable so we can re-use existing structs
-type Backend struct {
-	Name string `json:"name"`
-	Addr string `json:"address"`
-}
-
-type Service struct {
-	Name         string     `json:"name"`
-	Addr         string     `json:"address"`
-	VirtualHosts []string   `json:"virtual_hosts"`
-	Backends     []*Backend `json:"backends"`
-}
 
 func registerShuttle() {
 
@@ -35,7 +23,7 @@ func registerShuttle() {
 		return
 	}
 
-	backends := make(map[string]*Service)
+	backends := make(map[string]*shuttle.ServiceConfig)
 
 	for _, r := range registrations {
 
@@ -44,7 +32,7 @@ func registerShuttle() {
 		}
 		service := backends[r.Name]
 		if service == nil {
-			service = &Service{
+			service = &shuttle.ServiceConfig{
 				Name:         r.Name,
 				VirtualHosts: r.VirtualHosts,
 			}
@@ -53,7 +41,7 @@ func registerShuttle() {
 			}
 			backends[r.Name] = service
 		}
-		b := &Backend{
+		b := shuttle.BackendConfig{
 			Name: r.ContainerID[0:12],
 			Addr: r.ExternalAddr(),
 		}

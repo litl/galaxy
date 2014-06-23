@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/shuttle/client"
 
 	"github.com/gorilla/mux"
 )
@@ -50,7 +51,7 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	svcCfg := ServiceConfig{Name: vars["service"]}
+	svcCfg := client.ServiceConfig{Name: vars["service"]}
 	err = json.Unmarshal(body, &svcCfg)
 	if err != nil {
 		log.Errorln(err)
@@ -138,7 +139,7 @@ func postBackend(w http.ResponseWriter, r *http.Request) {
 	backendName := vars["backend"]
 	serviceName := vars["service"]
 
-	backendCfg := BackendConfig{Name: backendName}
+	backendCfg := client.BackendConfig{Name: backendName}
 	err = json.Unmarshal(body, &backendCfg)
 	if err != nil {
 		log.Errorln(err)

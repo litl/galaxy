@@ -2,12 +2,12 @@ package main
 
 import (
 	"net"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/shuttle/client"
 )
 
 var (
@@ -64,56 +64,8 @@ type ServiceStat struct {
 	Active        int64         `json:"active"`
 }
 
-// Subset of service fields needed for configuration.
-type ServiceConfig struct {
-	Name          string          `json:"name"`
-	Addr          string          `json:"address"`
-	VirtualHosts  []string        `json:"virtual_hosts"`
-	Backends      []BackendConfig `json:"backends"`
-	Balance       string          `json:"balance"`
-	CheckInterval int             `json:"check_interval"`
-	Fall          int             `json:"fall"`
-	Rise          int             `json:"rise"`
-	ClientTimeout int             `json:"client_timeout"`
-	ServerTimeout int             `json:"server_timeout"`
-	DialTimeout   int             `json:"connect_timeout"`
-}
-
-// Compare a service's settings, ignoring individual backends.
-func (s ServiceConfig) Equal(other ServiceConfig) bool {
-	// just remove the backends and compare the rest
-	s.Backends = nil
-	other.Backends = nil
-
-	// FIXME: Normalize default in one place!
-
-	if s.Balance != other.Balance {
-		if s.Balance == "" && other.Balance == "RR" {
-			other.Balance = ""
-		} else if s.Balance == "RR" && other.Balance == "" {
-			other.Balance = "RR"
-		}
-	}
-
-	if s.CheckInterval == 0 {
-		s.CheckInterval = 2000
-	}
-	if s.Rise == 0 {
-		s.Rise = 2
-	}
-	if s.Fall == 0 {
-		s.Fall = 2
-	}
-
-	// We handle backends separately
-	s.Backends = nil
-	other.Backends = nil
-
-	return reflect.DeepEqual(s, other)
-}
-
 // Create a Service from a config struct
-func NewService(cfg ServiceConfig) *Service {
+func NewService(cfg client.ServiceConfig) *Service {
 	s := &Service{
 		Name:          cfg.Name,
 		Addr:          cfg.Addr,
@@ -181,11 +133,11 @@ func (s *Service) Stats() ServiceStat {
 	return stats
 }
 
-func (s *Service) Config() ServiceConfig {
+func (s *Service) Config() client.ServiceConfig {
 	s.Lock()
 	defer s.Unlock()
 
-	config := ServiceConfig{
+	config := client.ServiceConfig{
 		Name:          s.Name,
 		Addr:          s.Addr,
 		VirtualHosts:  s.VirtualHosts,
