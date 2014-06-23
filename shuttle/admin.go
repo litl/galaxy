@@ -60,7 +60,6 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if Registry.GetService(svcCfg.Name) == nil {
-		log.Printf("Service %s doesn't exist, adding", svcCfg.Name)
 		if e := Registry.AddService(svcCfg); e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return

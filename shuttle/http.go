@@ -83,7 +83,7 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 		loc.GetObserverChain().Add("logger", &RequestLogger{})
 
 		s.router.SetRouter(vhost, &route.ConstRouter{Location: loc})
-		log.Printf("Creating balancer for %s", vhost)
+		log.Printf("Starting HTTP listener for %s", vhost)
 		s.balancers[vhost] = balancer
 	}
 
@@ -92,7 +92,7 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 		return nil
 	}
 	endpoint := endpoint.MustParseUrl(url)
-	log.Printf("Adding %s endpoint %s", vhost, endpoint.GetUrl())
+	log.Printf("Adding HTTP endpoint %s to %s", endpoint.GetUrl(), vhost)
 	err = balancer.AddEndpoint(endpoint)
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
 	if endpoint == nil {
 		return nil
 	}
-	log.Printf("Removing %s endpoint %s", vhost, endpoint.GetUrl())
+	log.Printf("Removing HTTP endpoint %s from %s ", endpoint.GetUrl(), vhost)
 	balancer.RemoveEndpoint(endpoint)
 
 	endpoints := balancer.GetEndpoints()

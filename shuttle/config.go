@@ -46,7 +46,7 @@ func writeStateConfig() {
 	defer configMutex.Unlock()
 
 	if stateConfig == "" {
-		log.Println("No state file. Not saving changes")
+		log.Debug("No state file. Not saving changes")
 		return
 	}
 

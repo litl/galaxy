@@ -177,6 +177,7 @@ func (s *Service) add(backend *Backend) {
 	s.Lock()
 	defer s.Unlock()
 
+	log.Printf("Adding TCP backend %s for %s at %s", backend.Addr, s.Name, s.Addr)
 	backend.up = true
 	backend.rwTimeout = s.ServerTimeout
 	backend.dialTimeout = s.DialTimeout
@@ -204,6 +205,7 @@ func (s *Service) remove(name string) bool {
 
 	for i, b := range s.Backends {
 		if b.Name == name {
+			log.Printf("Remvoing TCP backend %s for %s at %s", b.Addr, s.Name, s.Addr)
 			last := len(s.Backends) - 1
 			deleted := b
 			s.Backends[i], s.Backends[last] = s.Backends[last], nil
@@ -219,7 +221,7 @@ func (s *Service) remove(name string) bool {
 func (s *Service) start() (err error) {
 	s.Lock()
 	defer s.Unlock()
-	log.Println("Starting service", s.Name)
+	log.Printf("Starting TCP listener for %s on %s", s.Name, s.Addr)
 
 	s.listener, err = newTimeoutListener(s.Addr, s.ClientTimeout)
 	if err != nil {
@@ -280,7 +282,7 @@ func (s *Service) stop() {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Println("Stopping Service", s.Name)
+	log.Printf("Stopping TCP listener for %s on %s", s.Name, s.Addr)
 	for _, backend := range s.Backends {
 		backend.Stop()
 	}
