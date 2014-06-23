@@ -3,143 +3,76 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/codegangsta/cli"
 	"github.com/litl/galaxy/log"
+	shuttle "github.com/litl/galaxy/shuttle/client"
 )
 
-type BackendConfig struct {
-	Name      string `json:"name"`
-	Addr      string `json:"address"`
-	CheckAddr string `json:"check_address"`
-	Weight    int    `json:"weight"`
-}
-type ServiceConfig struct {
-	Name          string          `json:"name"`
-	Addr          string          `json:"address"`
-	Backends      []BackendConfig `json:"backends"`
-	Balance       string          `json:"balance"`
-	CheckInterval int             `json:"check_interval"`
-	Fall          int             `json:"fall"`
-	Rise          int             `json:"rise"`
-	ClientTimeout int             `json:"client_timeout"`
-	ServerTimeout int             `json:"server_timeout"`
-	DialTimeout   int             `json:"connect_timeout"`
-}
+func registerShuttle(c *cli.Context) {
 
-// build our shuttle config from the current state of registered services.
-func buildConfig() (map[string]*ServiceConfig, error) {
-	svcMap := make(map[string]*ServiceConfig)
-
-	allRegs, err := serviceRegistry.ListRegistrations()
+	registrations, err := serviceRegistry.ListRegistrations()
 	if err != nil {
-		log.Println("Error getting registrations:", err)
-		return nil, err
+		log.Errorf("ERROR: Unable to list registrations: %s", err)
+		return
 	}
 
-	// get all registered applications so we know what ports to listen on
-	allApps, err := serviceRegistry.ListApps("*")
-	if err != nil {
-		log.Println("Error listing apps:", err)
-		return nil, err
-	}
+	backends := make(map[string]*shuttle.ServiceConfig)
 
-	// Make a Service config to listen for every service in our env
-	for _, cfg := range allApps {
-		port := cfg.EnvGet("PORT")
-		if port == "" {
-			// no registered port, so don't proxy this service
-			log.Debugf("Service %s has no port", cfg.Name)
+	for _, r := range registrations {
+
+		// No service ports exposed on the host, skip it.
+		if r.ExternalAddr() == "" {
 			continue
 		}
 
-		service, ok := svcMap[cfg.Name]
-		if !ok {
-			// TODO: make some of this configurable
-			service = &ServiceConfig{
-				Name:          cfg.Name,
-				Addr:          "127.0.0.1:" + port,
-				CheckInterval: 2000,
-				Fall:          2,
-				Rise:          3,
-				DialTimeout:   2000,
+		// No listening port or virtual hosts configured, skip it.
+		if r.Port == "" && len(r.VirtualHosts) == 0 {
+			continue
+		}
+		service := backends[r.Name]
+		if service == nil {
+			service = &shuttle.ServiceConfig{
+				Name:         r.Name,
+				VirtualHosts: r.VirtualHosts,
 			}
-			svcMap[cfg.Name] = service
-			log.Debugf("updating shuttle service %+v", service)
+			if r.Port != "" {
+				service.Addr = "0.0.0.0:" + r.Port
+			}
+			backends[r.Name] = service
 		}
+		b := shuttle.BackendConfig{
+			Name: r.ContainerID[0:12],
+			Addr: r.ExternalAddr(),
+		}
+		service.Backends = append(service.Backends, b)
 	}
 
-	// Add the all the backends we can find to the services
-	for _, reg := range allRegs {
-		pathParts := strings.Split(reg.Path, "/")
-		if len(pathParts) < 5 {
-			log.Printf("Error, bad registration path: %s", pathParts)
-			continue
-		}
-
-		if reg.ExternalIP == "" || reg.ExternalPort == "" {
-			// skipping a service we can't address
-			log.Debugf("Incomplete address %s:%s for %s", reg.ExternalIP, reg.ExternalPort, reg.Path)
-			continue
-		}
-
-		hostName, svcName := pathParts[3], pathParts[4]
-
-		service, ok := svcMap[svcName]
-		if !ok {
-			log.Printf("Found registration for unknown service %s:%s", service, reg)
-			continue
-		}
-
-		backend := BackendConfig{
-			Name: hostName,
-			Addr: reg.ExternalIP + ":" + reg.ExternalPort,
-		}
-		backend.CheckAddr = backend.Addr
-		log.Debugf("updating shuttle backend %+v", backend)
-
-		service.Backends = append(service.Backends, backend)
-	}
-
-	return svcMap, nil
-}
-
-func UpdateShuttle(shuttleAddr string) {
-	shuttleAddr = "http://" + shuttleAddr
-	log.Printf("Updating shuttle at %s", shuttleAddr)
-
-	// give us some way to fail if shuttle gets locked up
 	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
 	httpClient := &http.Client{Transport: transport}
 
-	for {
-		svcMap, err := buildConfig()
+	for k, service := range backends {
+
+		js, err := json.Marshal(service)
 		if err != nil {
-			goto SLEEP
+			log.Printf("ERROR: Marshaling service to JSON: %s", err)
+			continue
 		}
 
-		for name, service := range svcMap {
-			reqJSON, err := json.Marshal(service)
-			if err != nil {
-				log.Println("ERROR serializing services:", err)
-				continue
-			}
-
-			resp, err := httpClient.Post(shuttleAddr+"/"+name, "application/json", bytes.NewReader(reqJSON))
-			if err != nil {
-				log.Println("ERROR updating shuttle config:", err)
-				continue
-			}
-
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("ERROR: recieved %s from shuttle", resp.Status)
-			}
+		resp, err := httpClient.Post(fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), k), "application/jsoN",
+			bytes.NewBuffer(js))
+		if err != nil {
+			log.Errorf("ERROR: Registerring backend with shuttle: %s", err)
+			continue
 		}
 
-	SLEEP:
-		// TODO: make update interval a flag or config option
-		time.Sleep(5 * time.Second)
+		if resp.StatusCode != http.StatusOK {
+			log.Errorf("ERROR: Failed to register service with shuttle: %s", resp.Status)
+		}
+		resp.Body.Close()
 	}
+
 }

@@ -47,10 +47,6 @@ func initOrDie(c *cli.Context) {
 	if !c.Bool("loop") {
 		log.DefaultLogger.SetFlags(0)
 	}
-
-	if shuttle := c.GlobalString("shuttleAddr"); shuttle != "" {
-		go UpdateShuttle(shuttle)
-	}
 }
 
 func main() {
