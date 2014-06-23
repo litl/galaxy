@@ -27,6 +27,12 @@ func registerShuttle() {
 
 	for _, r := range registrations {
 
+		// No service ports exposed on the host, skip it.
+		if r.ExternalAddr() == "" {
+			continue
+		}
+
+		// No listening port or virtual hosts configured, skip it.
 		if r.Port == "" && len(r.VirtualHosts) == 0 {
 			continue
 		}
@@ -55,6 +61,7 @@ func registerShuttle() {
 			log.Printf("ERROR: Marshaling service to JSON: %s", err)
 			continue
 		}
+
 		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:9090/%s", k), "application/jsoN",
 			bytes.NewBuffer(js))
 		if err != nil {
@@ -117,8 +124,12 @@ func register(c *cli.Context) {
 				}
 
 				if lastLogged == 0 || time.Now().UnixNano()-lastLogged > (60*time.Second).Nanoseconds() {
-					log.Printf("Registered %s as %s at %s", dockerContainer.ID[0:12], serviceConfig.Name,
-						registration.ExternalAddr())
+					location := registration.ExternalAddr()
+					if location != "" {
+						location = " at " + location
+					}
+					log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(dockerContainer.Name, "/"),
+						dockerContainer.ID[0:12], serviceConfig.Name, location)
 					registered = true
 
 				}

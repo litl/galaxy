@@ -76,6 +76,10 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	for _, svcCfg := range Registry.Config() {
 		for _, vhost := range svcCfg.VirtualHosts {
 			for _, backend := range svcCfg.Backends {
+				if backend.Addr == "" {
+					log.Warnf("No address specifed for %s for %s. Skipping.", backend.Name, svcCfg.Name)
+					continue
+				}
 				addr := "http://" + backend.Addr
 				httpRouter.AddBackend(svcCfg.Name, vhost, addr)
 				vhosts[vhost] = append(vhosts[vhost], addr)
