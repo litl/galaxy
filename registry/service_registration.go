@@ -22,6 +22,8 @@ type ServiceRegistration struct {
 	StartedAt    time.Time `json:"STARTED_AT"`
 	Expires      time.Time `json:"-"`
 	Path         string    `json:"-"`
+	VirtualHosts []string  `json:"VIRTUAL_HOSTS"`
+	Port         string    `json:"PORT"`
 }
 
 func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
@@ -51,6 +53,11 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 	serviceRegistration := r.newServiceRegistration(container)
 	serviceRegistration.Name = serviceConfig.Name
+
+	vhosts := serviceConfig.Env()["VIRTUAL_HOST"]
+	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
+
+	serviceRegistration.Port = serviceConfig.Env()["GALAXY_PORT"]
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {

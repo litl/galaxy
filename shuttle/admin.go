@@ -72,13 +72,18 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, vhost := range svcCfg.VirtualHosts {
-		addrs := []string{}
-		for _, backend := range svcCfg.Backends {
-			addr := "http://" + backend.Addr
-			httpRouter.AddBackend(svcCfg.Name, vhost, addr)
-			addrs = append(addrs, addr)
+	vhosts := make(map[string][]string)
+	for _, svcCfg := range Registry.Config() {
+		for _, vhost := range svcCfg.VirtualHosts {
+			for _, backend := range svcCfg.Backends {
+				addr := "http://" + backend.Addr
+				httpRouter.AddBackend(svcCfg.Name, vhost, addr)
+				vhosts[vhost] = append(vhosts[vhost], addr)
+			}
+
 		}
+	}
+	for vhost, addrs := range vhosts {
 		httpRouter.RemoveBackends(vhost, addrs)
 	}
 
