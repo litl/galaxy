@@ -20,6 +20,7 @@ type Service struct {
 	sync.Mutex
 	Name          string
 	Addr          string
+	VirtualHosts  []string
 	Backends      []*Backend
 	Balance       string
 	CheckInterval int
@@ -47,6 +48,7 @@ type Service struct {
 type ServiceStat struct {
 	Name          string        `json:"name"`
 	Addr          string        `json:"address"`
+	VirtualHosts  []string      `json:"virtual_hosts"`
 	Backends      []BackendStat `json:"backends"`
 	Balance       string        `json:"balance"`
 	CheckInterval int           `json:"check_interval"`
@@ -66,6 +68,7 @@ type ServiceStat struct {
 type ServiceConfig struct {
 	Name          string          `json:"name"`
 	Addr          string          `json:"address"`
+	VirtualHosts  []string        `json:"virtual_hosts"`
 	Backends      []BackendConfig `json:"backends"`
 	Balance       string          `json:"balance"`
 	CheckInterval int             `json:"check_interval"`
@@ -117,6 +120,7 @@ func NewService(cfg ServiceConfig) *Service {
 		CheckInterval: cfg.CheckInterval,
 		Fall:          cfg.Fall,
 		Rise:          cfg.Rise,
+		VirtualHosts:  cfg.VirtualHosts,
 		ClientTimeout: time.Duration(cfg.ClientTimeout) * time.Millisecond,
 		ServerTimeout: time.Duration(cfg.ServerTimeout) * time.Millisecond,
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
@@ -155,6 +159,7 @@ func (s *Service) Stats() ServiceStat {
 	stats := ServiceStat{
 		Name:          s.Name,
 		Addr:          s.Addr,
+		VirtualHosts:  s.VirtualHosts,
 		Balance:       s.Balance,
 		CheckInterval: s.CheckInterval,
 		Fall:          s.Fall,
@@ -183,6 +188,7 @@ func (s *Service) Config() ServiceConfig {
 	config := ServiceConfig{
 		Name:          s.Name,
 		Addr:          s.Addr,
+		VirtualHosts:  s.VirtualHosts,
 		Balance:       s.Balance,
 		CheckInterval: s.CheckInterval,
 		Fall:          s.Fall,
@@ -261,6 +267,7 @@ func (s *Service) remove(name string) bool {
 func (s *Service) start() (err error) {
 	s.Lock()
 	defer s.Unlock()
+	log.Println("Starting service", s.Name)
 
 	s.listener, err = newTimeoutListener(s.Addr, s.ClientTimeout)
 	if err != nil {
@@ -282,7 +289,7 @@ func (s *Service) run() {
 			conn, err := s.listener.Accept()
 			if err != nil {
 				if err, ok := err.(*net.OpError); ok && err.Temporary() {
-					log.Println("warning:", err)
+					log.Warnln("WARN:", err)
 					continue
 				}
 				// we must be getting shut down
@@ -302,7 +309,7 @@ func (s *Service) connect(cliConn net.Conn) {
 	for _, b := range backends {
 		srvConn, err := net.DialTimeout("tcp", b.Addr, b.dialTimeout)
 		if err != nil {
-			log.Printf("Error connecting to Backend %s/%s: %s", s.Name, b.Name, err)
+			log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, b.Name, err)
 			atomic.AddInt64(&b.Errors, 1)
 			continue
 		}
@@ -311,7 +318,7 @@ func (s *Service) connect(cliConn net.Conn) {
 		return
 	}
 
-	log.Println("Error: no Backend for", s.Name)
+	log.Errorf("ERROR: no backend for", s.Name)
 	cliConn.Close()
 }
 
@@ -321,7 +328,7 @@ func (s *Service) stop() {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Debug("Stopping Service", s.Name)
+	log.Println("Stopping Service", s.Name)
 	for _, backend := range s.Backends {
 		backend.Stop()
 	}
