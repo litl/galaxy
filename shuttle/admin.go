@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/shuttle/client"
 
 	"github.com/gorilla/mux"
 )
@@ -50,7 +51,7 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	svcCfg := ServiceConfig{Name: vars["service"]}
+	svcCfg := client.ServiceConfig{Name: vars["service"]}
 	err = json.Unmarshal(body, &svcCfg)
 	if err != nil {
 		log.Errorln(err)
@@ -59,7 +60,6 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if Registry.GetService(svcCfg.Name) == nil {
-		log.Printf("Service %s doesn't exist, adding", svcCfg.Name)
 		if e := Registry.AddService(svcCfg); e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return
@@ -72,13 +72,22 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, vhost := range svcCfg.VirtualHosts {
-		addrs := []string{}
-		for _, backend := range svcCfg.Backends {
-			addr := "http://" + backend.Addr
-			httpRouter.AddBackend(svcCfg.Name, vhost, addr)
-			addrs = append(addrs, addr)
+	vhosts := make(map[string][]string)
+	for _, svcCfg := range Registry.Config() {
+		for _, vhost := range svcCfg.VirtualHosts {
+			for _, backend := range svcCfg.Backends {
+				if backend.Addr == "" {
+					log.Warnf("No address specifed for %s for %s. Skipping.", backend.Name, svcCfg.Name)
+					continue
+				}
+				addr := "http://" + backend.Addr
+				httpRouter.AddBackend(svcCfg.Name, vhost, addr)
+				vhosts[vhost] = append(vhosts[vhost], addr)
+			}
+
 		}
+	}
+	for vhost, addrs := range vhosts {
 		httpRouter.RemoveBackends(vhost, addrs)
 	}
 
@@ -133,7 +142,7 @@ func postBackend(w http.ResponseWriter, r *http.Request) {
 	backendName := vars["backend"]
 	serviceName := vars["service"]
 
-	backendCfg := BackendConfig{Name: backendName}
+	backendCfg := client.BackendConfig{Name: backendName}
 	err = json.Unmarshal(body, &backendCfg)
 	if err != nil {
 		log.Errorln(err)

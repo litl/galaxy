@@ -311,6 +311,23 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	args = append(args, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
+	args = append(args, "-dns")
+	args = append(args, s.shuttleHost)
+
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	if err != nil {
+		return err
+	}
+
+	for _, config := range serviceConfigs {
+		port := config.Env()["GALAXY_PORT"]
+		if port == "" {
+			continue
+		}
+
+		args = append(args, "-e")
+		args = append(args, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":"+port)
+	}
 
 	publicDns, err := ec2PublicHostname()
 	if err != nil {
@@ -354,6 +371,22 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	var envVars []string
 	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+	}
+
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, config := range serviceConfigs {
+		port := config.Env()["GALAXY_PORT"]
+
+		if port == "" {
+			continue
+		}
+
+		envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":"+port)
+
 	}
 
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
@@ -400,6 +433,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 			Config: &docker.Config{
 				Image: img,
 				Env:   envVars,
+				Dns:   []string{s.shuttleHost},
 			},
 		})
 		if err != nil {

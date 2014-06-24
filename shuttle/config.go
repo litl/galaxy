@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/shuttle/client"
 )
 
 func loadConfig() {
@@ -21,7 +22,7 @@ func loadConfig() {
 			continue
 		}
 
-		var svcs []ServiceConfig
+		var svcs []client.ServiceConfig
 		err = json.Unmarshal(cfgData, &svcs)
 		if err != nil {
 			log.Warnln("Config error:", err)
@@ -45,7 +46,7 @@ func writeStateConfig() {
 	defer configMutex.Unlock()
 
 	if stateConfig == "" {
-		log.Println("No state file. Not saving changes")
+		log.Debug("No state file. Not saving changes")
 		return
 	}
 

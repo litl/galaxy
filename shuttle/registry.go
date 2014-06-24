@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/shuttle/client"
 )
 
 var (
@@ -39,7 +40,7 @@ func (s *ServiceRegistry) GetService(name string) *Service {
 
 // Add a new service to the Registry.
 // Do not replace an existing service.
-func (s *ServiceRegistry) AddService(cfg ServiceConfig) error {
+func (s *ServiceRegistry) AddService(cfg client.ServiceConfig) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -59,7 +60,7 @@ func (s *ServiceRegistry) AddService(cfg ServiceConfig) error {
 // Replacing a configuration will shutdown the existing service, and start a
 // new one, which will cause the listening socket to be temporarily
 // unavailable.
-func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig) error {
+func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -78,7 +79,7 @@ func (s *ServiceRegistry) UpdateService(newCfg ServiceConfig) error {
 
 	// we're going to update just the backends for this config
 	// get a map of what's already running
-	currentBackends := make(map[string]BackendConfig)
+	currentBackends := make(map[string]client.BackendConfig)
 	for _, backendCfg := range currentCfg.Backends {
 		currentBackends[backendCfg.Name] = backendCfg
 	}
@@ -131,13 +132,13 @@ func (s *ServiceRegistry) ServiceStats(serviceName string) (ServiceStat, error) 
 	return service.Stats(), nil
 }
 
-func (s *ServiceRegistry) ServiceConfig(serviceName string) (ServiceConfig, error) {
+func (s *ServiceRegistry) ServiceConfig(serviceName string) (client.ServiceConfig, error) {
 	s.Lock()
 	defer s.Unlock()
 
 	service, ok := s.svcs[serviceName]
 	if !ok {
-		return ServiceConfig{}, ErrNoService
+		return client.ServiceConfig{}, ErrNoService
 	}
 	return service.Config(), nil
 }
@@ -160,7 +161,7 @@ func (s *ServiceRegistry) BackendStats(serviceName, backendName string) (Backend
 }
 
 // Add or update a Backend on an existing Service.
-func (s *ServiceRegistry) AddBackend(svcName string, backendCfg BackendConfig) error {
+func (s *ServiceRegistry) AddBackend(svcName string, backendCfg client.BackendConfig) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -203,11 +204,11 @@ func (s *ServiceRegistry) Stats() []ServiceStat {
 	return stats
 }
 
-func (s *ServiceRegistry) Config() []ServiceConfig {
+func (s *ServiceRegistry) Config() []client.ServiceConfig {
 	s.Lock()
 	defer s.Unlock()
 
-	var configs []ServiceConfig
+	var configs []client.ServiceConfig
 	for _, service := range s.svcs {
 		configs = append(configs, service.Config())
 	}

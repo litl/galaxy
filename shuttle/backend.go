@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/shuttle/client"
 )
 
 type Backend struct {
@@ -56,22 +57,7 @@ type BackendStat struct {
 	CheckFail int    `json:"check_fail"`
 }
 
-// The subset of fields we load and serialize for config.
-type BackendConfig struct {
-	Name      string `json:"name"`
-	Addr      string `json:"address"`
-	CheckAddr string `json:"check_address"`
-	Weight    int    `json:"weight"`
-}
-
-func (b BackendConfig) Equal(other BackendConfig) bool {
-	if other.Weight == 0 {
-		other.Weight = 1
-	}
-	return b == other
-}
-
-func NewBackend(cfg BackendConfig) *Backend {
+func NewBackend(cfg client.BackendConfig) *Backend {
 	b := &Backend{
 		Name:      cfg.Name,
 		Addr:      cfg.Addr,
@@ -119,11 +105,11 @@ func (b *Backend) Up() bool {
 }
 
 // Return the struct for marshaling into a json config
-func (b *Backend) Config() BackendConfig {
+func (b *Backend) Config() client.BackendConfig {
 	b.Lock()
 	defer b.Unlock()
 
-	cfg := BackendConfig{
+	cfg := client.BackendConfig{
 		Name:      b.Name,
 		Addr:      b.Addr,
 		CheckAddr: b.CheckAddr,

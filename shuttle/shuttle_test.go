@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/shuttle/client"
 	. "gopkg.in/check.v1"
 )
 
@@ -53,7 +54,7 @@ func mySetup(s *BasicSuite, t Tester) {
 		s.servers = append(s.servers, server)
 	}
 
-	svcCfg := ServiceConfig{
+	svcCfg := client.ServiceConfig{
 		Name: "testService",
 		Addr: "127.0.0.1:2000",
 	}
@@ -98,7 +99,7 @@ func (s *BasicSuite) AddBackend(c Tester) {
 	}
 
 	name := fmt.Sprintf("backend_%d", next)
-	cfg := BackendConfig{
+	cfg := client.BackendConfig{
 		Name:      name,
 		Addr:      s.servers[next].addr,
 		CheckAddr: s.servers[next].addr,
@@ -179,7 +180,7 @@ func (s *BasicSuite) TestWeightedRoundRobin(c *C) {
 func (s *BasicSuite) TestLeastConn(c *C) {
 	// replace out default service with one using LeastConn balancing
 	Registry.RemoveService("testService")
-	svcCfg := ServiceConfig{
+	svcCfg := client.ServiceConfig{
 		Name:    "testService",
 		Addr:    "127.0.0.1:2223",
 		Balance: "LC",
@@ -341,7 +342,7 @@ func (s *BasicSuite) TestRemoveBackend(c *C) {
 }
 
 func (s *BasicSuite) TestUpdateService(c *C) {
-	svcCfg := ServiceConfig{
+	svcCfg := client.ServiceConfig{
 		Name: "Update",
 		Addr: "127.0.0.1:9324",
 	}
@@ -355,7 +356,7 @@ func (s *BasicSuite) TestUpdateService(c *C) {
 		c.Fatal(ErrNoService)
 	}
 
-	svcCfg = ServiceConfig{
+	svcCfg = client.ServiceConfig{
 		Name: "Update",
 		Addr: "127.0.0.1:9425",
 	}

@@ -57,8 +57,12 @@ func register(c *cli.Context) {
 				}
 
 				if lastLogged == 0 || time.Now().UnixNano()-lastLogged > (60*time.Second).Nanoseconds() {
-					log.Printf("Registered %s as %s at %s", dockerContainer.ID[0:12], serviceConfig.Name,
-						registration.ExternalAddr())
+					location := registration.ExternalAddr()
+					if location != "" {
+						location = " at " + location
+					}
+					log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(dockerContainer.Name, "/"),
+						dockerContainer.ID[0:12], serviceConfig.Name, location)
 					registered = true
 
 				}
@@ -68,6 +72,9 @@ func register(c *cli.Context) {
 		if registered {
 			lastLogged = time.Now().UnixNano()
 		}
+
+		registerShuttle(c)
+
 		if !c.Bool("loop") {
 			break
 		}
