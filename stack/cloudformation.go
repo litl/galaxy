@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -318,7 +319,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 	return shared, nil
 }
 
-func GetTemplate(name string) (*simplejson.Json, error) {
+func GetTemplate(name string) ([]byte, error) {
 	svc, err := getCFService()
 	if err != nil {
 		log.Fatal(err)
@@ -340,12 +341,7 @@ func GetTemplate(name string) (*simplejson.Json, error) {
 	}
 	defer resp.Body.Close()
 
-	template, err := simplejson.NewFromReader(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return template, nil
+	return ioutil.ReadAll(resp.Body)
 }
 
 // Create a CloudFormation stack

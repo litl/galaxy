@@ -16,6 +16,7 @@ import (
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
+	"github.com/litl/galaxy/stack"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
@@ -584,6 +585,63 @@ func pgPsql(c *cli.Context) {
 	}
 }
 
+func stackInit(c *cli.Context) {
+	stackName := c.Args().First()
+	if stackName == "" {
+		log.Fatal("stack name required")
+	}
+
+	keyPair := c.String("keypair")
+	if keyPair == "" {
+		log.Fatal("-keypair required")
+	}
+
+	var stackTmpl []byte
+	tmplLoc := c.String("template")
+
+	if tmplLoc != "" {
+		var err error
+		stackTmpl, err = ioutil.ReadFile(tmplLoc)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		stackTmpl = stack.GalaxyTemplate()
+	}
+
+	//TODO: Make this an option
+	opts := map[string]string{
+		"KeyPair": "admin-us-east",
+	}
+
+	err := stack.Create(stackName, stackTmpl, opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// Print a Cloudformation template to stdout.  This is useful for generating a
+// config file to edit, then create/update the base stack.
+func stackTemplate(c *cli.Context) {
+	stackName := c.Args().First()
+
+	if stackName == "" {
+		if _, err := os.Stdout.Write(stack.GalaxyTemplate()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	stackTmpl, err := stack.GetTemplate(stackName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := os.Stdout.Write(stackTmpl); err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
 
 	loadConfig()
@@ -712,6 +770,22 @@ func main() {
 			Usage:       "connect to database using psql",
 			Action:      pgPsql,
 			Description: "pg:psql <app>",
+		},
+		{
+			Name:        "stack:init",
+			Usage:       "initialize the galaxy infrastructure",
+			Action:      stackInit,
+			Description: "stack:init <stack_name>",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "template", Usage: "cloudformation template"},
+				cli.StringFlag{Name: "keypair", Usage: "ssh keypair for galaxy controller"},
+			},
+		},
+		{
+			Name:        "stack:template",
+			Usage:       "print the cloudformation template to stdout",
+			Action:      stackTemplate,
+			Description: "stack:template <stack_name>",
 		},
 	}
 	app.Run(os.Args)
