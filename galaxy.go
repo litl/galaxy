@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
@@ -620,6 +621,83 @@ func stackInit(c *cli.Context) {
 	}
 }
 
+// manually create a pool stack
+func stackCreatePool(c *cli.Context) {
+	poolName := c.GlobalString("pool")
+	if poolName == "" {
+		log.Fatal("pool name required")
+	}
+
+	keyPair := c.String("keypair")
+	if keyPair == "" {
+		log.Fatal("keypair required")
+	}
+
+	amiID := c.String("ami")
+	if amiID == "" {
+		log.Fatal("ami required")
+	}
+
+	baseStack := c.String("base")
+	if baseStack == "" {
+		log.Fatal("base stack required")
+	}
+
+	poolEnv := c.GlobalString("env")
+	if poolEnv == "" {
+		log.Fatal("env required")
+	}
+
+	// get the resources we need from the base stack
+	resources, err := stack.GetSharedResources(baseStack)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// add all subnets
+	subnets := []string{}
+	for _, val := range resources.Subnets {
+		subnets = append(subnets, val)
+	}
+
+	// TODO: add more options
+	pool := stack.Pool{
+		Name:            poolName,
+		Env:             poolEnv,
+		DesiredCapacity: 1,
+		KeyName:         "admin-us-east",
+		InstanceType:    "m3.medium",
+		ImageID:         amiID,
+		SubnetIDs:       subnets,
+		SecurityGroups: []string{
+			resources.SecurityGroups["sshSG"],
+			resources.SecurityGroups["defaultSG"],
+		},
+	}
+
+	if poolEnv == "web" {
+		pool.ELB = true
+		pool.ELBSecurityGroups = []string{
+			resources.SecurityGroups["defaultSG"],
+			resources.SecurityGroups["webSG"],
+		}
+		pool.ELBHealthCheck = "HTTP:8080/"
+	}
+
+	poolTmpl, err := stack.CreatePoolTemplate(pool)
+
+	stackName := baseStack + poolName + poolEnv
+
+	if err := stack.Update(stackName, poolTmpl, nil); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
 // Print a Cloudformation template to stdout.  This is useful for generating a
 // config file to edit, then create/update the base stack.
 func stackTemplate(c *cli.Context) {
@@ -786,6 +864,17 @@ func main() {
 			Usage:       "print the cloudformation template to stdout",
 			Action:      stackTemplate,
 			Description: "stack:template <stack_name>",
+		},
+		{
+			Name:        "stack:create_pool",
+			Usage:       "create a pool stack",
+			Action:      stackCreatePool,
+			Description: "stack:create_pool",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "base", Usage: "base stack name"},
+				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
+				cli.StringFlag{Name: "ami", Usage: "ami id"},
+			},
 		},
 	}
 	app.Run(os.Args)
