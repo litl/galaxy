@@ -25,14 +25,10 @@ func registerShuttle(c *cli.Context) {
 	for _, r := range registrations {
 
 		// No service ports exposed on the host, skip it.
-		if r.ExternalAddr() == "" {
+		if r.ExternalAddr() == "" || r.Port == "" {
 			continue
 		}
 
-		// No listening port or virtual hosts configured, skip it.
-		if r.Port == "" && len(r.VirtualHosts) == 0 {
-			continue
-		}
 		service := backends[r.Name]
 		if service == nil {
 			service = &shuttle.ServiceConfig{
