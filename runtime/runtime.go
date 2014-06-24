@@ -302,7 +302,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	}
 
 	args := []string{
-		"run", "-rm", "-i",
+		"run", "--rm", "-i",
 	}
 	for key, value := range serviceConfig.Env() {
 		args = append(args, "-e")
@@ -313,7 +313,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	args = append(args, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
-	args = append(args, "-dns")
+	args = append(args, "--dns")
 	args = append(args, s.shuttleHost)
 
 	serviceConfigs, err := s.serviceRegistry.ListApps("")
