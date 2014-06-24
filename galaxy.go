@@ -348,6 +348,7 @@ func configSet(c *cli.Context) {
 		svcCfg = registry.NewServiceConfig(app, "")
 	}
 
+	updated := false
 	for _, arg := range args {
 
 		if strings.TrimSpace(arg) == "" {
@@ -361,20 +362,35 @@ func configSet(c *cli.Context) {
 
 		}
 		values := strings.Split(arg, "=")
-		svcCfg.EnvSet(strings.ToUpper(strings.TrimSpace(values[0])), strings.TrimSpace(values[1]))
+
+		k := strings.ToUpper(strings.TrimSpace(values[0]))
+		v := strings.TrimSpace(values[1])
+		if k == "ENV" || strings.HasPrefix(k, "GALAXY") {
+			log.Warnf("%s cannot be updated.", k)
+			continue
+		}
+
+		log.Printf("%s=%s\n", k, v)
+		svcCfg.EnvSet(k, v)
+		updated = true
 	}
 
-	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
+	if !updated {
+		log.Errorf("Configuration NOT changed for %s\n", app)
+		return
+	}
+
+	updated, err = serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
 		log.Printf("ERROR: Unable to set config: %s.\n", err)
 		return
 	}
 
 	if !updated {
-		log.Printf("Configuration NOT changed for %s\n", app)
+		log.Errorf("Configuration NOT changed for %s\n", app)
 		return
 	}
-	log.Printf("Configuration changed for %s\n", app)
+	log.Printf("Configuration changed for %s. v%d\n", app, svcCfg.ID())
 }
 
 func configUnset(c *cli.Context) {
@@ -392,21 +408,35 @@ func configUnset(c *cli.Context) {
 		return
 	}
 
+	updated := false
 	for _, arg := range c.Args().Tail() {
+		k := strings.ToUpper(strings.TrimSpace(arg))
+		if k == "ENV" || strings.HasPrefix(k, "GALAXY") || svcCfg.EnvGet(k) == "" {
+			log.Warnf("%s cannot be unset.", k)
+			continue
+		}
+
+		log.Printf("%s\n", k)
 		svcCfg.EnvSet(strings.ToUpper(arg), "")
+		updated = true
 	}
 
-	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
+	if !updated {
+		log.Errorf("Configuration NOT changed for %s\n", app)
+		return
+	}
+
+	updated, err = serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		log.Printf("ERROR: Unable to unset config: %s.\n", err)
+		log.Errorf("ERROR: Unable to unset config: %s.\n", err)
 		return
 	}
 
 	if !updated {
-		log.Printf("Configuration NOT changed for %s\n", app)
+		log.Errorf("Configuration NOT changed for %s\n", app)
 		return
 	}
-	log.Printf("Configuration changed for %s\n", app)
+	log.Printf("Configuration changed for %s. v%d.\n", app, svcCfg.ID())
 
 }
 
