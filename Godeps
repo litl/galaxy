@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/litl/galaxy",
-	"GoVersion": "go1.2.1",
+	"GoVersion": "go1.3",
 	"Packages": [
 		"./..."
 	],
@@ -45,8 +45,7 @@
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
-			"Comment": "0.2.1-87-ge1b8930",
-			"Rev": "e1b8930d27aaa28b18a396b65c7df63014a1a9cd"
+			"Rev": "0903e75a83a527249edcd5fb77cde2c6669d4c2e"
 		},
 		{
 			"ImportPath": "github.com/garyburd/redigo/redis",
