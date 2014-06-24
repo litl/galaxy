@@ -311,6 +311,8 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	args = append(args, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
+	args = append(args, "-dns")
+	args = append(args, s.shuttleHost)
 
 	serviceConfigs, err := s.serviceRegistry.ListApps("")
 	if err != nil {
@@ -431,6 +433,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 			Config: &docker.Config{
 				Image: img,
 				Env:   envVars,
+				Dns:   []string{s.shuttleHost},
 			},
 		})
 		if err != nil {
