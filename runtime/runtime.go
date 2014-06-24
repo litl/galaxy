@@ -259,7 +259,9 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 		ID: container.ID,
 	})
 	err = s.ensureDockerClient().StartContainer(container.ID,
-		&docker.HostConfig{})
+		&docker.HostConfig{
+			Dns: []string{s.shuttleHost},
+		})
 
 	if err != nil {
 		return container, err
@@ -433,7 +435,6 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 			Config: &docker.Config{
 				Image: img,
 				Env:   envVars,
-				Dns:   []string{s.shuttleHost},
 			},
 		})
 		if err != nil {
@@ -444,6 +445,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	log.Printf("Starting %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 	err = s.ensureDockerClient().StartContainer(container.ID,
 		&docker.HostConfig{
+			Dns:             []string{s.shuttleHost},
 			PublishAllPorts: true,
 		})
 
