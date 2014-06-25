@@ -11,12 +11,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
+	"github.com/litl/galaxy/stack"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
@@ -423,6 +425,24 @@ func configGet(c *cli.Context) {
 	}
 }
 
+// Return the path for the config directory, and create it if it doesn't exist
+func cfgDir() string {
+	homeDir := utils.HomeDir()
+	if homeDir == "" {
+		log.Fatal("ERROR: Unable to determine current home dir. Set $HOME.")
+	}
+
+	configDir := filepath.Join(homeDir, ".galaxy")
+	_, err := os.Stat(configDir)
+	if err != nil && os.IsNotExist(err) {
+		err = os.Mkdir(configDir, 0700)
+		if err != nil {
+			log.Fatal("ERROR: cannot create config directory:", err)
+		}
+	}
+	return configDir
+}
+
 func login(c *cli.Context) {
 	initRegistry(c)
 
@@ -432,18 +452,7 @@ func login(c *cli.Context) {
 		return
 	}
 
-	homeDir := utils.HomeDir()
-	if homeDir == "" {
-		log.Println("ERROR: Unable to determine current home dir. Set $HOME.")
-		return
-	}
-
-	configDir := filepath.Join(homeDir, ".galaxy")
-	_, err := os.Stat(configDir)
-	if err != nil && os.IsNotExist(err) {
-		os.Mkdir(configDir, 0700)
-	}
-
+	configDir := cfgDir()
 	config.Host = c.Args().First()
 
 	// This will exit if it fails
@@ -465,13 +474,7 @@ func login(c *cli.Context) {
 func logout(c *cli.Context) {
 	initRegistry(c)
 
-	homeDir := utils.HomeDir()
-	if homeDir == "" {
-		log.Println("ERROR: Unable to determine current home dir. Set $HOME")
-		return
-	}
-
-	configFile := filepath.Join(homeDir, ".galaxy", "galaxy.toml")
+	configFile := filepath.Join(cfgDir(), "galaxy.toml")
 
 	_, err := os.Stat(configFile)
 	if err == nil {
@@ -535,14 +538,7 @@ func runRemote() {
 }
 
 func loadConfig() {
-
-	homeDir := utils.HomeDir()
-	if homeDir == "" {
-		log.Println("ERROR: Unable to determine current home dir. Set $HOME.")
-		return
-	}
-
-	configFile := filepath.Join(homeDir, ".galaxy", "galaxy.toml")
+	configFile := filepath.Join(cfgDir(), "galaxy.toml")
 
 	_, err := os.Stat(configFile)
 	if err == nil {
@@ -607,6 +603,140 @@ func pgPsql(c *cli.Context) {
 	err = cmd.Wait()
 	if err != nil {
 		fmt.Printf("Command finished with error: %v\n", err)
+	}
+}
+
+func stackInit(c *cli.Context) {
+	stackName := c.Args().First()
+	if stackName == "" {
+		log.Fatal("stack name required")
+	}
+
+	keyPair := c.String("keypair")
+	if keyPair == "" {
+		log.Fatal("-keypair required")
+	}
+
+	var stackTmpl []byte
+	tmplLoc := c.String("template")
+
+	if tmplLoc != "" {
+		var err error
+		stackTmpl, err = ioutil.ReadFile(tmplLoc)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		stackTmpl = stack.GalaxyTemplate()
+	}
+
+	//TODO: Make this an option
+	opts := map[string]string{
+		"KeyPair": "admin-us-east",
+	}
+
+	err := stack.Create(stackName, stackTmpl, opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// manually create a pool stack
+func stackCreatePool(c *cli.Context) {
+	poolName := c.GlobalString("pool")
+	if poolName == "" {
+		log.Fatal("pool name required")
+	}
+
+	keyPair := c.String("keypair")
+	if keyPair == "" {
+		log.Fatal("keypair required")
+	}
+
+	amiID := c.String("ami")
+	if amiID == "" {
+		log.Fatal("ami required")
+	}
+
+	baseStack := c.String("base")
+	if baseStack == "" {
+		log.Fatal("base stack required")
+	}
+
+	poolEnv := c.GlobalString("env")
+	if poolEnv == "" {
+		log.Fatal("env required")
+	}
+
+	// get the resources we need from the base stack
+	resources, err := stack.GetSharedResources(baseStack)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// add all subnets
+	subnets := []string{}
+	for _, val := range resources.Subnets {
+		subnets = append(subnets, val)
+	}
+
+	// TODO: add more options
+	pool := stack.Pool{
+		Name:            poolName,
+		Env:             poolEnv,
+		DesiredCapacity: 1,
+		KeyName:         "admin-us-east",
+		InstanceType:    "m3.medium",
+		ImageID:         amiID,
+		SubnetIDs:       subnets,
+		SecurityGroups: []string{
+			resources.SecurityGroups["sshSG"],
+			resources.SecurityGroups["defaultSG"],
+		},
+	}
+
+	if poolEnv == "web" {
+		pool.ELB = true
+		pool.ELBSecurityGroups = []string{
+			resources.SecurityGroups["defaultSG"],
+			resources.SecurityGroups["webSG"],
+		}
+		pool.ELBHealthCheck = "HTTP:8080/"
+	}
+
+	poolTmpl, err := stack.CreatePoolTemplate(pool)
+
+	stackName := baseStack + poolName + poolEnv
+
+	if err := stack.Update(stackName, poolTmpl, nil); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+// Print a Cloudformation template to stdout.  This is useful for generating a
+// config file to edit, then create/update the base stack.
+func stackTemplate(c *cli.Context) {
+	stackName := c.Args().First()
+
+	if stackName == "" {
+		if _, err := os.Stdout.Write(stack.GalaxyTemplate()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	stackTmpl, err := stack.GetTemplate(stackName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := os.Stdout.Write(stackTmpl); err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -738,6 +868,33 @@ func main() {
 			Usage:       "connect to database using psql",
 			Action:      pgPsql,
 			Description: "pg:psql <app>",
+		},
+		{
+			Name:        "stack:init",
+			Usage:       "initialize the galaxy infrastructure",
+			Action:      stackInit,
+			Description: "stack:init <stack_name>",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "template", Usage: "cloudformation template"},
+				cli.StringFlag{Name: "keypair", Usage: "ssh keypair for galaxy controller"},
+			},
+		},
+		{
+			Name:        "stack:template",
+			Usage:       "print the cloudformation template to stdout",
+			Action:      stackTemplate,
+			Description: "stack:template <stack_name>",
+		},
+		{
+			Name:        "stack:create_pool",
+			Usage:       "create a pool stack",
+			Action:      stackCreatePool,
+			Description: "stack:create_pool",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "base", Usage: "base stack name"},
+				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
+				cli.StringFlag{Name: "ami", Usage: "ami id"},
+			},
 		},
 	}
 	app.Run(os.Args)
