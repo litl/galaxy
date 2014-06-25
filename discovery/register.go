@@ -21,7 +21,7 @@ func register(c *cli.Context) {
 			All: false,
 		})
 		if err != nil {
-			panic(err)
+			log.Errorf("ERROR: Could not list containers: %s", err)
 		}
 
 		outputBuffer.Log(strings.Join([]string{
