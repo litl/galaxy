@@ -70,6 +70,7 @@ type Pool struct {
 	MinSize           int
 	MaxSize           int
 	KeyName           string
+	IAMRole           string
 	InstanceType      string
 	ImageID           string
 	SubnetIDs         []string
@@ -120,7 +121,7 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 
 	asgTags := []tag{
 		tag{"Key": "Name",
-			"Value":             "asg" + poolSuffix,
+			"Value":             pool.Name + "-" + pool.Env,
 			"PropagateAtLaunch": true},
 		tag{"Key": "env",
 			"Value":             pool.Env,
@@ -147,6 +148,10 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	lcProp.Set("InstanceType", pool.InstanceType)
 	lcProp.Set("KeyName", pool.KeyName)
 	lcProp.Set("SecurityGroups", pool.SecurityGroups)
+
+	if pool.IAMRole != "" {
+		lcProp.Set("IamInstanceProfile", pool.IAMRole)
+	}
 
 	if pool.ELB {
 		asgProp.Set("LoadBalancerNames", []ref{ref{"elb" + poolSuffix}})

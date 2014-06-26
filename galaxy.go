@@ -668,6 +668,8 @@ func stackCreatePool(c *cli.Context) {
 		log.Fatal("env required")
 	}
 
+	iamRole := c.String("role")
+
 	// get the resources we need from the base stack
 	resources, err := stack.GetSharedResources(baseStack)
 	if err != nil {
@@ -688,6 +690,7 @@ func stackCreatePool(c *cli.Context) {
 		KeyName:         "admin-us-east",
 		InstanceType:    "m3.medium",
 		ImageID:         amiID,
+		IAMRole:         iamRole,
 		SubnetIDs:       subnets,
 		SecurityGroups: []string{
 			resources.SecurityGroups["sshSG"],
@@ -708,7 +711,7 @@ func stackCreatePool(c *cli.Context) {
 
 	stackName := baseStack + poolName + poolEnv
 
-	if err := stack.Update(stackName, poolTmpl, nil); err != nil {
+	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
 		log.Fatal(err)
 	}
 
@@ -894,6 +897,7 @@ func main() {
 				cli.StringFlag{Name: "base", Usage: "base stack name"},
 				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
 				cli.StringFlag{Name: "ami", Usage: "ami id"},
+				cli.StringFlag{Name: "role", Usage: "optional IAM role"},
 			},
 		},
 	}
