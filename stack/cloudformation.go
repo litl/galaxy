@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,6 +12,10 @@ import (
 	"github.com/bitly/go-simplejson"
 	"github.com/crowdmob/goamz/aws"
 )
+
+type GetTemplateResponse struct {
+	TemplateBody []byte `xml:"GetTemplateResult>TemplateBody"`
+}
 
 type CreateStackResponse struct {
 	RequestId string `xml:"ResponseMetadata>RequestId"`
@@ -341,7 +344,10 @@ func GetTemplate(name string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	return ioutil.ReadAll(resp.Body)
+	tmplResp := GetTemplateResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(&tmplResp)
+
+	return tmplResp.TemplateBody, err
 }
 
 // Create a CloudFormation stack

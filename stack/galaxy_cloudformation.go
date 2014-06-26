@@ -10,7 +10,7 @@ var cloudformation_template = []byte(`{
             "Description": "Galaxy Controller AMI",
             "Type": "String"
         },
-        "InstanceType": {
+        "ControllerInstanceType": {
             "Default": "m1.small",
             "Description": "LaunchConfig Instance Type",
             "Type": "String"
@@ -222,7 +222,7 @@ var cloudformation_template = []byte(`{
                     "Ref": "ControllerImageId"
                 },
                 "InstanceType": {
-                    "Ref": "InstanceType"
+                    "Ref": "ControllerInstanceType"
                 },
                 "KeyName": {
                     "Ref": "KeyPair"
