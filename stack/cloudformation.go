@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,6 +12,10 @@ import (
 	"github.com/bitly/go-simplejson"
 	"github.com/crowdmob/goamz/aws"
 )
+
+type GetTemplateResponse struct {
+	TemplateBody []byte `xml:"GetTemplateResult>TemplateBody"`
+}
 
 type CreateStackResponse struct {
 	RequestId string `xml:"ResponseMetadata>RequestId"`
@@ -67,6 +70,7 @@ type Pool struct {
 	MinSize           int
 	MaxSize           int
 	KeyName           string
+	IAMRole           string
 	InstanceType      string
 	ImageID           string
 	SubnetIDs         []string
@@ -117,7 +121,7 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 
 	asgTags := []tag{
 		tag{"Key": "Name",
-			"Value":             "asg" + poolSuffix,
+			"Value":             pool.Name + "-" + pool.Env,
 			"PropagateAtLaunch": true},
 		tag{"Key": "env",
 			"Value":             pool.Env,
@@ -144,6 +148,10 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	lcProp.Set("InstanceType", pool.InstanceType)
 	lcProp.Set("KeyName", pool.KeyName)
 	lcProp.Set("SecurityGroups", pool.SecurityGroups)
+
+	if pool.IAMRole != "" {
+		lcProp.Set("IamInstanceProfile", pool.IAMRole)
+	}
 
 	if pool.ELB {
 		asgProp.Set("LoadBalancerNames", []ref{ref{"elb" + poolSuffix}})
@@ -341,7 +349,10 @@ func GetTemplate(name string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	return ioutil.ReadAll(resp.Body)
+	tmplResp := GetTemplateResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(&tmplResp)
+
+	return tmplResp.TemplateBody, err
 }
 
 // Create a CloudFormation stack
