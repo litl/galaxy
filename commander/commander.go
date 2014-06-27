@@ -256,9 +256,9 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 func main() {
 	flag.Int64Var(&stopCutoff, "cutoff", 10, "Seconds to wait before stopping old containers")
 	flag.StringVar(&app, "app", "", "App to start")
-	flag.StringVar(&redisHost, "redis", utils.DefaultRedisHost, "redis host")
-	flag.StringVar(&env, "env", "", "Environment namespace")
-	flag.StringVar(&pool, "pool", "", "Pool namespace")
+	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
+	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
+	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.BoolVar(&loop, "loop", false, "Run continously")
 	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
 	flag.StringVar(&statsdHost, "statsdAddr", utils.GetEnv("GALAXY_STATSD_HOST", ""), "IP where containers can reach a statsd service. Defaults to docker0 IP:8125.")
