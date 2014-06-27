@@ -10,13 +10,17 @@
 			"Rev": "f87ce853111478914f0bcffa34d43a93643e6eda"
 		},
 		{
+			"ImportPath": "github.com/bitly/go-simplejson",
+			"Rev": "2abbab791406d7c6c4c0a3e11db0b0f9f41ef90d"
+		},
+		{
 			"ImportPath": "github.com/codegangsta/cli",
 			"Comment": "1.0.0-39-g8f0575f",
 			"Rev": "8f0575f520013467eb175a5dd30158ed816eeda9"
 		},
 		{
-			"ImportPath": "github.com/daviddengcn/go-colortext",
-			"Rev": "8386cd264821f95e9bc124a0a339560d1a899cad"
+			"ImportPath": "github.com/crowdmob/goamz/aws",
+			"Rev": "c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88"
 		},
 		{
 			"ImportPath": "github.com/dotcloud/docker/dockerversion",
@@ -42,6 +46,10 @@
 			"ImportPath": "github.com/dotcloud/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar",
 			"Comment": "v0.10.0-91-g24c4c3e",
 			"Rev": "24c4c3e0e99ddb4d65200f2f7367883e47008898"
+		},
+		{
+			"ImportPath": "github.com/fatih/color",
+			"Rev": "95b468b5f34882796c597b718955603a584a9bd4"
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
