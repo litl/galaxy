@@ -365,7 +365,7 @@ func configSet(c *cli.Context) {
 
 		k := strings.ToUpper(strings.TrimSpace(values[0]))
 		v := strings.TrimSpace(values[1])
-		if k == "ENV" || strings.HasPrefix(k, "GALAXY") {
+		if k == "ENV" {
 			log.Warnf("%s cannot be updated.", k)
 			continue
 		}
@@ -411,7 +411,7 @@ func configUnset(c *cli.Context) {
 	updated := false
 	for _, arg := range c.Args().Tail() {
 		k := strings.ToUpper(strings.TrimSpace(arg))
-		if k == "ENV" || strings.HasPrefix(k, "GALAXY") || svcCfg.EnvGet(k) == "" {
+		if k == "ENV" || svcCfg.EnvGet(k) == "" {
 			log.Warnf("%s cannot be unset.", k)
 			continue
 		}
