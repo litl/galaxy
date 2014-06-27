@@ -99,9 +99,11 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	//as well as tcp vs udp ports.
 	var externalPort, internalPort string
 	for k, v := range container.NetworkSettings.Ports {
-		externalPort = v[0].HostPort
-		internalPort = k.Port()
-		break
+		if len(v) > 0 {
+			externalPort = v[0].HostPort
+			internalPort = k.Port()
+			break
+		}
 	}
 
 	serviceRegistration := ServiceRegistration{
