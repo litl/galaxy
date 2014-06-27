@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
+
+	"github.com/litl/galaxy/log"
 )
 
 func SSHCmd(host string, command string, background bool, debug bool) {
@@ -18,7 +20,6 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 	}
 
 	cmd := exec.Command("/usr/bin/ssh",
-		//"-i", config.PrivateKey,
 		"-o", "RequestTTY=yes",
 		host,
 		"-p", port,
@@ -26,13 +27,16 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	var b []byte
+	buf := bytes.NewBuffer(b)
+	cmd.Stderr = buf
 	err := cmd.Start()
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Fprintf(os.Stderr, "Connecting to %s...\n", host)
+
 	if err := cmd.Wait(); err != nil {
+		log.Error(buf.String())
 		if exiterr, ok := err.(*exec.ExitError); ok {
 			// The program has exited with an exit code != 0
 
