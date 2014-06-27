@@ -59,6 +59,16 @@ func NewServiceRuntime(shuttleHost, statsdHost, env, pool, redisHost string) *Se
 
 }
 
+func GetEndpoint() string {
+	defaultEndpoint := "unix:///var/run/docker.sock"
+	if os.Getenv("DOCKER_HOST") != "" {
+		defaultEndpoint = os.Getenv("DOCKER_HOST")
+	}
+
+	return defaultEndpoint
+
+}
+
 func dockerBridgeIp() (string, error) {
 	dockerZero, err := net.InterfaceByName("docker0")
 	if err != nil {
@@ -79,7 +89,7 @@ func dockerBridgeIp() (string, error) {
 
 func (s *ServiceRuntime) ensureDockerClient() *docker.Client {
 	if s.dockerClient == nil {
-		endpoint := "unix:///var/run/docker.sock"
+		endpoint := GetEndpoint()
 		client, err := docker.NewClient(endpoint)
 		if err != nil {
 			panic(err)

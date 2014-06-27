@@ -38,14 +38,14 @@ var config struct {
 // ensure the registry as a redis host, but only once
 func initRegistry(c *cli.Context) {
 	serviceRegistry = registry.NewServiceRegistry(
-		c.GlobalString("env"),
-		c.GlobalString("pool"),
+		utils.GalaxyEnv(c),
+		utils.GalaxyPool(c),
 		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),
 	)
 
-	serviceRegistry.Connect(c.GlobalString("redis"))
+	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
 }
 
 // ensure the registry as a redis host, but only once
@@ -53,9 +53,9 @@ func initRuntime(c *cli.Context) {
 	serviceRuntime = runtime.NewServiceRuntime(
 		"",
 		"",
-		c.GlobalString("env"),
-		c.GlobalString("pool"),
-		c.GlobalString("redis"),
+		utils.GalaxyEnv(c),
+		utils.GalaxyPool(c),
+		utils.GalaxyRedisHost(c),
 	)
 }
 
@@ -116,8 +116,8 @@ func appList(c *cli.Context) {
 		columns = append(columns, strings.Join([]string{
 			name, strconv.FormatBool(environmentConfigured),
 			versionDeployed, strconv.Itoa(registered),
-			c.GlobalString("pool"),
-			c.GlobalString("env")}, " | "))
+			utils.GalaxyPool(c),
+			utils.GalaxyEnv(c)}, " | "))
 	}
 	output, _ := columnize.SimpleFormat(columns)
 	log.Println(output)
@@ -154,9 +154,9 @@ func appCreate(c *cli.Context) {
 		return
 	}
 	if created {
-		log.Printf("Created %s in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("Created %s in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	} else {
-		log.Printf("%s already exists in in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("%s already exists in in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	}
 }
 
@@ -175,9 +175,9 @@ func appDelete(c *cli.Context) {
 		return
 	}
 	if deleted {
-		log.Printf("Deleted %s from env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("Deleted %s from env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	} else {
-		log.Printf("%s does not exists in env %s on pool %s.\n", app, c.GlobalString("env"), c.GlobalString("pool"))
+		log.Printf("%s does not exists in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	}
 
 }
@@ -520,16 +520,16 @@ func logout(c *cli.Context) {
 func poolCreate(c *cli.Context) {
 
 	initRegistry(c)
-	created, err := serviceRegistry.CreatePool(c.GlobalString("pool"))
+	created, err := serviceRegistry.CreatePool(utils.GalaxyPool(c))
 	if err != nil {
 		log.Printf("ERROR: Could not create pool: %s\n", err)
 		return
 	}
 
 	if created {
-		log.Printf("Pool %s created\n", c.GlobalString("pool"))
+		log.Printf("Pool %s created\n", utils.GalaxyPool(c))
 	} else {
-		log.Printf("Pool %s already exists\n", c.GlobalString("pool"))
+		log.Printf("Pool %s already exists\n", utils.GalaxyPool(c))
 	}
 
 }
@@ -550,16 +550,16 @@ func poolList(c *cli.Context) {
 func poolDelete(c *cli.Context) {
 
 	initRegistry(c)
-	created, err := serviceRegistry.DeletePool(c.GlobalString("pool"))
+	created, err := serviceRegistry.DeletePool(utils.GalaxyPool(c))
 	if err != nil {
 		log.Printf("ERROR: Could not delete pool: %s\n", err)
 		return
 	}
 
 	if created {
-		log.Printf("Pool %s delete\n", c.GlobalString("pool"))
+		log.Printf("Pool %s delete\n", utils.GalaxyPool(c))
 	} else {
-		log.Printf("Pool %s has apps configured. Delete them first.\n", c.GlobalString("pool"))
+		log.Printf("Pool %s has apps configured. Delete them first.\n", utils.GalaxyPool(c))
 	}
 }
 
@@ -790,9 +790,9 @@ func main() {
 	app.Usage = "galaxy cli"
 	app.Version = buildVersion
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "redis", Value: "127.0.0.1:6379", Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
 	}
 
 	app.Commands = []cli.Command{

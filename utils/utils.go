@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"github.com/codegangsta/cli"
 
 	"os"
 )
@@ -93,4 +94,16 @@ func GetEnv(name, defaultValue string) string {
 
 func HomeDir() string {
 	return os.Getenv("HOME")
+}
+
+func GalaxyEnv(c *cli.Context) string {
+	return GetEnv("GALAXY_ENV", c.GlobalString("env"))
+}
+
+func GalaxyPool(c *cli.Context) string {
+	return GetEnv("GALAXY_POOL", c.GlobalString("pool"))
+}
+
+func GalaxyRedisHost(c *cli.Context) string {
+	return GetEnv("GALAXY_REDIS_HOST", c.GlobalString("redis"))
 }

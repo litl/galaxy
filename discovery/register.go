@@ -7,6 +7,7 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
 
@@ -31,8 +32,8 @@ func register(c *cli.Context) {
 
 		serviceConfigs, err := serviceRegistry.ListApps("")
 		if err != nil {
-			log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", c.GlobalString("env"),
-				c.GlobalString("pool"), err)
+			log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", utils.GalaxyEnv(c),
+				utils.GalaxyPool(c), err)
 		}
 
 		registered := false

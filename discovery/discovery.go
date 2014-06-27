@@ -7,6 +7,7 @@ import (
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
+	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -23,7 +24,7 @@ var (
 
 func initOrDie(c *cli.Context) {
 	var err error
-	endpoint := "unix:///var/run/docker.sock"
+	endpoint := runtime.GetEndpoint()
 	client, err = docker.NewClient(endpoint)
 
 	if err != nil {
@@ -31,14 +32,14 @@ func initOrDie(c *cli.Context) {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-		c.GlobalString("env"),
-		c.GlobalString("pool"),
+		utils.GalaxyEnv(c),
+		utils.GalaxyPool(c),
 		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),
 	)
 
-	serviceRegistry.Connect(c.GlobalString("redis"))
+	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
 
 	outputBuffer = &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer

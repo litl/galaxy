@@ -29,8 +29,8 @@ func status(c *cli.Context) {
 
 	serviceConfigs, err := serviceRegistry.ListApps("")
 	if err != nil {
-		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", c.GlobalString("env"),
-			c.GlobalString("pool"), err)
+		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", utils.GalaxyEnv(c),
+			utils.GalaxyPool(c), err)
 	}
 
 	for _, serviceConfig := range serviceConfigs {
