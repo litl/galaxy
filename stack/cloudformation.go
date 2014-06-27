@@ -259,6 +259,21 @@ func DescribeStacks() (DescribeStacksResponse, error) {
 	return descResp, nil
 }
 
+func Exists(name string) (bool, error) {
+	resp, err := DescribeStacks()
+	if err != nil {
+		return false, err
+	}
+
+	for _, stack := range resp.Stacks {
+		if stack.Name == name {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // Wait for a stack creation to complete.
 // Poll every 5s while the stack is in the CREATE_IN_PROGRESS state, and
 // return nil when it enters CREATE_COMPLETE, or and error if it enters
@@ -281,7 +296,6 @@ func Wait(name string, timeout time.Duration) error {
 				case "CREATE_IN_PROGRESS", "UPDATE_IN_PROGRESS":
 					goto SLEEP
 				case "CREATE_COMPLETE":
-					log.Println("CREATE_COMPLETE")
 					return nil
 				default:
 					return fmt.Errorf("%s:%s", stack.Status, stack.StatusReason)
@@ -294,7 +308,6 @@ func Wait(name string, timeout time.Duration) error {
 			return fmt.Errorf("timeout")
 		}
 
-		log.Println("waiting...")
 		time.Sleep(5 * time.Second)
 	}
 
