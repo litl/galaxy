@@ -790,9 +790,9 @@ func main() {
 	app.Usage = "galaxy cli"
 	app.Version = buildVersion
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "redis", Value: "127.0.0.1:6379", Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: "dev", Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: "web", Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "redis", Value: utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: utils.DefaultEnv, Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: utils.DefaultPool, Usage: "pool (web, worker, etc.)"},
 	}
 
 	app.Commands = []cli.Command{

@@ -212,8 +212,8 @@ func statusHandler(h http.Handler) http.Handler {
 func main() {
 
 	flag.StringVar(&listenAddr, "http", "127.0.0.1:8080", "http server address")
-	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
-	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
+	flag.StringVar(&env, "env", "", "Environment namespace")
+	flag.StringVar(&redisHost, "redis", utils.DefaultRedisHost, "redis host")
 	flag.BoolVar(&version, "v", false, "display version info")
 
 	flag.Parse()
