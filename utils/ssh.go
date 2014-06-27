@@ -22,7 +22,7 @@ func SSHCmd(host string, command string, background bool, debug bool) {
 		"-o", "RequestTTY=yes",
 		host,
 		"-p", port,
-		"-C", "/bin/bash", "-i", "-l", "-c", "'source .bashrc && "+command+"'")
+		"-C", "/bin/sh", "-i", "-l", "-c", "'"+command+"'")
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
