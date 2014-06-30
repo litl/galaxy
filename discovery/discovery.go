@@ -7,6 +7,7 @@ import (
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
+	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -23,7 +24,7 @@ var (
 
 func initOrDie(c *cli.Context) {
 	var err error
-	endpoint := "unix:///var/run/docker.sock"
+	endpoint := runtime.GetEndpoint()
 	client, err = docker.NewClient(endpoint)
 
 	if err != nil {
@@ -31,14 +32,14 @@ func initOrDie(c *cli.Context) {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-		c.GlobalString("env"),
-		c.GlobalString("pool"),
+		utils.GalaxyEnv(c),
+		utils.GalaxyPool(c),
 		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),
 	)
 
-	serviceRegistry.Connect(c.GlobalString("redis"))
+	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
 
 	outputBuffer = &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer
@@ -56,9 +57,9 @@ func main() {
 	app.Usage = "discovery service registration"
 	app.Version = buildVersion
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "redis", Value: utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: utils.GetEnv("GALAXY_ENV", "dev"), Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: utils.GetEnv("GALAXY_POOL", "web"), Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "redis", Value: utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "env", Value: "", Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: "", Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
 		cli.StringFlag{Name: "sshAddr", Value: "127.0.0.1:22", Usage: "hosts external ssh IP:port"},
 		cli.StringFlag{Name: "shuttleAddr", Value: "127.0.0.1:9090", Usage: "shuttle http address"},

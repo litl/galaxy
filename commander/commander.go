@@ -130,7 +130,6 @@ func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
 }
 
 func restartContainers(app string, cmdChan chan string) {
-	wg.Add(1)
 	defer wg.Done()
 	logOnce := true
 
@@ -144,16 +143,27 @@ func restartContainers(app string, cmdChan chan string) {
 			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				if !loop {
+					return
+				}
+
 				continue
 			}
 
 			if serviceConfig.Version() == "" {
+				if !loop {
+					return
+				}
 				continue
 			}
 
 			if cmd == "deploy" {
 				_, err = pullImage(serviceConfig)
 				if err != nil {
+					if !loop {
+						return
+					}
+
 					// if we can't pull the image, leave whatever is running alone
 					continue
 				}
@@ -165,6 +175,10 @@ func restartContainers(app string, cmdChan chan string) {
 				if err != nil {
 					log.Errorf("ERROR: Could not stop %s: %s\n",
 						serviceConfig.Version(), err)
+					if !loop {
+						return
+					}
+
 					continue
 				}
 			}
@@ -256,7 +270,7 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 func main() {
 	flag.Int64Var(&stopCutoff, "cutoff", 10, "Seconds to wait before stopping old containers")
 	flag.StringVar(&app, "app", "", "App to start")
-	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", "127.0.0.1:6379"), "redis host")
+	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.BoolVar(&loop, "loop", false, "Run continously")
@@ -292,6 +306,7 @@ func main() {
 	serviceRegistry.CreatePool(pool)
 
 	for app, ch := range workerChans {
+		wg.Add(1)
 		go restartContainers(app, ch)
 		ch <- "deploy"
 	}
@@ -303,5 +318,6 @@ func main() {
 		restartChan := serviceRegistry.Watch(cancelChan)
 		monitorService(restartChan)
 	}
+
 	wg.Wait()
 }

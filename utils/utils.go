@@ -4,8 +4,15 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"github.com/codegangsta/cli"
 
 	"os"
+)
+
+const (
+	DefaultRedisHost = "127.0.0.1:6379"
+	DefaultEnv       = "dev"
+	DefaultPool      = "web"
 )
 
 type OutputBuffer struct {
@@ -93,4 +100,25 @@ func GetEnv(name, defaultValue string) string {
 
 func HomeDir() string {
 	return os.Getenv("HOME")
+}
+
+func GalaxyEnv(c *cli.Context) string {
+	if c.GlobalString("env") != DefaultEnv {
+		return c.GlobalString("env")
+	}
+	return GetEnv("GALAXY_ENV", c.GlobalString("env"))
+}
+
+func GalaxyPool(c *cli.Context) string {
+	if c.GlobalString("pool") != DefaultPool {
+		return c.GlobalString("pool")
+	}
+	return GetEnv("GALAXY_POOL", c.GlobalString("pool"))
+}
+
+func GalaxyRedisHost(c *cli.Context) string {
+	if c.GlobalString("redis") != DefaultRedisHost {
+		return c.GlobalString("redis")
+	}
+	return GetEnv("GALAXY_REDIS_HOST", c.GlobalString("redis"))
 }
