@@ -680,9 +680,6 @@ func stackCreatePool(c *cli.Context) {
 	}
 
 	keyPair := c.String("keypair")
-	if keyPair == "" {
-		log.Fatal("keypair required")
-	}
 
 	amiID := c.String("ami")
 	if amiID == "" {
@@ -708,6 +705,14 @@ func stackCreatePool(c *cli.Context) {
 	resources, err := stack.GetSharedResources(baseStack)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if keyPair == "" {
+		keyPair = resources.Parameters["KeyPair"]
+	}
+
+	if keyPair == "" {
+		log.Fatal("KeyPair required")
 	}
 
 	// add all subnets

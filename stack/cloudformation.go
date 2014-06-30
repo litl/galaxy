@@ -31,11 +31,17 @@ type DeleteStackResponse struct {
 	RequestId string `xml:"ResponseMetadata>RequestId"`
 }
 
+type stackParameter struct {
+	Key   string `xml:"ParameterKey"`
+	Value string `xml:"ParameterValue"`
+}
+
 type stackDescription struct {
-	Id           string `xml:"StackId"`
-	Name         string `xml:"StackName"`
-	Status       string `xml:"StackStatus"`
-	StatusReason string `xml:"StackStatusReason"`
+	Id           string           `xml:"StackId"`
+	Name         string           `xml:"StackName"`
+	Status       string           `xml:"StackStatus"`
+	StatusReason string           `xml:"StackStatusReason"`
+	Parameters   []stackParameter `xml:"Parameters>member"`
 }
 
 type DescribeStacksResponse struct {
@@ -55,11 +61,13 @@ type ListStackResourcesResponse struct {
 	Resources []stackResource `xml:"ListStackResourcesResult>StackResourceSummaries>member"`
 }
 
-// Resources from the base stack that need to be referenced from other stacks
+// Resources from the base stack that may need to be referenced from other
+// stacks
 type SharedResources struct {
 	Subnets        map[string]string
 	SecurityGroups map[string]string
 	Roles          map[string]string
+	Parameters     map[string]string
 }
 
 // Options needed to build a CloudFormation pool template.
@@ -330,6 +338,23 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 	shared.SecurityGroups = make(map[string]string)
 	shared.Subnets = make(map[string]string)
 	shared.Roles = make(map[string]string)
+	shared.Parameters = make(map[string]string)
+
+	// we need to use DescribeStacks to get any parameters that were used in
+	// the base stack, such as KeyPair
+	descResp, err := DescribeStacks()
+	if err != nil {
+		return shared, err
+	}
+
+	// load all parameters from the base stack into the shared values
+	for _, stack := range descResp.Stacks {
+		if stack.Name == stackName {
+			for _, param := range stack.Parameters {
+				shared.Parameters[param.Key] = param.Value
+			}
+		}
+	}
 
 	for _, resource := range res.Resources {
 		switch resource.Type {
