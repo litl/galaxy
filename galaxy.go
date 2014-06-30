@@ -732,7 +732,7 @@ func stackCreatePool(c *cli.Context) {
 		},
 	}
 
-	if poolEnv == "web" {
+	if strings.HasPrefix(poolName, "web") {
 		pool.ELB = true
 		pool.ELBSecurityGroups = []string{
 			resources.SecurityGroups["webSG"],
