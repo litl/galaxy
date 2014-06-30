@@ -203,6 +203,17 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::EC2::SecurityGroupIngress"
         },
+        "galaxyInstanceProfile": {
+            "Properties": {
+                "Path": "/",
+                "Roles": [
+                    {
+                        "Ref": "galaxyRootRole"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::InstanceProfile"
+        },
         "galaxyLaunchConfig": {
             "Properties": {
                 "AssociatePublicIpAddress": true,
@@ -218,6 +229,9 @@ var cloudformation_template = []byte(`{
                         }
                     }
                 ],
+                "IamInstanceProfile": {
+                    "Ref": "galaxyInstanceProfile"
+                },
                 "ImageId": {
                     "Ref": "ControllerImageId"
                 },
@@ -237,6 +251,43 @@ var cloudformation_template = []byte(`{
                 ]
             },
             "Type": "AWS::AutoScaling::LaunchConfiguration"
+        },
+        "galaxyRootRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "NotAction": "iam:*",
+                                    "Resource": "*"
+                                }
+                            ],
+                            "Version": "2012-10-17"
+                        },
+                        "PolicyName": "root"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::Role"
         },
         "galaxyRoute": {
             "DependsOn": "galaxyGatewayAttachment",

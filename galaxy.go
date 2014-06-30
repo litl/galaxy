@@ -15,6 +15,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
+	"github.com/crowdmob/goamz/aws"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -698,7 +699,10 @@ func stackCreatePool(c *cli.Context) {
 		log.Fatal("env required")
 	}
 
-	iamRole := c.String("role")
+	instanceType := c.String("instance-type")
+	if instanceType == "" {
+		instanceType = "m1.small"
+	}
 
 	// get the resources we need from the base stack
 	resources, err := stack.GetSharedResources(baseStack)
@@ -717,10 +721,10 @@ func stackCreatePool(c *cli.Context) {
 		Name:            poolName,
 		Env:             poolEnv,
 		DesiredCapacity: 1,
-		KeyName:         "admin-us-east",
-		InstanceType:    "m3.medium",
+		KeyName:         keyPair,
+		InstanceType:    instanceType,
 		ImageID:         amiID,
-		IAMRole:         iamRole,
+		IAMRole:         resources.Roles["galaxyInstanceProfile"],
 		SubnetIDs:       subnets,
 		SecurityGroups: []string{
 			resources.SecurityGroups["sshSG"],
@@ -731,20 +735,21 @@ func stackCreatePool(c *cli.Context) {
 	if poolEnv == "web" {
 		pool.ELB = true
 		pool.ELBSecurityGroups = []string{
-			resources.SecurityGroups["defaultSG"],
 			resources.SecurityGroups["webSG"],
+			resources.SecurityGroups["defaultSG"],
 		}
 		pool.ELBHealthCheck = "HTTP:8080/"
 	}
 
 	poolTmpl, err := stack.CreatePoolTemplate(pool)
 
-	stackName := baseStack + poolName + poolEnv
+	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolName, poolEnv)
 
 	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
 		log.Fatal(err)
 	}
 
+	// do we want to wait on this by default?
 	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
 		log.Fatal(err)
 	}
@@ -765,6 +770,11 @@ func stackTemplate(c *cli.Context) {
 
 	stackTmpl, err := stack.GetTemplate(stackName)
 	if err != nil {
+		if err, ok := err.(*aws.Error); ok {
+			if err.Code == "ValidationError" && strings.Contains(err.Message, "does not exist") {
+				log.Fatalf("Stack '%s' does not exist", stackName)
+			}
+		}
 		log.Fatal(err)
 	}
 
@@ -910,6 +920,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "template", Usage: "cloudformation template"},
 				cli.StringFlag{Name: "keypair", Usage: "ssh keypair for galaxy controller"},
+				cli.StringFlag{Name: "ami", Usage: "ami id"},
 			},
 		},
 		{
@@ -927,7 +938,7 @@ func main() {
 				cli.StringFlag{Name: "base", Usage: "base stack name"},
 				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
 				cli.StringFlag{Name: "ami", Usage: "ami id"},
-				cli.StringFlag{Name: "role", Usage: "optional IAM role"},
+				cli.StringFlag{Name: "instance-type", Usage: "optional instance type"},
 			},
 		},
 	}
