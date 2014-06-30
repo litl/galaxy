@@ -673,7 +673,7 @@ func stackInit(c *cli.Context) {
 }
 
 // manually create a pool stack
-func stackCreatePool(c *cli.Context) {
+func stackPool(c *cli.Context, create bool) {
 	poolName := c.GlobalString("pool")
 	if poolName == "" {
 		log.Fatal("pool name required")
@@ -746,10 +746,22 @@ func stackCreatePool(c *cli.Context) {
 		pool.ELBHealthCheck = "HTTP:8080/"
 	}
 
-	poolTmpl, err := stack.CreatePoolTemplate(pool)
-
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolName, poolEnv)
 
+	poolTmpl, err := stack.CreatePoolTemplate(pool)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	switch create {
+	case true:
+		createPool(poolTmpl, stackName)
+	case false:
+		updatePool(poolTmpl, stackName)
+	}
+}
+
+func createPool(poolTmpl []byte, stackName string) {
 	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
 		log.Fatal(err)
 	}
@@ -759,6 +771,26 @@ func stackCreatePool(c *cli.Context) {
 		log.Fatal(err)
 	}
 
+}
+
+func updatePool(poolTmpl []byte, stackName string) {
+	if err := stack.Update(stackName, poolTmpl, nil); err != nil {
+		log.Fatal(err)
+	}
+
+	// do we want to wait on this by default?
+	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func stackCreatePool(c *cli.Context) {
+	stackPool(c, true)
+}
+
+func stackUpdatePool(c *cli.Context) {
+	stackPool(c, false)
 }
 
 // Print a Cloudformation template to stdout.  This is useful for generating a
@@ -939,6 +971,18 @@ func main() {
 			Usage:       "create a pool stack",
 			Action:      stackCreatePool,
 			Description: "stack:create_pool",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "base", Usage: "base stack name"},
+				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
+				cli.StringFlag{Name: "ami", Usage: "ami id"},
+				cli.StringFlag{Name: "instance-type", Usage: "optional instance type"},
+			},
+		},
+		{
+			Name:        "stack:update_pool",
+			Usage:       "update a pool stack",
+			Action:      stackUpdatePool,
+			Description: "stack:update_pool",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "base", Usage: "base stack name"},
 				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},

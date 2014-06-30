@@ -304,7 +304,7 @@ func Wait(name string, timeout time.Duration) error {
 				switch stack.Status {
 				case "CREATE_IN_PROGRESS", "UPDATE_IN_PROGRESS":
 					goto SLEEP
-				case "CREATE_COMPLETE":
+				case "CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS":
 					return nil
 				default:
 					return fmt.Errorf("%s:%s", stack.Status, stack.StatusReason)
