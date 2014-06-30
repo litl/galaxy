@@ -59,6 +59,7 @@ type ListStackResourcesResponse struct {
 type SharedResources struct {
 	Subnets        map[string]string
 	SecurityGroups map[string]string
+	Roles          map[string]string
 }
 
 // Options needed to build a CloudFormation pool template.
@@ -314,10 +315,11 @@ func Wait(name string, timeout time.Duration) error {
 }
 
 // Return the SharedResources from our base stack that are needed for pool
-// stacks. We currently just the IDs for subnets and security groups,
-// since they cannot be referenced by name in a VPC.
-// This could be cached to disk so that we don't need to lookup the base stack
-// to build a pool template.
+// stacks. We need the IDs for subnets and security groups, since they cannot
+// be referenced by name in a VPC. We also lookup the IAM instance profile
+// created by the base stack for use in pool's launch configs.  This could be
+// cached to disk so that we don't need to lookup the base stack to build a
+// pool template.
 func GetSharedResources(stackName string) (SharedResources, error) {
 	shared := SharedResources{}
 	res, err := ListStackResources(stackName)
@@ -327,6 +329,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 
 	shared.SecurityGroups = make(map[string]string)
 	shared.Subnets = make(map[string]string)
+	shared.Roles = make(map[string]string)
 
 	for _, resource := range res.Resources {
 		switch resource.Type {
@@ -334,6 +337,8 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 			shared.SecurityGroups[resource.LogicalId] = resource.PhysicalId
 		case "AWS::EC2::Subnet":
 			shared.Subnets[resource.LogicalId] = resource.PhysicalId
+		case "AWS::IAM::InstanceProfile":
+			shared.Roles[resource.LogicalId] = resource.PhysicalId
 		}
 	}
 

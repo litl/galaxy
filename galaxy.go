@@ -669,8 +669,6 @@ func stackCreatePool(c *cli.Context) {
 		log.Fatal("env required")
 	}
 
-	iamRole := c.String("role")
-
 	instanceType := c.String("instance-type")
 	if instanceType == "" {
 		instanceType = "m1.small"
@@ -696,7 +694,7 @@ func stackCreatePool(c *cli.Context) {
 		KeyName:         keyPair,
 		InstanceType:    instanceType,
 		ImageID:         amiID,
-		IAMRole:         iamRole,
+		IAMRole:         resources.Roles["galaxyInstanceProfile"],
 		SubnetIDs:       subnets,
 		SecurityGroups: []string{
 			resources.SecurityGroups["sshSG"],
@@ -910,7 +908,6 @@ func main() {
 				cli.StringFlag{Name: "base", Usage: "base stack name"},
 				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
 				cli.StringFlag{Name: "ami", Usage: "ami id"},
-				cli.StringFlag{Name: "role", Usage: "optional IAM role"},
 				cli.StringFlag{Name: "instance-type", Usage: "optional instance type"},
 			},
 		},
