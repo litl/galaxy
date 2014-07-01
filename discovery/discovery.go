@@ -28,7 +28,15 @@ func initOrDie(c *cli.Context) {
 	client, err = docker.NewClient(endpoint)
 
 	if err != nil {
-		panic(err)
+		log.Fatalf("ERROR: %s", err)
+	}
+
+	if utils.GalaxyEnv(c) == "" {
+		log.Fatalln("ERROR: env not set.  Set GALAXY_ENV or pass -env.")
+	}
+
+	if utils.GalaxyPool(c) == "" {
+		log.Fatalln("ERROR: pool not set.  Set GALAXY_POOL or pass -pool.")
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
