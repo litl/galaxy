@@ -28,7 +28,15 @@ func initOrDie(c *cli.Context) {
 	client, err = docker.NewClient(endpoint)
 
 	if err != nil {
-		panic(err)
+		log.Fatalf("ERROR: %s", err)
+	}
+
+	if utils.GalaxyEnv(c) == "" {
+		log.Fatalln("ERROR: env not set.  Set GALAXY_ENV or pass -env.")
+	}
+
+	if utils.GalaxyPool(c) == "" {
+		log.Fatalln("ERROR: pool not set.  Set GALAXY_POOL or pass -pool.")
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
@@ -58,8 +66,8 @@ func main() {
 	app.Version = buildVersion
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "redis", Value: utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: "", Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: "", Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "env", Value: utils.DefaultEnv, Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: utils.DefaultPool, Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
 		cli.StringFlag{Name: "sshAddr", Value: "127.0.0.1:22", Usage: "hosts external ssh IP:port"},
 		cli.StringFlag{Name: "shuttleAddr", Value: "127.0.0.1:9090", Usage: "shuttle http address"},

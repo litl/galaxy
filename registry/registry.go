@@ -293,6 +293,7 @@ func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		appList = append(appList, *cfg)
 	}
 
