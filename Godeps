@@ -77,8 +77,8 @@
 		},
 		{
 			"ImportPath": "github.com/mailgun/vulcan",
-			"Comment": "v0.1-156-gc643c1c",
-			"Rev": "c643c1ce79593884def4018760fad367e361e33b"
+			"Comment": "v0.1-164-g4e769f1",
+			"Rev": "4e769f1ab976be8ae28f5e1b7ec754091fbb3a07"
 		},
 		{
 			"ImportPath": "github.com/ryanuber/columnize",
