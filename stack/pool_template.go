@@ -73,13 +73,9 @@ var pool_template = []byte(`
 				"AssociatePublicIpAddress": true,
 				"BlockDeviceMappings": [
 					{
-						"DeviceName": "/dev/sdb",
-						"VirtualName": "ephemeral0"
-					},
-					{
 						"DeviceName": "/dev/sda1",
 						"Ebs": {
-							"VolumeSize": 250
+							"VolumeSize": 8
 						}
 					}
 				],
