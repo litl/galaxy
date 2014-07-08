@@ -87,14 +87,19 @@ type Pool struct {
 	ELB               bool
 	ELBHealthCheck    string
 	ELBSecurityGroups []string
+	VolumeSize        int
 }
-
-// helper bits for creating pool templates
-type tag map[string]interface{}
-type ref struct{ Ref string }
 
 // Create a CloudFormation template for a our pool stack
 func CreatePoolTemplate(pool Pool) ([]byte, error) {
+	// helper bits for creating pool templates
+	type tag map[string]interface{}
+	type ref struct{ Ref string }
+	type blockDev struct {
+		DeviceName string
+		Ebs        map[string]int
+	}
+
 	// check for missing required fields
 	switch "" {
 	case pool.Name, pool.Env, pool.KeyName, pool.InstanceType, pool.ImageID:
@@ -157,6 +162,16 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	lcProp.Set("InstanceType", pool.InstanceType)
 	lcProp.Set("KeyName", pool.KeyName)
 	lcProp.Set("SecurityGroups", pool.SecurityGroups)
+
+	// Set the volue size for /dev/sda1 (the root volume)
+	if pool.VolumeSize > 0 {
+		lcProp.Set("BlockDeviceMappings", []blockDev{
+			blockDev{
+				DeviceName: "/dev/sda1",
+				Ebs:        map[string]int{"VolumeSize": 12},
+			},
+		})
+	}
 
 	if pool.IAMRole != "" {
 		lcProp.Set("IamInstanceProfile", pool.IAMRole)

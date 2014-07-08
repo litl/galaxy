@@ -735,6 +735,7 @@ func stackPool(c *cli.Context, create bool) {
 			resources.SecurityGroups["sshSG"],
 			resources.SecurityGroups["defaultSG"],
 		},
+		VolumeSize: 250,
 	}
 
 	if strings.HasPrefix(poolName, "web") {
@@ -770,7 +771,7 @@ func createPool(poolTmpl []byte, stackName string) {
 	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
 		log.Fatal(err)
 	}
-
+	log.Println("CreateStack complete")
 }
 
 func updatePool(poolTmpl []byte, stackName string) {
@@ -783,6 +784,7 @@ func updatePool(poolTmpl []byte, stackName string) {
 		log.Fatal(err)
 	}
 
+	log.Println("UpdateStack complete")
 }
 
 func stackCreatePool(c *cli.Context) {
