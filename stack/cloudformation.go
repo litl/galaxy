@@ -128,7 +128,7 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	elb := tmpRes.Get("elb_")
 	lc := tmpRes.Get("lc_")
 
-	poolSuffix := pool.Name + pool.Env
+	poolSuffix := pool.Name + "-" + pool.Env
 
 	// this is the Resource object we'll insert back into the template
 	poolRes := simplejson.New()
@@ -178,18 +178,18 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	}
 
 	if pool.ELB {
-		asgProp.Set("LoadBalancerNames", []ref{ref{"elb" + poolSuffix}})
+		asgProp.Set("LoadBalancerNames", []ref{ref{"elb-" + poolSuffix}})
 
 		elbProp := elb.Get("Properties")
 		elbProp.Get("HealthCheck").Set("Target", pool.ELBHealthCheck)
 		elbProp.Set("SecurityGroups", pool.ELBSecurityGroups)
 		elbProp.Set("Subnets", pool.SubnetIDs)
 
-		poolRes.Set("elb"+poolSuffix, elb)
+		poolRes.Set("elb-"+poolSuffix, elb)
 	}
 
-	poolRes.Set("asg"+poolSuffix, asg)
-	poolRes.Set("lc"+poolSuffix, lc)
+	poolRes.Set("asg-"+poolSuffix, asg)
+	poolRes.Set("lc-"+poolSuffix, lc)
 
 	poolTmpl.Set("Resources", poolRes)
 
