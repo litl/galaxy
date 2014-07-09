@@ -739,16 +739,30 @@ func stackPool(c *cli.Context, create bool) {
 		BaseStackName: baseStack,
 	}
 
-	if strings.HasPrefix(poolName, "web") {
-		pool.ELB = true
-		pool.ELBSecurityGroups = []string{
-			resources.SecurityGroups["webSG"],
-			resources.SecurityGroups["defaultSG"],
+	if strings.Contains(poolName, "web") {
+		elb := stack.PoolELB{
+			Name: poolEnv + poolName,
+
+			SecurityGroups: []string{
+				resources.SecurityGroups["webSG"],
+				resources.SecurityGroups["defaultSG"],
+			},
+			HealthCheck: "HTTP:8080/",
 		}
-		pool.ELBHealthCheck = "HTTP:8080/"
+
+		// TODO: how do we add https?
+		listener := stack.PoolELBListener{
+			LoadBalancerPort: 80,
+			Protocol:         "HTTP",
+			InstancePort:     8080,
+			InstanceProtocol: "HTTP",
+		}
+
+		elb.Listeners = append(elb.Listeners, listener)
+		pool.ELBs = append(pool.ELBs, elb)
 	}
 
-	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolName, poolEnv)
+	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
 
 	poolTmpl, err := stack.CreatePoolTemplate(pool)
 	if err != nil {
