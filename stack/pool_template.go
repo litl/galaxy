@@ -12,6 +12,7 @@ Resources.asg_
          .elb_.Properties.HealthCheck.Target
 		 .elb_.Properties.SecurityGroups = [webSG, defaultSG]
 		 .elb_.Properties.Subnets [SubnetIds,]
+		 .elb_.Propertied.Listeners
 
 		 .lc_
          .lc_.Properties.ImageId

@@ -73,21 +73,36 @@ type SharedResources struct {
 // Options needed to build a CloudFormation pool template.
 // Each pool will have its own stack, that can quickly updated or removed.
 type Pool struct {
-	Name              string
-	Env               string
-	DesiredCapacity   int
-	MinSize           int
-	MaxSize           int
-	KeyName           string
-	IAMRole           string
-	InstanceType      string
-	ImageID           string
-	SubnetIDs         []string
-	SecurityGroups    []string
-	ELB               bool
-	ELBHealthCheck    string
-	ELBSecurityGroups []string
-	VolumeSize        int
+	Name            string
+	Env             string
+	DesiredCapacity int
+	MinSize         int
+	MaxSize         int
+	KeyName         string
+	IAMRole         string
+	InstanceType    string
+	ImageID         string
+	SubnetIDs       []string
+	SecurityGroups  []string
+	VolumeSize      int
+	BaseStackName   string
+	ELBs            []PoolELB
+}
+
+type PoolELB struct {
+	Name           string
+	Listeners      []PoolELBListener
+	SecurityGroups []string
+	HealthCheck    string
+}
+
+type PoolELBListener struct {
+	LoadBalancerPort int `json:",string"`
+	Protocol         string
+	InstancePort     int `json:",string"`
+	InstanceProtocol string
+	PolicyNames      []string `json:",omitempty"`
+	SSLCertificateId string   `json:",omitempty"`
 }
 
 // Create a CloudFormation template for a our pool stack
@@ -106,13 +121,13 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 		return nil, fmt.Errorf("incomplete pool definition")
 	}
 
+	if pool.BaseStackName == "" {
+		pool.BaseStackName = "galaxy"
+	}
+
 	switch 0 {
 	case len(pool.SubnetIDs), len(pool.SecurityGroups), pool.DesiredCapacity:
 		return nil, fmt.Errorf("incomplete pool definition")
-	}
-
-	if pool.ELB && len(pool.ELBHealthCheck) == 0 {
-		return nil, fmt.Errorf("health check target required")
 	}
 
 	poolTmpl, err := simplejson.NewJson(pool_template)
@@ -128,17 +143,20 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	elb := tmpRes.Get("elb_")
 	lc := tmpRes.Get("lc_")
 
-	poolSuffix := pool.Name + pool.Env
+	poolSuffix := pool.Env + pool.Name
 
 	// this is the Resource object we'll insert back into the template
 	poolRes := simplejson.New()
 
 	asgTags := []tag{
 		tag{"Key": "Name",
-			"Value":             pool.Name + "-" + pool.Env,
+			"Value":             fmt.Sprintf("%s-%s-%s", pool.BaseStackName, pool.Env, pool.Name),
 			"PropagateAtLaunch": true},
 		tag{"Key": "env",
 			"Value":             pool.Env,
+			"PropagateAtLaunch": true},
+		tag{"Key": "pool",
+			"Value":             pool.Name,
 			"PropagateAtLaunch": true},
 		tag{"Key": "source",
 			"Value":             "galaxy",
@@ -177,15 +195,22 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 		lcProp.Set("IamInstanceProfile", pool.IAMRole)
 	}
 
-	if pool.ELB {
-		asgProp.Set("LoadBalancerNames", []ref{ref{"elb" + poolSuffix}})
+	if len(pool.ELBs) > 0 {
+		for _, e := range pool.ELBs {
+			if e.Listeners == nil {
+				return nil, fmt.Errorf("ELB %s has no listeners", e.Name)
+			}
 
-		elbProp := elb.Get("Properties")
-		elbProp.Get("HealthCheck").Set("Target", pool.ELBHealthCheck)
-		elbProp.Set("SecurityGroups", pool.ELBSecurityGroups)
-		elbProp.Set("Subnets", pool.SubnetIDs)
+			asgProp.Set("LoadBalancerNames", []ref{ref{"elb" + e.Name}})
 
-		poolRes.Set("elb"+poolSuffix, elb)
+			elbProp := elb.Get("Properties")
+			elbProp.Get("HealthCheck").Set("Target", e.HealthCheck)
+			elbProp.Set("SecurityGroups", e.SecurityGroups)
+			elbProp.Set("Subnets", pool.SubnetIDs)
+			elbProp.Set("Listeners", e.Listeners)
+
+			poolRes.Set("elb"+e.Name, elb)
+		}
 	}
 
 	poolRes.Set("asg"+poolSuffix, asg)
