@@ -88,6 +88,7 @@ type Pool struct {
 	ELBHealthCheck    string
 	ELBSecurityGroups []string
 	VolumeSize        int
+	BaseStackName     string
 }
 
 // Create a CloudFormation template for a our pool stack
@@ -104,6 +105,10 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	switch "" {
 	case pool.Name, pool.Env, pool.KeyName, pool.InstanceType, pool.ImageID:
 		return nil, fmt.Errorf("incomplete pool definition")
+	}
+
+	if pool.BaseStackName == "" {
+		pool.BaseStackName = "galaxy"
 	}
 
 	switch 0 {
@@ -128,14 +133,14 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	elb := tmpRes.Get("elb_")
 	lc := tmpRes.Get("lc_")
 
-	poolSuffix := pool.Name + pool.Env
+	poolSuffix := pool.Env + pool.Name
 
 	// this is the Resource object we'll insert back into the template
 	poolRes := simplejson.New()
 
 	asgTags := []tag{
 		tag{"Key": "Name",
-			"Value":             pool.Name + "-" + pool.Env,
+			"Value":             fmt.Sprintf("%s-%s-%s", pool.BaseStackName, pool.Env, pool.Name),
 			"PropagateAtLaunch": true},
 		tag{"Key": "env",
 			"Value":             pool.Env,

@@ -735,7 +735,8 @@ func stackPool(c *cli.Context, create bool) {
 			resources.SecurityGroups["sshSG"],
 			resources.SecurityGroups["defaultSG"],
 		},
-		VolumeSize: 250,
+		VolumeSize:    250,
+		BaseStackName: baseStack,
 	}
 
 	if strings.HasPrefix(poolName, "web") {
@@ -959,7 +960,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "template", Usage: "cloudformation template"},
 				cli.StringFlag{Name: "keypair", Usage: "ssh keypair for galaxy controller"},
-				cli.StringFlag{Name: "ami", Usage: "ami id"},
+				cli.StringFlag{Name: "ami", Usage: "controller ami id"},
 			},
 		},
 		{
