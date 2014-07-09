@@ -104,21 +104,21 @@ func HomeDir() string {
 
 func GalaxyEnv(c *cli.Context) string {
 	if c.GlobalString("env") != DefaultEnv {
-		return c.GlobalString("env")
+		return strings.TrimSpace(c.GlobalString("env"))
 	}
-	return GetEnv("GALAXY_ENV", c.GlobalString("env"))
+	return strings.TrimSpace(GetEnv("GALAXY_ENV", c.GlobalString("env")))
 }
 
 func GalaxyPool(c *cli.Context) string {
 	if c.GlobalString("pool") != DefaultPool {
-		return c.GlobalString("pool")
+		return strings.TrimSpace(c.GlobalString("pool"))
 	}
-	return GetEnv("GALAXY_POOL", c.GlobalString("pool"))
+	return strings.TrimSpace(GetEnv("GALAXY_POOL", c.GlobalString("pool")))
 }
 
 func GalaxyRedisHost(c *cli.Context) string {
 	if c.GlobalString("redis") != DefaultRedisHost {
-		return c.GlobalString("redis")
+		return strings.TrimSpace(c.GlobalString("redis"))
 	}
-	return GetEnv("GALAXY_REDIS_HOST", c.GlobalString("redis"))
+	return strings.TrimSpace(GetEnv("GALAXY_REDIS_HOST", c.GlobalString("redis")))
 }
