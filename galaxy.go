@@ -674,11 +674,6 @@ func stackInit(c *cli.Context) {
 
 // manually create a pool stack
 func stackPool(c *cli.Context, create bool) {
-	poolName := c.GlobalString("pool")
-	if poolName == "" {
-		log.Fatal("pool name required")
-	}
-
 	keyPair := c.String("keypair")
 
 	amiID := c.String("ami")
@@ -690,6 +685,11 @@ func stackPool(c *cli.Context, create bool) {
 	if baseStack == "" {
 		log.Fatal("base stack required")
 	}
+
+	if c.GlobalString("pool") == "" {
+		log.Fatal("pool name required")
+	}
+	poolName := baseStack + "-" + c.GlobalString("pool")
 
 	poolEnv := c.GlobalString("env")
 	if poolEnv == "" {
@@ -738,7 +738,7 @@ func stackPool(c *cli.Context, create bool) {
 		VolumeSize: 250,
 	}
 
-	if strings.HasPrefix(poolName, "web") {
+	if strings.Contains(poolName, "web") {
 		pool.ELB = true
 		pool.ELBSecurityGroups = []string{
 			resources.SecurityGroups["webSG"],
@@ -747,7 +747,7 @@ func stackPool(c *cli.Context, create bool) {
 		pool.ELBHealthCheck = "HTTP:8080/"
 	}
 
-	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolName, poolEnv)
+	stackName := poolName + "-" + poolEnv
 
 	poolTmpl, err := stack.CreatePoolTemplate(pool)
 	if err != nil {
