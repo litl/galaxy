@@ -122,16 +122,18 @@ func appList(c *cli.Context) {
 		return
 	}
 
-	columns := []string{"NAME | CONFIGURED | VERSION | REGISTERED | POOL | ENV"}
+	columns := []string{"NAME | VERSION | PORT | REGISTERED | POOL | ENV"}
 	for _, app := range appList {
 		name := app.Name
-		environmentConfigured := app.Env != nil
+		port := app.EnvGet("GALAXY_PORT")
 		versionDeployed := app.Version()
 		registered := serviceRegistry.CountInstances(name)
 
 		columns = append(columns, strings.Join([]string{
-			name, strconv.FormatBool(environmentConfigured),
-			versionDeployed, strconv.Itoa(registered),
+			name,
+			versionDeployed,
+			port,
+			strconv.Itoa(registered),
 			utils.GalaxyPool(c),
 			utils.GalaxyEnv(c)}, " | "))
 	}
