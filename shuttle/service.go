@@ -205,7 +205,7 @@ func (s *Service) remove(name string) bool {
 
 	for i, b := range s.Backends {
 		if b.Name == name {
-			log.Printf("Remvoing TCP backend %s for %s at %s", b.Addr, s.Name, s.Addr)
+			log.Printf("Removing TCP backend %s for %s at %s", b.Addr, s.Name, s.Addr)
 			last := len(s.Backends) - 1
 			deleted := b
 			s.Backends[i], s.Backends[last] = s.Backends[last], nil
