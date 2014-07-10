@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/bitly/go-simplejson"
 	"github.com/crowdmob/goamz/aws"
+
+	"github.com/litl/galaxy/log"
 )
 
 type GetTemplateResponse struct {
@@ -61,6 +62,20 @@ type ListStackResourcesResponse struct {
 	Resources []stackResource `xml:"ListStackResourcesResult>StackResourceSummaries>member"`
 }
 
+type serverCert struct {
+	ServerCertificateName string `xml:"ServerCertificateName"`
+	Path                  string `xml:"Path"`
+	Arn                   string `xml:"Arn"`
+	UploadDate            string `xml:"UploadDate"`
+	ServerCertificateId   string `xml:"ServerCertificateId"`
+	Expiration            string `xml:"Expiration"`
+}
+
+type ListServerCertsResponse struct {
+	RequestId string       `xml:"ResponseMetadata>RequestId"`
+	Certs     []serverCert `xml:"ListServerCertificatesResult>ServerCertificateMetadataList>member"`
+}
+
 // Resources from the base stack that may need to be referenced from other
 // stacks
 type SharedResources struct {
@@ -68,6 +83,7 @@ type SharedResources struct {
 	SecurityGroups map[string]string
 	Roles          map[string]string
 	Parameters     map[string]string
+	ServerCerts    map[string]string
 }
 
 // Options needed to build a CloudFormation pool template.
@@ -226,7 +242,17 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 
 }
 
-func getCFService() (*aws.Service, error) {
+func getService(svcName string) (*aws.Service, error) {
+	services := map[string]string{
+		"cf":  "https://cloudformation.us-east-1.amazonaws.com/",
+		"iam": "https://iam.amazonaws.com/",
+	}
+
+	endPoint := services[svcName]
+	if endPoint == "" {
+		return nil, fmt.Errorf("unknown service")
+	}
+
 	// only get the creds from the env for now
 	auth, err := aws.GetAuth("", "", "", time.Now())
 	if err != nil {
@@ -234,7 +260,7 @@ func getCFService() (*aws.Service, error) {
 	}
 
 	serviceInfo := aws.ServiceInfo{
-		Endpoint: "https://cloudformation.us-east-1.amazonaws.com/",
+		Endpoint: endPoint,
 		Signer:   aws.V2Signature,
 	}
 
@@ -249,7 +275,7 @@ func getCFService() (*aws.Service, error) {
 func ListStackResources(stackName string) (ListStackResourcesResponse, error) {
 	listResp := ListStackResourcesResponse{}
 
-	svc, err := getCFService()
+	svc, err := getService("cf")
 	if err != nil {
 		return listResp, err
 	}
@@ -281,7 +307,7 @@ func ListStackResources(stackName string) (ListStackResourcesResponse, error) {
 func DescribeStacks() (DescribeStacksResponse, error) {
 	descResp := DescribeStacksResponse{}
 
-	svc, err := getCFService()
+	svc, err := getService("cf")
 	if err != nil {
 		return descResp, err
 	}
@@ -362,6 +388,38 @@ func Wait(name string, timeout time.Duration) error {
 
 }
 
+func ListServerCertificates() (ListServerCertsResponse, error) {
+	certResp := ListServerCertsResponse{}
+
+	svc, err := getService("iam")
+	if err != nil {
+		return certResp, err
+	}
+
+	params := map[string]string{
+		"Action":  "ListServerCertificates",
+		"Version": "2010-05-08",
+	}
+
+	resp, err := svc.Query("POST", "/", params)
+	if err != nil {
+		return certResp, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err := svc.BuildError(resp)
+		return certResp, err
+	}
+	defer resp.Body.Close()
+
+	err = xml.NewDecoder(resp.Body).Decode(&certResp)
+	if err != nil {
+		return certResp, err
+	}
+
+	return certResp, nil
+}
+
 // Return the SharedResources from our base stack that are needed for pool
 // stacks. We need the IDs for subnets and security groups, since they cannot
 // be referenced by name in a VPC. We also lookup the IAM instance profile
@@ -379,6 +437,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 	shared.Subnets = make(map[string]string)
 	shared.Roles = make(map[string]string)
 	shared.Parameters = make(map[string]string)
+	shared.ServerCerts = make(map[string]string)
 
 	// we need to use DescribeStacks to get any parameters that were used in
 	// the base stack, such as KeyPair
@@ -407,11 +466,22 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 		}
 	}
 
+	// now we need to find any server certs we may have
+	certResp, err := ListServerCertificates()
+	if err != nil {
+		// we've made it this far, just log this error so we can at least get the CF data
+		log.Error("error listing server certificates:", err)
+	}
+
+	for _, cert := range certResp.Certs {
+		shared.ServerCerts[cert.ServerCertificateName] = cert.Arn
+	}
+
 	return shared, nil
 }
 
 func GetTemplate(name string) ([]byte, error) {
-	svc, err := getCFService()
+	svc, err := getService("cf")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -441,7 +511,7 @@ func GetTemplate(name string) ([]byte, error) {
 // Create a CloudFormation stack
 // The options map must include KeyPair, SubnetCIDRBlocks, and VPCCidrBlock
 func Create(name string, stackTmpl []byte, options map[string]string) error {
-	svc, err := getCFService()
+	svc, err := getService("cf")
 	if err != nil {
 		return err
 	}
@@ -485,7 +555,7 @@ func Create(name string, stackTmpl []byte, options map[string]string) error {
 // Update an existing CloudFormation stack.
 // The options map must include KeyPair
 func Update(name string, stackTmpl []byte, options map[string]string) error {
-	svc, err := getCFService()
+	svc, err := getService("cf")
 	if err != nil {
 		return err
 	}
@@ -529,7 +599,7 @@ func Update(name string, stackTmpl []byte, options map[string]string) error {
 
 // Delete and entire stack by name
 func Delete(name string) error {
-	svc, err := getCFService()
+	svc, err := getService("cf")
 	if err != nil {
 		return err
 	}
