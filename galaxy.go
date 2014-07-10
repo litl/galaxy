@@ -735,7 +735,7 @@ func stackPool(c *cli.Context, create bool) {
 			resources.SecurityGroups["sshSG"],
 			resources.SecurityGroups["defaultSG"],
 		},
-		VolumeSize:    250,
+		VolumeSize:    100,
 		BaseStackName: baseStack,
 	}
 
