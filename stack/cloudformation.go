@@ -92,6 +92,7 @@ type Pool struct {
 	Name            string
 	Env             string
 	DesiredCapacity int
+	EBSOptimized    bool
 	MinSize         int
 	MaxSize         int
 	KeyName         string
@@ -126,9 +127,13 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	// helper bits for creating pool templates
 	type tag map[string]interface{}
 	type ref struct{ Ref string }
+	type ebs struct {
+		VolumeSize int
+		VolumeType string
+	}
 	type blockDev struct {
 		DeviceName string
-		Ebs        map[string]int
+		Ebs        ebs
 	}
 
 	// check for missing required fields
@@ -196,13 +201,17 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 	lcProp.Set("InstanceType", pool.InstanceType)
 	lcProp.Set("KeyName", pool.KeyName)
 	lcProp.Set("SecurityGroups", pool.SecurityGroups)
+	lcProp.Set("EbsOptimized", pool.EBSOptimized)
 
 	// Set the volue size for /dev/sda1 (the root volume)
 	if pool.VolumeSize > 0 {
 		lcProp.Set("BlockDeviceMappings", []blockDev{
 			blockDev{
 				DeviceName: "/dev/sda1",
-				Ebs:        map[string]int{"VolumeSize": 12},
+				Ebs: ebs{
+					VolumeSize: pool.VolumeSize,
+					VolumeType: "gp2",
+				},
 			},
 		})
 	}
