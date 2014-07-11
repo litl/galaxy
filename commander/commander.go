@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
@@ -286,13 +287,13 @@ func main() {
 		return
 	}
 
-	if env == "" {
+	if strings.TrimSpace(env) == "" {
 		fmt.Println("Need an env")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	if pool == "" {
+	if strings.TrimSpace(pool) == "" {
 		fmt.Println("Need a pool")
 		flag.PrintDefaults()
 		os.Exit(1)

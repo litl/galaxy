@@ -38,6 +38,7 @@ var config struct {
 
 // ensure the registry as a redis host, but only once
 func initRegistry(c *cli.Context) {
+
 	serviceRegistry = registry.NewServiceRegistry(
 		utils.GalaxyEnv(c),
 		utils.GalaxyPool(c),
@@ -82,6 +83,18 @@ func ensureAppParam(c *cli.Context, command string) string {
 	return app
 }
 
+func ensureEnvArg(c *cli.Context) {
+	if utils.GalaxyEnv(c) == "" {
+		log.Fatalln("ERROR: env is required.  Pass --env or set GALAXY_ENV")
+	}
+}
+
+func ensurePoolArg(c *cli.Context) {
+	if utils.GalaxyPool(c) == "" {
+		log.Fatalln("ERROR: pool is required.  Pass --pool or set GALAXY_POOL")
+	}
+}
+
 func countInstances(app string) int {
 	return serviceRegistry.CountInstances(app)
 }
@@ -99,6 +112,8 @@ func appExists(app string) (bool, error) {
 }
 
 func appList(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
 
 	appList, err := serviceRegistry.ListApps("")
@@ -107,16 +122,18 @@ func appList(c *cli.Context) {
 		return
 	}
 
-	columns := []string{"NAME | CONFIGURED | VERSION | REGISTERED | POOL | ENV"}
+	columns := []string{"NAME | VERSION | PORT | REGISTERED | POOL | ENV"}
 	for _, app := range appList {
 		name := app.Name
-		environmentConfigured := app.Env != nil
+		port := app.EnvGet("GALAXY_PORT")
 		versionDeployed := app.Version()
 		registered := serviceRegistry.CountInstances(name)
 
 		columns = append(columns, strings.Join([]string{
-			name, strconv.FormatBool(environmentConfigured),
-			versionDeployed, strconv.Itoa(registered),
+			name,
+			versionDeployed,
+			port,
+			strconv.Itoa(registered),
 			utils.GalaxyPool(c),
 			utils.GalaxyEnv(c)}, " | "))
 	}
@@ -125,7 +142,10 @@ func appList(c *cli.Context) {
 }
 
 func appCreate(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
+
 	app := c.Args().First()
 	if app == "" {
 		log.Println("ERROR: app name missing")
@@ -162,7 +182,10 @@ func appCreate(c *cli.Context) {
 }
 
 func appDelete(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
+
 	app := ensureAppParam(c, "app:delete")
 
 	// Don't allow deleting runtime hosts entries
@@ -184,6 +207,8 @@ func appDelete(c *cli.Context) {
 }
 
 func appDeploy(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
 	initRuntime(c)
 
@@ -249,6 +274,8 @@ func appRestart(c *cli.Context) {
 }
 
 func appRun(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
 	initRuntime(c)
 
@@ -273,6 +300,8 @@ func appRun(c *cli.Context) {
 }
 
 func appShell(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
 	initRuntime(c)
 
@@ -292,6 +321,7 @@ func appShell(c *cli.Context) {
 }
 
 func configList(c *cli.Context) {
+	ensureEnvArg(c)
 	initRegistry(c)
 	app := ensureAppParam(c, "config")
 
@@ -320,6 +350,7 @@ func configList(c *cli.Context) {
 }
 
 func configSet(c *cli.Context) {
+	ensureEnvArg(c)
 	initRegistry(c)
 	app := ensureAppParam(c, "config:set")
 
@@ -395,6 +426,7 @@ func configSet(c *cli.Context) {
 }
 
 func configUnset(c *cli.Context) {
+	ensureEnvArg(c)
 	initRegistry(c)
 	app := ensureAppParam(c, "config:unset")
 
@@ -442,6 +474,7 @@ func configUnset(c *cli.Context) {
 }
 
 func configGet(c *cli.Context) {
+	ensureEnvArg(c)
 	initRegistry(c)
 	app := ensureAppParam(c, "config:get")
 
@@ -475,7 +508,6 @@ func cfgDir() string {
 }
 
 func login(c *cli.Context) {
-	initRegistry(c)
 
 	if c.Args().First() == "" {
 		log.Println("ERROR: host missing")
@@ -503,7 +535,6 @@ func login(c *cli.Context) {
 }
 
 func logout(c *cli.Context) {
-	initRegistry(c)
 
 	configFile := filepath.Join(cfgDir(), "galaxy.toml")
 
@@ -519,7 +550,8 @@ func logout(c *cli.Context) {
 }
 
 func poolCreate(c *cli.Context) {
-
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
 	created, err := serviceRegistry.CreatePool(utils.GalaxyPool(c))
 	if err != nil {
@@ -536,6 +568,7 @@ func poolCreate(c *cli.Context) {
 }
 
 func poolList(c *cli.Context) {
+	ensureEnvArg(c)
 	initRegistry(c)
 	pools, err := serviceRegistry.ListPools()
 	if err != nil {
@@ -549,7 +582,8 @@ func poolList(c *cli.Context) {
 }
 
 func poolDelete(c *cli.Context) {
-
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 	initRegistry(c)
 	created, err := serviceRegistry.DeletePool(utils.GalaxyPool(c))
 	if err != nil {
@@ -582,6 +616,7 @@ func loadConfig() {
 }
 
 func pgPsql(c *cli.Context) {
+	ensureEnvArg(c)
 	initRegistry(c)
 	app := ensureAppParam(c, "pg:psql")
 
@@ -855,8 +890,8 @@ func main() {
 	app.Version = buildVersion
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "redis", Value: utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: utils.DefaultEnv, Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: utils.DefaultPool, Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "env", Value: "", Usage: "environment (dev, test, prod, etc.)"},
+		cli.StringFlag{Name: "pool", Value: "", Usage: "pool (web, worker, etc.)"},
 	}
 
 	app.Commands = []cli.Command{

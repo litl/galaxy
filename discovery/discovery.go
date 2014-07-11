@@ -27,16 +27,21 @@ func initOrDie(c *cli.Context) {
 	endpoint := runtime.GetEndpoint()
 	client, err = docker.NewClient(endpoint)
 
+	// Don't log timestamps, etc. if running interactively
+	if !c.Bool("loop") {
+		log.DefaultLogger.SetFlags(0)
+	}
+
 	if err != nil {
 		log.Fatalf("ERROR: %s", err)
 	}
 
 	if utils.GalaxyEnv(c) == "" {
-		log.Fatalln("ERROR: env not set.  Set GALAXY_ENV or pass -env.")
+		log.Fatalln("ERROR: env not set.  Pass -env or set GALAXY_ENV.")
 	}
 
 	if utils.GalaxyPool(c) == "" {
-		log.Fatalln("ERROR: pool not set.  Set GALAXY_POOL or pass -pool.")
+		log.Fatalln("ERROR: pool not set.  Pass -pool or set GALAXY_POOL.")
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
@@ -52,10 +57,6 @@ func initOrDie(c *cli.Context) {
 	outputBuffer = &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer
 
-	// Don't log timestamps, etc. if running interactively
-	if !c.Bool("loop") {
-		log.DefaultLogger.SetFlags(0)
-	}
 }
 
 func main() {

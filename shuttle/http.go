@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -149,7 +150,14 @@ func (s *HTTPRouter) adminHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(503)
 		return
 	}
-	for k, _ := range s.balancers {
+
+	keys := make([]string, 0, len(s.balancers))
+	for key := range s.balancers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
 		balancer := s.balancers[k]
 		endpoints := balancer.GetEndpoints()
 		fmt.Fprintf(w, "%s\n", k)

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	auth "github.com/dotcloud/docker/registry"
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
@@ -383,6 +383,12 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 		"run", "--rm", "-i",
 	}
 	for key, value := range serviceConfig.Env() {
+		if key == "ENV" {
+			args = append(args, "-e")
+			args = append(args, strings.ToUpper(key)+"="+s.serviceRegistry.Env)
+			continue
+		}
+
 		args = append(args, "-e")
 		args = append(args, strings.ToUpper(key)+"="+value)
 	}
@@ -450,6 +456,10 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	// setup env vars from etcd
 	var envVars []string
 	for key, value := range serviceConfig.Env() {
+		if key == "ENV" {
+			envVars = append(envVars, strings.ToUpper(key)+"="+s.serviceRegistry.Env)
+			continue
+		}
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
