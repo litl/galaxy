@@ -272,7 +272,7 @@ func (s *Service) connect(cliConn net.Conn) {
 		return
 	}
 
-	log.Errorf("ERROR: no backend for", s.Name)
+	log.Errorf("ERROR: no backend for %s", s.Name)
 	cliConn.Close()
 }
 

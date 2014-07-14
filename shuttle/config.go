@@ -32,7 +32,7 @@ func loadConfig() {
 
 		for _, svcCfg := range svcs {
 			if e := Registry.AddService(svcCfg); e != nil {
-				log.Println("Unabled to add service %s: error:", svcCfg.Name, e)
+				log.Printf("Unable to add service %s: error: %s", svcCfg.Name, e)
 			}
 		}
 	}
