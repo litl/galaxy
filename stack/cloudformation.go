@@ -14,6 +14,11 @@ import (
 	"github.com/litl/galaxy/log"
 )
 
+/*
+Most of this should probably get wrapped up in a goamz/cloudformations package,
+if someone wants to write out the entire API.
+*/
+
 type GetTemplateResponse struct {
 	TemplateBody []byte `xml:"GetTemplateResult>TemplateBody"`
 }
@@ -122,8 +127,54 @@ type PoolELBListener struct {
 	SSLCertificateId string   `json:",omitempty"`
 }
 
+// set defaults and check for required fields
+func (pool *Pool) init() error {
+	if pool.MinSize == 0 {
+		pool.MinSize = 1
+	}
+	if pool.MaxSize == 0 {
+		pool.MaxSize = 3
+	}
+	if pool.DesiredCapacity == 0 {
+		pool.DesiredCapacity = 1
+	}
+	if pool.BaseStackName == "" {
+		pool.BaseStackName = "galaxy"
+	}
+
+	// check for missing required fields
+	errMsg := ""
+	switch {
+	case pool.Name == "":
+		errMsg = "missing pool name"
+	case pool.Env == "":
+		errMsg = "missing pool env"
+	case pool.KeyName == "":
+		errMsg = "missing pool key name"
+	case pool.InstanceType == "":
+		errMsg = "missing pool instance type"
+	case pool.ImageID == "":
+		errMsg = "missing pool image id"
+	case len(pool.SubnetIDs) == 0:
+		errMsg = "missing subnets"
+	case len(pool.SecurityGroups) == 0:
+		errMsg = "missing security groups"
+	}
+
+	if errMsg != "" {
+		return fmt.Errorf("incomplete pool definition: %s", errMsg)
+	}
+
+	return nil
+}
+
 // Create a CloudFormation template for a our pool stack
 func CreatePoolTemplate(pool Pool) ([]byte, error) {
+	err := pool.init()
+	if err != nil {
+		return nil, err
+	}
+
 	// helper bits for creating pool templates
 	type tag map[string]interface{}
 	type ref struct{ Ref string }
@@ -136,25 +187,11 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 		Ebs        ebs
 	}
 
-	// check for missing required fields
-	switch "" {
-	case pool.Name, pool.Env, pool.KeyName, pool.InstanceType, pool.ImageID:
-		return nil, fmt.Errorf("incomplete pool definition")
-	}
-
-	if pool.BaseStackName == "" {
-		pool.BaseStackName = "galaxy"
-	}
-
-	switch 0 {
-	case len(pool.SubnetIDs), len(pool.SecurityGroups), pool.DesiredCapacity:
-		return nil, fmt.Errorf("incomplete pool definition")
-	}
-
+	// read in our default JSON template
 	poolTmpl, err := simplejson.NewJson(pool_template)
 	if err != nil {
 		// this should always parse!
-		panic("our pool_template is corrupt")
+		panic("our pool_template is corrupt:" + err.Error())
 	}
 
 	// Use the "poll_template" Resources as a template to create the correct
@@ -186,6 +223,8 @@ func CreatePoolTemplate(pool Pool) ([]byte, error) {
 
 	asgProp := asg.Get("Properties")
 	asgProp.Set("DesiredCapacity", strconv.Itoa(pool.DesiredCapacity))
+	asgProp.Set("MinSize", strconv.Itoa(pool.MinSize))
+	asgProp.Set("MaxSize", strconv.Itoa(pool.MaxSize))
 	asgProp.Set("LaunchConfigurationName", ref{"lc" + poolSuffix})
 	asgProp.Set("Tags", asgTags)
 	asgProp.Set("VPCZoneIdentifier", pool.SubnetIDs)
@@ -278,6 +317,60 @@ func getService(svcName string) (*aws.Service, error) {
 		return nil, err
 	}
 	return svc, nil
+}
+
+// Retrieve options from an existing pool stack so we don't need to specify
+// everything for an update. This isn't a complete Pool, just uses the structure
+// to hold the various required options.
+func DescribePoolStack(name string) (Pool, error) {
+	pool := Pool{}
+
+	poolTmpl, err := GetTemplate(name)
+	if err != nil {
+		return pool, err
+	}
+
+	poolJson, err := simplejson.NewJson(poolTmpl)
+	if err != nil {
+		return pool, err
+	}
+
+	// only way to iterate over keys in simplejson, and get the *Json values
+	for resName, _ := range poolJson.Get("Resources").MustMap() {
+		res := poolJson.Get("Resources").Get(resName)
+		prop := res.Get("Properties")
+
+		switch res.Get("Type").MustString() {
+		case "AWS::AutoScaling::AutoScalingGroup":
+			pool.DesiredCapacity, _ = strconv.Atoi(prop.Get("DesiredCapacity").MustString())
+			pool.MaxSize, _ = strconv.Atoi(prop.Get("MaxSize").MustString())
+			pool.MinSize, _ = strconv.Atoi(prop.Get("MinSize").MustString())
+
+			tags := prop.Get("Tags")
+			for i := range tags.MustArray() {
+				tag := tags.GetIndex(i)
+				switch tag.Get("Name").MustString() {
+				case "env":
+					pool.Env = tag.Get("Value").MustString()
+				case "pool":
+					pool.Name = tag.Get("pool").MustString()
+				}
+			}
+
+		case "AWS::ElasticLoadBalancing::LoadBalancer":
+			// indicate there is an elb if that's any use
+			pool.ELBs = []PoolELB{PoolELB{}}
+
+		case "AWS::AutoScaling::LaunchConfiguration":
+			pool.VolumeSize = prop.Get("BlockDeviceMappings").GetIndex(0).GetPath("Ebs", "VolumeSize").MustInt()
+			pool.KeyName = prop.Get("KeyName").MustString()
+			pool.InstanceType = prop.Get("InstanceType").MustString()
+			pool.ImageID = prop.Get("ImageId").MustString()
+		}
+	}
+
+	return pool, nil
+
 }
 
 // List all resources associated with stackName
