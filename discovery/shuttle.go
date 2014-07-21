@@ -58,7 +58,7 @@ func registerShuttle(c *cli.Context) {
 			continue
 		}
 
-		resp, err := httpClient.Post(fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), k), "application/jsoN",
+		resp, err := httpClient.Post(fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), k), "application/json",
 			bytes.NewBuffer(js))
 		if err != nil {
 			log.Errorf("ERROR: Registerring backend with shuttle: %s", err)
