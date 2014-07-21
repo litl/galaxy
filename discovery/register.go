@@ -50,6 +50,7 @@ func register(c *cli.Context) {
 				}
 				log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(registration.ContainerName, "/"),
 					registration.ContainerID[0:12], registration.Name, location)
+				lastLogged = time.Now().UnixNano()
 			}
 
 			statusLine := strings.Join([]string{

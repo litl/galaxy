@@ -64,6 +64,12 @@ func initOrDie(c *cli.Context) {
 	outputBuffer = &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer
 
+	if c.Bool("loop") {
+		log.Printf("Starting discovery %s", buildVersion)
+		log.Printf("Using env = %s, pool = %s, HostIp = %s",
+			utils.GalaxyEnv(c), utils.GalaxyPool(c),
+			c.GlobalString("hostIp"))
+	}
 }
 
 func main() {
