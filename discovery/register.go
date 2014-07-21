@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/codegangsta/cli"
@@ -27,7 +28,7 @@ func register(c *cli.Context) {
 	var lastLogged int64
 
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, os.Kill)
+	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM)
 	go unregisterAll(c, signals)
 
 	for {
