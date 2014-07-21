@@ -237,10 +237,12 @@ func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
 
 func (s *HTTPRouter) Start() {
 
-	// init the vulcan logging
-	gotoolslog.Init([]*gotoolslog.LogConfig{
-		&gotoolslog.LogConfig{Name: "console"},
-	})
+	if debug {
+		// init the vulcan logging
+		gotoolslog.Init([]*gotoolslog.LogConfig{
+			&gotoolslog.LogConfig{Name: "console"},
+		})
+	}
 
 	log.Printf("HTTP server listening at %s", listenAddr)
 
