@@ -25,6 +25,9 @@ var (
 	// Debug logging
 	debug bool
 
+	// Redirect to SSL endpoint
+	sslOnly bool
+
 	// version flags
 	version      bool
 	buildVersion string
@@ -38,6 +41,7 @@ func init() {
 	flag.StringVar(&stateConfig, "state", "", "updated config which reflects the internal state")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version")
+	flag.BoolVar(&sslOnly, "sslOnly", false, "require SSL")
 
 	flag.Parse()
 }

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"sort"
@@ -55,6 +57,32 @@ func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) 
 		statusCode, a.GetDuration(), err)
 }
 
+type SSLRedirect struct{}
+
+func (s *SSLRedirect) ProcessRequest(r request.Request) (*http.Response, error) {
+	if sslOnly && r.GetHttpRequest().Header.Get("X-Forwarded-Proto") != "https" {
+
+		resp := &http.Response{
+			Status:        "301 Moved Permanently",
+			StatusCode:    301,
+			Proto:         r.GetHttpRequest().Proto,
+			ProtoMajor:    r.GetHttpRequest().ProtoMajor,
+			ProtoMinor:    r.GetHttpRequest().ProtoMinor,
+			Body:          ioutil.NopCloser(bytes.NewBufferString("")),
+			ContentLength: 0,
+			Request:       r.GetHttpRequest(),
+			Header:        http.Header{},
+		}
+		resp.Header.Set("Location", "https://"+r.GetHttpRequest().Host+r.GetHttpRequest().RequestURI)
+		return resp, nil
+	}
+
+	return nil, nil
+}
+
+func (s *SSLRedirect) ProcessResponse(r request.Request, a request.Attempt) {
+}
+
 func NewHTTPRouter() *HTTPRouter {
 	return &HTTPRouter{
 		balancers: make(map[string]*roundrobin.RoundRobin),
@@ -86,6 +114,7 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 			return err
 		}
 		loc.GetObserverChain().Add("logger", &RequestLogger{})
+		loc.GetMiddlewareChain().Add("ssl", 0, &SSLRedirect{})
 
 		s.router.SetRouter(vhost, &route.ConstRouter{Location: loc})
 		log.Printf("Starting HTTP listener for %s", vhost)
