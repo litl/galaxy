@@ -28,7 +28,7 @@ type ServiceRuntime struct {
 	serviceRegistry *registry.ServiceRegistry
 }
 
-func NewServiceRuntime(shuttleHost, statsdHost, env, pool, redisHost string) *ServiceRuntime {
+func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, statsdHost string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
@@ -42,15 +42,6 @@ func NewServiceRuntime(shuttleHost, statsdHost, env, pool, redisHost string) *Se
 	}
 
 	statsdHost = utils.GetEnv("GALAXY_STATSD_HOST", statsdHost)
-
-	serviceRegistry := registry.NewServiceRegistry(
-		env,
-		pool,
-		"",
-		600,
-		"",
-	)
-	serviceRegistry.Connect(redisHost)
 
 	return &ServiceRuntime{
 		shuttleHost:     shuttleHost,
@@ -658,6 +649,50 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 	}
 
 	return s.ensureDockerClient().InspectImage(version)
+
+}
+
+func (s *ServiceRuntime) RegisterAll() ([]*registry.ServiceRegistration, error) {
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	if err != nil {
+		return nil, err
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	registrations := []*registry.ServiceRegistration{}
+	for _, serviceConfig := range serviceConfigs {
+		for _, container := range containers {
+			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
+
+			if err != nil {
+				log.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
+				continue
+			}
+
+			if !serviceConfig.IsContainerVersion(strings.TrimPrefix(dockerContainer.Name, "/")) {
+				continue
+			}
+
+			registration, err := s.serviceRegistry.RegisterService(dockerContainer, &serviceConfig)
+			if err != nil {
+				log.Printf("ERROR: Could not register %s: %s\n",
+					serviceConfig.Name, err)
+				continue
+			}
+			registrations = append(registrations, registration)
+		}
+	}
+	return registrations, nil
 
 }
 

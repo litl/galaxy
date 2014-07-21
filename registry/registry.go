@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/garyburd/redigo/redis"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
@@ -107,9 +107,12 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	}
 
 	serviceRegistration := ServiceRegistration{
-		ContainerID: container.ID,
-		StartedAt:   container.Created,
+		ContainerName: container.Name,
+		ContainerID:   container.ID,
+		StartedAt:     container.Created,
+		Image:         container.Config.Image,
 	}
+
 	if externalPort != "" && internalPort != "" {
 		serviceRegistration.ExternalIP = r.HostIP
 		serviceRegistration.InternalIP = container.NetworkSettings.IPAddress

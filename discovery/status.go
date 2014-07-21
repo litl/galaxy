@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/codegangsta/cli"
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
@@ -54,13 +54,14 @@ func status(c *cli.Context) {
 
 			if registered != nil {
 				outputBuffer.Log(strings.Join([]string{
-					container.ID[0:12],
-					container.Image,
+					registered.ContainerID[0:12],
+					registered.Image,
 					registered.ExternalAddr(),
 					registered.InternalAddr(),
-					utils.HumanDuration(time.Now().Sub(time.Unix(container.Created, 0))) + " ago",
-					"In " + utils.HumanDuration(registered.Expires.Sub(time.Now())),
+					utils.HumanDuration(time.Now().UTC().Sub(registered.StartedAt)) + " ago",
+					"In " + utils.HumanDuration(registered.Expires.Sub(time.Now().UTC())),
 				}, " | "))
+
 			} else {
 				outputBuffer.Log(strings.Join([]string{
 					container.ID[0:12],

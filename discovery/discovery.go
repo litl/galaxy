@@ -56,11 +56,9 @@ func initOrDie(c *cli.Context) {
 	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
 
 	serviceRuntime = runtime.NewServiceRuntime(
+		serviceRegistry,
 		c.GlobalString("shuttleAddr"),
 		"",
-		utils.GalaxyEnv(c),
-		utils.GalaxyPool(c),
-		utils.GalaxyRedisHost(c),
 	)
 
 	outputBuffer = &utils.OutputBuffer{}

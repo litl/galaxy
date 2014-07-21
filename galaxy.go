@@ -53,11 +53,9 @@ func initRegistry(c *cli.Context) {
 // ensure the registry as a redis host, but only once
 func initRuntime(c *cli.Context) {
 	serviceRuntime = runtime.NewServiceRuntime(
+		serviceRegistry,
 		"",
 		"",
-		utils.GalaxyEnv(c),
-		utils.GalaxyPool(c),
-		utils.GalaxyRedisHost(c),
 	)
 }
 

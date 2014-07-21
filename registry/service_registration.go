@@ -9,21 +9,22 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/garyburd/redigo/redis"
-	"github.com/litl/galaxy/utils"
 )
 
 type ServiceRegistration struct {
-	Name         string    `json:"NAME",omitempty`
-	ExternalIP   string    `json:"EXTERNAL_IP",omitempty`
-	ExternalPort string    `json:"EXTERNAL_PORT",omitempty`
-	InternalIP   string    `json:"INTERNAL_IP",omitempty`
-	InternalPort string    `json:"INTERNAL_PORT",omitempty`
-	ContainerID  string    `json:"CONTAINER_ID"`
-	StartedAt    time.Time `json:"STARTED_AT"`
-	Expires      time.Time `json:"-"`
-	Path         string    `json:"-"`
-	VirtualHosts []string  `json:"VIRTUAL_HOSTS"`
-	Port         string    `json:"PORT"`
+	Name          string    `json:"NAME",omitempty`
+	ExternalIP    string    `json:"EXTERNAL_IP",omitempty`
+	ExternalPort  string    `json:"EXTERNAL_PORT",omitempty`
+	InternalIP    string    `json:"INTERNAL_IP",omitempty`
+	InternalPort  string    `json:"INTERNAL_PORT",omitempty`
+	ContainerID   string    `json:"CONTAINER_ID"`
+	ContainerName string    `json:"CONTAINER_NAME"`
+	Image         string    `json:"IMAGE",omitempty`
+	StartedAt     time.Time `json:"STARTED_AT"`
+	Expires       time.Time `json:"-"`
+	Path          string    `json:"-"`
+	VirtualHosts  []string  `json:"VIRTUAL_HOSTS"`
+	Port          string    `json:"PORT"`
 }
 
 func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
@@ -77,17 +78,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	if err != nil {
 		return nil, err
 	}
-
-	statusLine := strings.Join([]string{
-		container.ID[0:12],
-		container.Config.Image,
-		serviceRegistration.ExternalAddr(),
-		serviceRegistration.InternalAddr(),
-		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
-		"In " + utils.HumanDuration(time.Duration(r.TTL)*time.Second),
-	}, " | ")
-
-	r.OutputBuffer.Log(statusLine)
+	serviceRegistration.Expires = time.Now().UTC().Add(time.Duration(r.TTL) * time.Second)
 
 	return serviceRegistration, nil
 }
@@ -113,7 +104,7 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 }
 
 func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
-	desiredServiceRegistration := r.newServiceRegistration(container)
+
 	regPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
 	existingRegistration := ServiceRegistration{
@@ -136,14 +127,12 @@ func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, se
 			return nil, err
 		}
 
-		if existingRegistration.Equals(*desiredServiceRegistration) {
-			expires, err := redis.Int(conn.Do("TTL", regPath))
-			if err != nil {
-				return nil, err
-			}
-			existingRegistration.Expires = time.Now().Add(time.Duration(expires) * time.Second)
-			return &existingRegistration, nil
+		expires, err := redis.Int(conn.Do("TTL", regPath))
+		if err != nil {
+			return nil, err
 		}
+		existingRegistration.Expires = time.Now().UTC().Add(time.Duration(expires) * time.Second)
+		return &existingRegistration, nil
 	}
 
 	return nil, nil
