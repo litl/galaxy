@@ -19,6 +19,7 @@ func unregister(c *cli.Context) {
 		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 
+	unregisterShuttle(c)
 	containers, err := serviceRuntime.UnRegisterAll()
 	if err != nil {
 		log.Fatalf("ERROR: Problem unregistering containers: %s", err)
