@@ -63,6 +63,10 @@ func NewHTTPRouter() *HTTPRouter {
 
 func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 
+	if vhost == "" || url == "" {
+		return nil
+	}
+
 	var err error
 	balancer := s.balancers[vhost]
 
@@ -102,6 +106,11 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 }
 
 func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
+
+	if vhost == "" || url == "" {
+		return nil
+	}
+
 	balancer := s.balancers[vhost]
 	if balancer == nil {
 		return nil
@@ -123,6 +132,11 @@ func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
 
 // Remove all backends for vhost that are not listed in addrs
 func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
+
+	if vhost == "" {
+		return
+	}
+
 	// Remove backends that are no longer registered
 
 	balancer := s.balancers[vhost]
@@ -140,6 +154,10 @@ func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
 
 // Removes a virtual host router
 func (s *HTTPRouter) RemoveRouter(vhost string) {
+	if vhost == "" {
+		return
+	}
+
 	log.Printf("Removing balancer for %s", vhost)
 	delete(s.balancers, vhost)
 	s.router.RemoveRouter(vhost)
