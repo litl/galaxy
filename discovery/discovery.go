@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/codegangsta/cli"
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -18,6 +18,7 @@ const (
 var (
 	client          *docker.Client
 	serviceRegistry *registry.ServiceRegistry
+	serviceRuntime  *runtime.ServiceRuntime
 	outputBuffer    *utils.OutputBuffer
 	buildVersion    string
 )
@@ -53,6 +54,14 @@ func initOrDie(c *cli.Context) {
 	)
 
 	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
+
+	serviceRuntime = runtime.NewServiceRuntime(
+		c.GlobalString("shuttleAddr"),
+		"",
+		utils.GalaxyEnv(c),
+		utils.GalaxyPool(c),
+		utils.GalaxyRedisHost(c),
+	)
 
 	outputBuffer = &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer

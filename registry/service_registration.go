@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/garyburd/redigo/redis"
 	"github.com/litl/galaxy/utils"
 )
@@ -92,30 +92,24 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	return serviceRegistration, nil
 }
 
-func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) error {
+func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
 
 	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
 
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	_, err := conn.Do("DEL", registrationPath)
+	registration, err := r.GetServiceRegistration(container, serviceConfig)
 	if err != nil {
-		return err
+		return registration, err
 	}
 
-	statusLine := strings.Join([]string{
-		container.ID[0:12],
-		container.Config.Image,
-		"",
-		"",
-		utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
-		"",
-	}, " | ")
+	_, err = conn.Do("DEL", registrationPath)
+	if err != nil {
+		return registration, err
+	}
 
-	r.OutputBuffer.Log(statusLine)
-
-	return nil
+	return registration, nil
 }
 
 func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {

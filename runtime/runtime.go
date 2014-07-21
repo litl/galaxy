@@ -660,3 +660,45 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 	return s.ensureDockerClient().InspectImage(version)
 
 }
+
+func (s *ServiceRuntime) UnRegisterAll() ([]*docker.Container, error) {
+	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	if err != nil {
+		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", s.serviceRegistry.Env,
+			s.serviceRegistry.Pool, err)
+	}
+
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	removed := []*docker.Container{}
+
+	for _, serviceConfig := range serviceConfigs {
+		for _, container := range containers {
+			container, err := s.ensureDockerClient().InspectContainer(container.ID)
+			if err != nil {
+				log.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
+				continue
+			}
+
+			if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Name, "/")) {
+				continue
+			}
+
+			_, err = s.serviceRegistry.UnRegisterService(container, &serviceConfig)
+			if err != nil {
+				log.Printf("ERROR: Could not unregister %s: %s\n",
+					serviceConfig.Name, err)
+				return removed, err
+			}
+
+			removed = append(removed, container)
+			log.Printf("Unregistered %s as %s", container.ID[0:12], serviceConfig.Name)
+		}
+	}
+	return removed, nil
+}

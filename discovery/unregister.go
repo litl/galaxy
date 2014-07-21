@@ -1,11 +1,10 @@
 package main
 
 import (
-	"os"
 	"strings"
+	"time"
 
 	"github.com/codegangsta/cli"
-	"github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
@@ -15,45 +14,28 @@ func unregister(c *cli.Context) {
 
 	initOrDie(c)
 
-	containers, err := client.ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
-	if err != nil {
-		panic(err)
-	}
-
 	outputBuffer.Log(strings.Join([]string{
 		"CONTAINER ID", "IMAGE",
 		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 
-	serviceConfigs, err := serviceRegistry.ListApps("")
+	containers, err := serviceRuntime.UnRegisterAll()
 	if err != nil {
-		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", utils.GalaxyEnv(c),
-			utils.GalaxyPool(c), err)
+		log.Fatalf("ERROR: Problem unregistering containers: %s", err)
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		for _, container := range containers {
-			dockerContainer, err := client.InspectContainer(container.ID)
-			if err != nil {
-				log.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
-				continue
-			}
+	for _, container := range containers {
+		//FIXME: This needs to be moved out of here
+		statusLine := strings.Join([]string{
+			container.ID[0:12],
+			container.Config.Image,
+			"",
+			"",
+			utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+			"",
+		}, " | ")
 
-			if !serviceConfig.IsContainerVersion(strings.TrimPrefix(dockerContainer.Name, "/")) {
-				continue
-			}
-
-			err = serviceRegistry.UnRegisterService(dockerContainer, &serviceConfig)
-			if err != nil {
-				log.Printf("ERROR: Could not unregister %s: %s\n",
-					serviceConfig.Name, err)
-				os.Exit(1)
-			}
-			log.Printf("Unregistered %s as %s", dockerContainer.ID[0:12], serviceConfig.Name)
-
-		}
+		outputBuffer.Log(statusLine)
 	}
 
 	result, _ := columnize.SimpleFormat(outputBuffer.Output)
