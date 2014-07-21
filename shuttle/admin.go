@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -59,8 +60,22 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidPorts := []string{
+		listenAddr[strings.Index(listenAddr, ":")+1:],
+		adminListenAddr[strings.Index(adminListenAddr, ":")+1:],
+	}
+
+	for _, port := range invalidPorts {
+		if strings.HasSuffix(svcCfg.Addr, port) {
+			log.Errorf("Cannot use shuttle port: %s for %s service listener. Shuttle is using it.", port, svcCfg.Name)
+			http.Error(w, fmt.Sprintf("cannot use %s for listener port", port), http.StatusBadRequest)
+			return
+		}
+	}
+
 	if Registry.GetService(svcCfg.Name) == nil {
 		if e := Registry.AddService(svcCfg); e != nil {
+			log.Errorln(err)
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return
 		}
