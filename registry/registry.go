@@ -21,6 +21,10 @@ TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
       switch to ORDERED SETS and log changes
 */
 
+const (
+	DefaultTTL = 60
+)
+
 type ServiceRegistry struct {
 	redisPool    redis.Pool
 	Env          string

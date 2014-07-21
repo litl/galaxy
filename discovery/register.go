@@ -8,6 +8,7 @@ import (
 
 	"github.com/codegangsta/cli"
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
@@ -42,7 +43,7 @@ func register(c *cli.Context) {
 		}
 
 		for _, registration := range registrations {
-			if lastLogged == 0 || time.Now().UnixNano()-lastLogged > (60*time.Second).Nanoseconds() {
+			if lastLogged == 0 || time.Now().UnixNano()-lastLogged > (registry.DefaultTTL*time.Second).Nanoseconds() {
 				location := registration.ExternalAddr()
 				if location != "" {
 					location = " at " + location

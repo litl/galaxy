@@ -88,7 +88,7 @@ func main() {
 			Action:      register,
 			Description: "register [options]",
 			Flags: []cli.Flag{
-				cli.IntFlag{Name: "ttl", Value: 60, Usage: "TTL (s) for service registrations"},
+				cli.IntFlag{Name: "ttl", Value: registry.DefaultTTL, Usage: "TTL (s) for service registrations"},
 				cli.BoolFlag{Name: "loop", Usage: "Continuously register containers"},
 			},
 		},

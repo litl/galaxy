@@ -41,7 +41,7 @@ func initOrDie() {
 		env,
 		pool,
 		"",
-		600,
+		registry.DefaultTTL,
 		"",
 	)
 
