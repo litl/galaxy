@@ -53,11 +53,9 @@ func initRegistry(c *cli.Context) {
 // ensure the registry as a redis host, but only once
 func initRuntime(c *cli.Context) {
 	serviceRuntime = runtime.NewServiceRuntime(
+		serviceRegistry,
 		"",
 		"",
-		utils.GalaxyEnv(c),
-		utils.GalaxyPool(c),
-		utils.GalaxyRedisHost(c),
 	)
 }
 
@@ -507,48 +505,6 @@ func cfgDir() string {
 	return configDir
 }
 
-func login(c *cli.Context) {
-
-	if c.Args().First() == "" {
-		log.Println("ERROR: host missing")
-		cli.ShowCommandHelp(c, "login")
-		return
-	}
-
-	configDir := cfgDir()
-	config.Host = c.Args().First()
-
-	// This will exit if it fails
-	utils.SSHCmd(config.Host, "echo \"test\" > /dev/null", false, false)
-
-	configFile, err := os.Create(filepath.Join(configDir, "galaxy.toml"))
-	if err != nil {
-		log.Printf("ERROR: Unable to create config file: %s\n", err)
-		return
-	}
-	defer configFile.Close()
-
-	encoder := toml.NewEncoder(configFile)
-	encoder.Encode(config)
-	configFile.WriteString("\n")
-	log.Printf("Login sucessful")
-}
-
-func logout(c *cli.Context) {
-
-	configFile := filepath.Join(cfgDir(), "galaxy.toml")
-
-	_, err := os.Stat(configFile)
-	if err == nil {
-		err = os.Remove(configFile)
-		if err != nil {
-			log.Printf("ERROR: Unable to logout: %s\n", err)
-			return
-		}
-	}
-	log.Printf("Logout sucessful\n")
-}
-
 func poolCreate(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
@@ -596,10 +552,6 @@ func poolDelete(c *cli.Context) {
 	} else {
 		log.Printf("Pool %s has apps configured. Delete them first.\n", utils.GalaxyPool(c))
 	}
-}
-
-func runRemote() {
-	utils.SSHCmd(config.Host, "galaxy "+strings.Join(os.Args[1:], " "), false, false)
 }
 
 func loadConfig() {
@@ -879,11 +831,6 @@ func main() {
 	// Don't print date, etc..
 	log.DefaultLogger.SetFlags(0)
 
-	if config.Host != "" && len(os.Args) > 1 && (os.Args[1] != "login" && os.Args[1] != "logout") {
-		runRemote()
-		return
-	}
-
 	app := cli.NewApp()
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
@@ -895,18 +842,6 @@ func main() {
 	}
 
 	app.Commands = []cli.Command{
-		{
-			Name:        "login",
-			Usage:       "login to a controller",
-			Action:      login,
-			Description: "login host[:port]",
-		},
-		{
-			Name:        "logout",
-			Usage:       "logout off a controller",
-			Action:      logout,
-			Description: "logout",
-		},
 		{
 			Name:        "app",
 			Usage:       "list the apps currently created",

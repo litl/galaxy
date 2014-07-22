@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/codegangsta/cli"
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -18,6 +18,7 @@ const (
 var (
 	client          *docker.Client
 	serviceRegistry *registry.ServiceRegistry
+	serviceRuntime  *runtime.ServiceRuntime
 	outputBuffer    *utils.OutputBuffer
 	buildVersion    string
 )
@@ -54,9 +55,21 @@ func initOrDie(c *cli.Context) {
 
 	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
 
+	serviceRuntime = runtime.NewServiceRuntime(
+		serviceRegistry,
+		c.GlobalString("shuttleAddr"),
+		"",
+	)
+
 	outputBuffer = &utils.OutputBuffer{}
 	serviceRegistry.OutputBuffer = outputBuffer
 
+	if c.Bool("loop") {
+		log.Printf("Starting discovery %s", buildVersion)
+		log.Printf("Using env = %s, pool = %s, HostIp = %s",
+			utils.GalaxyEnv(c), utils.GalaxyPool(c),
+			c.GlobalString("hostIp"))
+	}
 }
 
 func main() {
@@ -81,7 +94,7 @@ func main() {
 			Action:      register,
 			Description: "register [options]",
 			Flags: []cli.Flag{
-				cli.IntFlag{Name: "ttl", Value: 60, Usage: "TTL (s) for service registrations"},
+				cli.IntFlag{Name: "ttl", Value: registry.DefaultTTL, Usage: "TTL (s) for service registrations"},
 				cli.BoolFlag{Name: "loop", Usage: "Continuously register containers"},
 			},
 		},

@@ -4,11 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
-	"strings"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -41,12 +41,12 @@ func initOrDie() {
 		env,
 		pool,
 		"",
-		600,
+		registry.DefaultTTL,
 		"",
 	)
 
 	serviceRegistry.Connect(redisHost)
-	serviceRuntime = runtime.NewServiceRuntime(shuttleHost, statsdHost, env, pool, redisHost)
+	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
 	serviceConfigs, err := serviceRegistry.ListApps("")
 	if err != nil {
