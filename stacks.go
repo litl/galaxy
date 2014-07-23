@@ -102,8 +102,6 @@ func stackInit(c *cli.Context) {
 }
 
 // update the base stack
-// TODO: allow custom template to be inserted
-// TODO: weed out parameters that aren't in the new template
 func stackUpdate(c *cli.Context) {
 	var stackTmpl []byte
 	var err error
@@ -278,6 +276,13 @@ func stackPool(c *cli.Context, update bool) {
 		maxSize = oldPool.MaxSize
 	}
 
+	sslCert := c.String("ssl-cert")
+
+	httpPort := c.Int("http-port")
+	if httpPort == 0 {
+		httpPort = 80
+	}
+
 	volumeSize := 100
 	if oldPool.VolumeSize > 0 {
 		volumeSize = oldPool.VolumeSize
@@ -311,18 +316,34 @@ func stackPool(c *cli.Context, update bool) {
 				resources.SecurityGroups["webSG"],
 				resources.SecurityGroups["defaultSG"],
 			},
-			HealthCheck: "HTTP:8080/",
+			HealthCheck: fmt.Sprintf("HTTP:%d/", httpPort),
 		}
 
-		// TODO: how do we add https?
 		listener := stack.PoolELBListener{
 			LoadBalancerPort: 80,
 			Protocol:         "HTTP",
-			InstancePort:     8080,
+			InstancePort:     httpPort,
 			InstanceProtocol: "HTTP",
 		}
 
 		elb.Listeners = append(elb.Listeners, listener)
+
+		if sslCert != "" {
+			certID := resources.ServerCerts[sslCert]
+			if certID == "" {
+				log.Fatalf("Could not find certificate '%s'", sslCert)
+			}
+
+			listener := stack.PoolELBListener{
+				LoadBalancerPort: 443,
+				Protocol:         "HTTPS",
+				InstancePort:     httpPort,
+				InstanceProtocol: "HTTP",
+				SSLCertificateId: certID,
+			}
+			elb.Listeners = append(elb.Listeners, listener)
+		}
+
 		pool.ELBs = append(pool.ELBs, elb)
 	}
 
@@ -331,6 +352,7 @@ func stackPool(c *cli.Context, update bool) {
 		log.Fatal(err)
 	}
 
+	//FIXME DEBUG
 	fmt.Println(string(poolTmpl))
 	return
 

@@ -490,6 +490,8 @@ func Wait(name string, timeout time.Duration) error {
 
 }
 
+// Get a list of SSL certificates from the IAM service.
+// Cloudformation templates need to reference certs via their ARNs.
 func ListServerCertificates() (ListServerCertsResponse, error) {
 	certResp := ListServerCertsResponse{}
 
