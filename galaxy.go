@@ -19,6 +19,8 @@ import (
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
+
+	"github.com/dotcloud/docker/pkg/term"
 )
 
 var (
@@ -27,10 +29,17 @@ var (
 
 	initOnce     sync.Once
 	buildVersion string
+
+	// make certain we have a tty for interactive prompts
+	tty bool
 )
 
 var config struct {
 	Host string `toml:"host"`
+}
+
+func init() {
+	tty = term.IsTerminal(os.Stdin.Fd())
 }
 
 // ensure the registry as a redis host, but only once

@@ -16,6 +16,10 @@ import (
 )
 
 func promptValue(prompt, dflt string) string {
+	if !tty {
+		return dflt
+	}
+
 	fmt.Printf("%s [%s]: ", prompt, dflt)
 
 	val, err := bufio.NewReader(os.Stdin).ReadString('\n')
