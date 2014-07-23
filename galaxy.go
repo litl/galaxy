@@ -767,6 +767,9 @@ func main() {
 				cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
 				cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
 				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
+				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
+				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
+				cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
 			},
 		},
 		{
@@ -795,6 +798,7 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "parameters", Usage: "JSON stack parameters"},
 				cli.StringFlag{Name: "template", Usage: "stack template file"},
+				cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
 			},
 		},
 		{

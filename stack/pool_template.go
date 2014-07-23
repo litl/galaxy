@@ -48,13 +48,13 @@ var pool_template = []byte(`
 				"VPCZoneIdentifier": []
             },
 			"Type": "AWS::AutoScaling::AutoScalingGroup",
-			"UpdatePolicy": {
-				"MaxBatchSize": "1",
-				"MinInstancesInService": "0",
-				"AutoScalingRollingUpdate": {
-					"PauseTime": "PT2M0S"
-				}
-			}
+            "UpdatePolicy" : {
+                "AutoScalingRollingUpdate" : {
+                    "MinInstancesInService" : "1",
+                    "MaxBatchSize" : "1",
+                    "PauseTime" : "PT5M"
+                }
+            }
         },
 		"elb_": {
 			"Properties": {

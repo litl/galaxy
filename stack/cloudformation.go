@@ -17,6 +17,8 @@ import (
 /*
 Most of this should probably get wrapped up in a goamz/cloudformations package,
 if someone wants to write out the entire API.
+
+TODO: this is going to need some DRY love
 */
 
 type GetTemplateResponse struct {
@@ -613,7 +615,8 @@ func GetTemplate(name string) ([]byte, error) {
 }
 
 // Create a CloudFormation stack
-// The options map must include KeyPair, SubnetCIDRBlocks, and VPCCidrBlock
+// Request parameters which are taken from the options:
+//   StackPolicyDuringUpdateBody
 func Create(name string, stackTmpl []byte, options map[string]string) error {
 	svc, err := getService("cf")
 	if err != nil {
@@ -628,6 +631,10 @@ func Create(name string, stackTmpl []byte, options map[string]string) error {
 
 	optNum := 1
 	for key, val := range options {
+		if key == "StackPolicyDuringUpdateBody" {
+			params["StackPolicyDuringUpdateBody"] = val
+			continue
+		}
 		params[fmt.Sprintf("Parameters.member.%d.ParameterKey", optNum)] = key
 		params[fmt.Sprintf("Parameters.member.%d.ParameterValue", optNum)] = val
 		optNum++
@@ -657,7 +664,8 @@ func Create(name string, stackTmpl []byte, options map[string]string) error {
 }
 
 // Update an existing CloudFormation stack.
-// The options map must include KeyPair
+// Request parameters which are taken from the options:
+//   StackPolicyDuringUpdateBody
 func Update(name string, stackTmpl []byte, options map[string]string) error {
 	svc, err := getService("cf")
 	if err != nil {
@@ -672,6 +680,10 @@ func Update(name string, stackTmpl []byte, options map[string]string) error {
 
 	optNum := 1
 	for key, val := range options {
+		if key == "StackPolicyDuringUpdateBody" {
+			params["StackPolicyDuringUpdateBody"] = val
+			continue
+		}
 		params[fmt.Sprintf("Parameters.member.%d.ParameterKey", optNum)] = key
 		params[fmt.Sprintf("Parameters.member.%d.ParameterValue", optNum)] = val
 		optNum++
@@ -738,4 +750,30 @@ func Delete(name string) error {
 // The default template used to create our base stack.
 func GalaxyTemplate() []byte {
 	return cloudformation_template
+}
+
+// set a stack policy
+// TODO: add delete policy
+func SetPolicy(name string, policy []byte) error {
+	svc, err := getService("cf")
+	if err != nil {
+		return err
+	}
+
+	params := map[string]string{
+		"Action":          "SetStackPolicy",
+		"StackName":       name,
+		"StackPolicyBody": string(policy),
+	}
+
+	resp, err := svc.Query("POST", "/", params)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return svc.BuildError(resp)
+	}
+
+	return nil
 }

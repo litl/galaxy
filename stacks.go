@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -195,8 +196,12 @@ func stackUpdatePool(c *cli.Context) {
 	stackPool(c, true)
 }
 
+// TODO: this function has gotten very long
 // manually create a pool stack
 func stackPool(c *cli.Context, update bool) {
+	var err error
+	options := make(map[string]string)
+
 	poolName := c.GlobalString("pool")
 	if poolName == "" {
 		log.Fatal("pool name required")
@@ -213,6 +218,30 @@ func stackPool(c *cli.Context, update bool) {
 	}
 
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
+
+	if policy := c.String("update-policy"); policy != "" && update {
+		policy = strings.TrimSpace(policy)
+
+		// no opening bracket probably indicates a filename
+		if !strings.HasPrefix(policy, "{") {
+			// might be a file
+			f, err := ioutil.ReadFile(policy)
+			if err != nil {
+				log.Fatal("could not read policy:", err)
+			}
+
+			policy = string(f)
+		}
+
+		// verify the json by compacting it
+		buf := bytes.NewBuffer(nil)
+		err = json.Compact(buf, []byte(policy))
+		if err != nil {
+			log.Fatal("invalid policy:", err)
+		}
+
+		options["StackPolicyDuringUpdateBody"] = buf.String()
+	}
 
 	// get the resources we need from the base stack
 	resources, err := stack.GetSharedResources(baseStack)
@@ -352,20 +381,16 @@ func stackPool(c *cli.Context, update bool) {
 		log.Fatal(err)
 	}
 
-	//FIXME DEBUG
-	fmt.Println(string(poolTmpl))
-	return
-
 	switch update {
 	case true:
-		updatePool(poolTmpl, stackName)
+		updatePool(poolTmpl, stackName, options)
 	case false:
-		createPool(poolTmpl, stackName)
+		createPool(poolTmpl, stackName, options)
 	}
 }
 
-func createPool(poolTmpl []byte, stackName string) {
-	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
+func createPool(poolTmpl []byte, stackName string, opts map[string]string) {
+	if err := stack.Create(stackName, poolTmpl, opts); err != nil {
 		log.Fatal(err)
 	}
 
@@ -376,8 +401,8 @@ func createPool(poolTmpl []byte, stackName string) {
 	log.Println("CreateStack complete")
 }
 
-func updatePool(poolTmpl []byte, stackName string) {
-	if err := stack.Update(stackName, poolTmpl, nil); err != nil {
+func updatePool(poolTmpl []byte, stackName string, opts map[string]string) {
+	if err := stack.Update(stackName, poolTmpl, opts); err != nil {
 		log.Fatal(err)
 	}
 
@@ -395,7 +420,7 @@ func stackDelete(c *cli.Context) {
 		log.Fatal("stack name required")
 	}
 
-	switch strings.ToLower(promptValue("\nDelete Stack '%s'?", "n")) {
+	switch strings.ToLower(promptValue(fmt.Sprintf("\nDelete Stack '%s'?", stackName), "n")) {
 	case "y", "yes":
 		err := stack.Delete(stackName)
 		if err != nil {
