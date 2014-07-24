@@ -117,16 +117,15 @@ func appExists(app string) (bool, error) {
 
 func appList(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 
-	appList, err := serviceRegistry.ListApps("")
+	appList, err := serviceRegistry.ListApps()
 	if err != nil {
 		log.Printf("ERROR: %s\n", err)
 		return
 	}
 
-	columns := []string{"NAME | VERSION | PORT | REGISTERED | POOL | ENV"}
+	columns := []string{"NAME | VERSION | PORT | REGISTERED | ENV"}
 	for _, app := range appList {
 		name := app.Name
 		port := app.EnvGet("GALAXY_PORT")
@@ -138,7 +137,6 @@ func appList(c *cli.Context) {
 			versionDeployed,
 			port,
 			strconv.Itoa(registered),
-			utils.GalaxyPool(c),
 			utils.GalaxyEnv(c)}, " | "))
 	}
 	output, _ := columnize.SimpleFormat(columns)

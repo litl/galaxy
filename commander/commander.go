@@ -48,7 +48,7 @@ func initOrDie() {
 	serviceRegistry.Connect(redisHost)
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
-	serviceConfigs, err := serviceRegistry.ListApps("")
+	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
 		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 	}
@@ -60,7 +60,7 @@ func initOrDie() {
 }
 
 func pullAllImages() error {
-	serviceConfigs, err := serviceRegistry.ListApps("")
+	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
 		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 		return err

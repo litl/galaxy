@@ -27,7 +27,7 @@ func status(c *cli.Context) {
 		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 
-	serviceConfigs, err := serviceRegistry.ListApps("")
+	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
 		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", utils.GalaxyEnv(c),
 			utils.GalaxyPool(c), err)

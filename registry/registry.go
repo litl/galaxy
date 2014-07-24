@@ -261,7 +261,7 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 	return deletedOne, nil
 }
 
-func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
+func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -269,10 +269,6 @@ func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
 		conn.Close()
 		r.reconnectRedis()
 		return nil, conn.Err()
-	}
-
-	if pool == "" {
-		pool = r.Pool
 	}
 
 	// TODO: convert to scan

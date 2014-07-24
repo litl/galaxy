@@ -247,7 +247,7 @@ func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.Service
 
 func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
 
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	serviceConfigs, err := s.serviceRegistry.ListApps()
 	if err != nil {
 		return err
 	}
@@ -391,7 +391,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	args = append(args, "--dns")
 	args = append(args, s.shuttleHost)
 
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	serviceConfigs, err := s.serviceRegistry.ListApps()
 	if err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	serviceConfigs, err := s.serviceRegistry.ListApps()
 	if err != nil {
 		return nil, err
 	}
@@ -660,7 +660,7 @@ func (s *ServiceRuntime) RegisterAll() ([]*registry.ServiceRegistration, error) 
 		return nil, err
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	serviceConfigs, err := s.serviceRegistry.ListApps()
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +697,7 @@ func (s *ServiceRuntime) RegisterAll() ([]*registry.ServiceRegistration, error) 
 }
 
 func (s *ServiceRuntime) UnRegisterAll() ([]*docker.Container, error) {
-	serviceConfigs, err := s.serviceRegistry.ListApps("")
+	serviceConfigs, err := s.serviceRegistry.ListApps()
 	if err != nil {
 		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", s.serviceRegistry.Env,
 			s.serviceRegistry.Pool, err)
