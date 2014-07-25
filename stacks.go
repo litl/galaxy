@@ -78,6 +78,40 @@ func getInitOpts(c *cli.Context) map[string]string {
 	return opts
 }
 
+// Return json supplied in the argument, or look for a file by the name given.
+// Is the name is "STDIN", read the json from stdin
+func jsonFromArg(arg string) ([]byte, error) {
+	var jsonArg []byte
+	var err error
+
+	arg = strings.TrimSpace(arg)
+
+	// assume that an opening brack mean the json is given directly
+	if strings.HasPrefix(arg, "{") {
+		jsonArg = []byte(arg)
+	} else if arg == "STDIN" {
+		jsonArg, err = ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// all else fails, look for a file
+		jsonArg, err = ioutil.ReadFile(arg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// verify the json by compacting it
+	buf := bytes.NewBuffer(nil)
+	err = json.Compact(buf, jsonArg)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 // create our base stack
 func stackInit(c *cli.Context) {
 	stackName := c.Args().First()
@@ -122,7 +156,7 @@ func stackUpdate(c *cli.Context) {
 
 	template := c.String("template")
 	if template != "" {
-		stackTmpl, err = ioutil.ReadFile(template)
+		stackTmpl, err = jsonFromArg(template)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -220,27 +254,12 @@ func stackPool(c *cli.Context, update bool) {
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
 
 	if policy := c.String("update-policy"); policy != "" && update {
-		policy = strings.TrimSpace(policy)
-
-		// no opening bracket probably indicates a filename
-		if !strings.HasPrefix(policy, "{") {
-			// might be a file
-			f, err := ioutil.ReadFile(policy)
-			if err != nil {
-				log.Fatal("could not read policy:", err)
-			}
-
-			policy = string(f)
-		}
-
-		// verify the json by compacting it
-		buf := bytes.NewBuffer(nil)
-		err = json.Compact(buf, []byte(policy))
+		policyJSON, err := jsonFromArg(policy)
 		if err != nil {
-			log.Fatal("invalid policy:", err)
+			log.Fatal("policy error:", err)
 		}
 
-		options["StackPolicyDuringUpdateBody"] = buf.String()
+		options["StackPolicyDuringUpdateBody"] = string(policyJSON)
 	}
 
 	// get the resources we need from the base stack

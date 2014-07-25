@@ -794,7 +794,7 @@ func main() {
 			Name:        "stack:update",
 			Usage:       "update the base stack",
 			Action:      stackUpdate,
-			Description: "stack:update",
+			Description: "stack:update <stack_name>",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "parameters", Usage: "JSON stack parameters"},
 				cli.StringFlag{Name: "template", Usage: "stack template file"},
