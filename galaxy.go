@@ -528,6 +528,7 @@ func poolCreate(c *cli.Context) {
 	}
 
 	// now create the cloudformation stack
+	// is this fails, the stack can be created separately with stack:create_pool
 	stackCreatePool(c)
 }
 
@@ -777,6 +778,9 @@ func main() {
 			Usage:       "deletes a pool",
 			Action:      poolDelete,
 			Description: "pool:delete",
+			Flags: []cli.Flag{
+				cli.BoolFlag{Name: "y", Usage: "skip confirmation"},
+			},
 		},
 		{
 			Name:        "pg:psql",
@@ -806,6 +810,9 @@ func main() {
 			Usage:       "delete a stack",
 			Action:      stackDelete,
 			Description: "stack:delete <stack_name>",
+			Flags: []cli.Flag{
+				cli.BoolFlag{Name: "y", Usage: "skip confirmation"},
+			},
 		},
 		{
 			Name:        "stack:create_pool",

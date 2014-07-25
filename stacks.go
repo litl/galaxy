@@ -433,19 +433,27 @@ func updatePool(poolTmpl []byte, stackName string, opts map[string]string) {
 	log.Println("UpdateStack complete")
 }
 
+// delete a pool
 func stackDelete(c *cli.Context) {
 	stackName := c.Args().First()
 	if stackName == "" {
 		log.Fatal("stack name required")
 	}
 
-	switch strings.ToLower(promptValue(fmt.Sprintf("\nDelete Stack '%s'?", stackName), "n")) {
-	case "y", "yes":
-		err := stack.Delete(stackName)
-		if err != nil {
-			log.Fatal(err)
+	ok := c.Bool("y")
+	if !ok {
+		switch strings.ToLower(promptValue(fmt.Sprintf("\nDelete Stack '%s'?", stackName), "n")) {
+		case "y", "yes":
+			ok = true
 		}
-	default:
-		log.Println("aborted")
+	}
+
+	if !ok {
+		log.Fatal("aborted")
+	}
+
+	err := stack.Delete(stackName)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
