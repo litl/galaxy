@@ -1,32 +1,36 @@
 package stack
 
+//TODO: replace "galaxy" strings with actual stack name for easier cross-reference
 // The base template for our Galaxy Cloudformation
 var cloudformation_template = []byte(`{
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "galaxy CoudFormation Template",
+    "Description": "Galaxy CloudFormation",
     "Parameters": {
         "ControllerImageId": {
-            "Default": "ami-018c9568",
             "Description": "Galaxy Controller AMI",
             "Type": "String"
         },
         "ControllerInstanceType": {
-            "Default": "m1.small",
             "Description": "LaunchConfig Instance Type",
             "Type": "String"
         },
+        "PoolImageId": {
+            "Description": "Default galaxy pool AMI",
+            "Type": "String"
+        },
+        "PoolInstanceType": {
+            "Description": "Default galaxy pool instance type",
+            "Type": "String"
+        },
         "KeyPair": {
-            "AllowedPattern": ".+",
             "Description": "The name of an EC2 Key Pair to allow SSH access to the instance.",
             "Type": "String"
         },
         "SubnetCidrBlocks": {
-            "Default": "10.24.1.0/24, 10.24.2.0/24, 10.24.3.0/24",
             "Description": "Comma delimited list of Cidr blocks for subnets (3)",
             "Type": "CommaDelimitedList"
         },
         "VPCCidrBlock": {
-            "Default": "10.24.0.0/16",
             "Description": "Cidr Block for the VPC",
             "Type": "String"
         }
@@ -135,7 +139,7 @@ var cloudformation_template = []byte(`{
                 "HealthCheckGracePeriod": "300",
                 "HealthCheckType": "EC2",
                 "LaunchConfigurationName": {
-                    "Ref": "galaxyLaunchConfig"
+                    "Ref": "galaxyControllerLC"
                 },
                 "MaxSize": "1",
                 "MinSize": "1",
@@ -214,14 +218,29 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::IAM::InstanceProfile"
         },
-        "galaxyLaunchConfig": {
+        "galaxyPoolLC": {
+            "Properties": {
+                "ImageId": {
+                    "Ref": "ControllerImageId"
+                },
+                "InstanceType": {
+                    "Ref": "ControllerInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyPair"
+                }
+            },
+            "Type": "AWS::AutoScaling::LaunchConfiguration"
+        },
+        "galaxyControllerLC": {
             "Properties": {
                 "AssociatePublicIpAddress": true,
                 "BlockDeviceMappings": [
                     {
                         "DeviceName": "/dev/sda1",
                         "Ebs": {
-                            "VolumeSize": 250
+                            "VolumeSize": 100,
+							"VolumeType": "gp2"
                         }
                     }
                 ],

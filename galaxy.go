@@ -11,17 +11,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
-	"github.com/crowdmob/goamz/aws"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
-	"github.com/litl/galaxy/stack"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
+
+	"github.com/dotcloud/docker/pkg/term"
 )
 
 var (
@@ -30,10 +29,17 @@ var (
 
 	initOnce     sync.Once
 	buildVersion string
+
+	// make certain we have a tty for interactive prompts
+	tty bool
 )
 
 var config struct {
 	Host string `toml:"host"`
+}
+
+func init() {
+	tty = term.IsTerminal(os.Stdin.Fd())
 }
 
 // ensure the registry as a redis host, but only once
@@ -521,6 +527,15 @@ func poolCreate(c *cli.Context) {
 		log.Printf("Pool %s already exists\n", utils.GalaxyPool(c))
 	}
 
+	// now create the cloudformation stack
+	// is this fails, the stack can be created separately with stack:create_pool
+	stackCreatePool(c)
+}
+
+func poolUpdate(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
+	stackUpdatePool(c)
 }
 
 func poolList(c *cli.Context) {
@@ -624,206 +639,6 @@ func pgPsql(c *cli.Context) {
 	}
 }
 
-func stackInit(c *cli.Context) {
-	stackName := c.Args().First()
-	if stackName == "" {
-		log.Fatal("stack name required")
-	}
-
-	keyPair := c.String("keypair")
-	if keyPair == "" {
-		log.Fatal("-keypair required")
-	}
-
-	var stackTmpl []byte
-	tmplLoc := c.String("template")
-
-	if tmplLoc != "" {
-		var err error
-		stackTmpl, err = ioutil.ReadFile(tmplLoc)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		stackTmpl = stack.GalaxyTemplate()
-	}
-
-	//TODO: Make this an option
-	opts := map[string]string{
-		"KeyPair": "admin-us-east",
-	}
-
-	err := stack.Create(stackName, stackTmpl, opts)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-// manually create a pool stack
-func stackPool(c *cli.Context, create bool) {
-	poolName := c.GlobalString("pool")
-	if poolName == "" {
-		log.Fatal("pool name required")
-	}
-
-	keyPair := c.String("keypair")
-
-	amiID := c.String("ami")
-	if amiID == "" {
-		log.Fatal("ami required")
-	}
-
-	baseStack := c.String("base")
-	if baseStack == "" {
-		log.Fatal("base stack required")
-	}
-
-	poolEnv := c.GlobalString("env")
-	if poolEnv == "" {
-		log.Fatal("env required")
-	}
-
-	instanceType := c.String("instance-type")
-	if instanceType == "" {
-		instanceType = "m1.small"
-	}
-
-	// get the resources we need from the base stack
-	resources, err := stack.GetSharedResources(baseStack)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if keyPair == "" {
-		keyPair = resources.Parameters["KeyPair"]
-	}
-
-	if keyPair == "" {
-		log.Fatal("KeyPair required")
-	}
-
-	// add all subnets
-	subnets := []string{}
-	for _, val := range resources.Subnets {
-		subnets = append(subnets, val)
-	}
-
-	// TODO: add more options
-	pool := stack.Pool{
-		Name:            poolName,
-		Env:             poolEnv,
-		DesiredCapacity: 1,
-		KeyName:         keyPair,
-		InstanceType:    instanceType,
-		ImageID:         amiID,
-		IAMRole:         resources.Roles["galaxyInstanceProfile"],
-		SubnetIDs:       subnets,
-		SecurityGroups: []string{
-			resources.SecurityGroups["sshSG"],
-			resources.SecurityGroups["defaultSG"],
-		},
-		VolumeSize:    100,
-		BaseStackName: baseStack,
-	}
-
-	if strings.Contains(poolName, "web") {
-		elb := stack.PoolELB{
-			Name: poolEnv + poolName,
-
-			SecurityGroups: []string{
-				resources.SecurityGroups["webSG"],
-				resources.SecurityGroups["defaultSG"],
-			},
-			HealthCheck: "HTTP:8080/",
-		}
-
-		// TODO: how do we add https?
-		listener := stack.PoolELBListener{
-			LoadBalancerPort: 80,
-			Protocol:         "HTTP",
-			InstancePort:     8080,
-			InstanceProtocol: "HTTP",
-		}
-
-		elb.Listeners = append(elb.Listeners, listener)
-		pool.ELBs = append(pool.ELBs, elb)
-	}
-
-	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
-
-	poolTmpl, err := stack.CreatePoolTemplate(pool)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	switch create {
-	case true:
-		createPool(poolTmpl, stackName)
-	case false:
-		updatePool(poolTmpl, stackName)
-	}
-}
-
-func createPool(poolTmpl []byte, stackName string) {
-	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
-		log.Fatal(err)
-	}
-
-	// do we want to wait on this by default?
-	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
-		log.Fatal(err)
-	}
-	log.Println("CreateStack complete")
-}
-
-func updatePool(poolTmpl []byte, stackName string) {
-	if err := stack.Update(stackName, poolTmpl, nil); err != nil {
-		log.Fatal(err)
-	}
-
-	// do we want to wait on this by default?
-	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("UpdateStack complete")
-}
-
-func stackCreatePool(c *cli.Context) {
-	stackPool(c, true)
-}
-
-func stackUpdatePool(c *cli.Context) {
-	stackPool(c, false)
-}
-
-// Print a Cloudformation template to stdout.  This is useful for generating a
-// config file to edit, then create/update the base stack.
-func stackTemplate(c *cli.Context) {
-	stackName := c.Args().First()
-
-	if stackName == "" {
-		if _, err := os.Stdout.Write(stack.GalaxyTemplate()); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-
-	stackTmpl, err := stack.GetTemplate(stackName)
-	if err != nil {
-		if err, ok := err.(*aws.Error); ok {
-			if err.Code == "ValidationError" && strings.Contains(err.Message, "does not exist") {
-				log.Fatalf("Stack '%s' does not exist", stackName)
-			}
-		}
-		log.Fatal(err)
-	}
-
-	if _, err := os.Stdout.Write(stackTmpl); err != nil {
-		log.Fatal(err)
-	}
-}
-
 func main() {
 
 	loadConfig()
@@ -839,9 +654,22 @@ func main() {
 		cli.StringFlag{Name: "redis", Value: utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: "", Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: "", Usage: "pool (web, worker, etc.)"},
+		cli.StringFlag{Name: "base", Usage: "base stack name"},
+		cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
+		cli.StringFlag{Name: "ami", Usage: "ami id"},
+		cli.StringFlag{Name: "instance-type", Usage: "instance type"},
 	}
 
 	app.Commands = []cli.Command{
+		{
+			Name:        "init",
+			Usage:       "initialize the galaxy infrastructure",
+			Action:      stackInit,
+			Description: "stack:init <stack_name>",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "template", Usage: "template file"},
+			},
+		},
 		{
 			Name:        "app",
 			Usage:       "list the apps currently created",
@@ -923,12 +751,37 @@ func main() {
 			Usage:       "create a pool",
 			Action:      poolCreate,
 			Description: "pool:create",
+			Flags: []cli.Flag{
+				cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
+				cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
+				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
+				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
+				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
+			},
+		},
+		{
+			Name:        "pool:update",
+			Usage:       "update a pool's stack",
+			Action:      poolUpdate,
+			Description: "pool:update",
+			Flags: []cli.Flag{
+				cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
+				cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
+				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
+				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
+				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
+				cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
+				cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
+			},
 		},
 		{
 			Name:        "pool:delete",
 			Usage:       "deletes a pool",
 			Action:      poolDelete,
 			Description: "pool:delete",
+			Flags: []cli.Flag{
+				cli.BoolFlag{Name: "y", Usage: "skip confirmation"},
+			},
 		},
 		{
 			Name:        "pg:psql",
@@ -937,44 +790,43 @@ func main() {
 			Description: "pg:psql <app>",
 		},
 		{
-			Name:        "stack:init",
-			Usage:       "initialize the galaxy infrastructure",
-			Action:      stackInit,
-			Description: "stack:init <stack_name>",
-			Flags: []cli.Flag{
-				cli.StringFlag{Name: "template", Usage: "cloudformation template"},
-				cli.StringFlag{Name: "keypair", Usage: "ssh keypair for galaxy controller"},
-				cli.StringFlag{Name: "ami", Usage: "controller ami id"},
-			},
-		},
-		{
 			Name:        "stack:template",
 			Usage:       "print the cloudformation template to stdout",
 			Action:      stackTemplate,
 			Description: "stack:template <stack_name>",
 		},
 		{
-			Name:        "stack:create_pool",
-			Usage:       "create a pool stack",
-			Action:      stackCreatePool,
-			Description: "stack:create_pool",
+			Name:        "stack:update",
+			Usage:       "update the base stack",
+			Action:      stackUpdate,
+			Description: "stack:update <stack_name>",
 			Flags: []cli.Flag{
-				cli.StringFlag{Name: "base", Usage: "base stack name"},
-				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
-				cli.StringFlag{Name: "ami", Usage: "ami id"},
-				cli.StringFlag{Name: "instance-type", Usage: "optional instance type"},
+				cli.StringFlag{Name: "parameters", Usage: "JSON stack parameters"},
+				cli.StringFlag{Name: "template", Usage: "stack template file"},
+				cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
 			},
 		},
 		{
-			Name:        "stack:update_pool",
-			Usage:       "update a pool stack",
-			Action:      stackUpdatePool,
-			Description: "stack:update_pool",
+			Name:        "stack:delete",
+			Usage:       "delete a stack",
+			Action:      stackDelete,
+			Description: "stack:delete <stack_name>",
 			Flags: []cli.Flag{
-				cli.StringFlag{Name: "base", Usage: "base stack name"},
-				cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
-				cli.StringFlag{Name: "ami", Usage: "ami id"},
-				cli.StringFlag{Name: "instance-type", Usage: "optional instance type"},
+				cli.BoolFlag{Name: "y", Usage: "skip confirmation"},
+			},
+		},
+		{
+			Name:        "stack:create_pool",
+			Usage:       "create a pool stack directly",
+			Action:      stackCreatePool,
+			Description: "stack:create_pool",
+			Flags: []cli.Flag{
+				cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
+				cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
+				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
+				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
+				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
+				cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
 			},
 		},
 	}

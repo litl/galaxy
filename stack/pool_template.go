@@ -4,6 +4,8 @@ package stack
 Resources.asg_
          .asg_.Properties.LaunchConfigurationName {"Ref": }
          .asg_.Properties.LoadBalancerNames [{"Ref": }]
+		 .asg_.Properties.MinSize
+		 .asg_.Properties.MaxSize
 		 .asg_.Properties.DesiredCapacity
          .asg_.Tags // must have PropagateAtLaunch
          .asg_.VPCZoneIdentifier = [SubnetIds,]
@@ -40,12 +42,19 @@ var pool_template = []byte(`
                 "HealthCheckGracePeriod": "300",
                 "HealthCheckType": "EC2",
                 "LaunchConfigurationName": "",
-				"MaxSize": "12",
-				"MinSize": "1",
+				"MaxSize": "",
+				"MinSize": "",
 				"Tags": [],
 				"VPCZoneIdentifier": []
             },
-			"Type": "AWS::AutoScaling::AutoScalingGroup"
+			"Type": "AWS::AutoScaling::AutoScalingGroup",
+            "UpdatePolicy" : {
+                "AutoScalingRollingUpdate" : {
+                    "MinInstancesInService" : "1",
+                    "MaxBatchSize" : "1",
+                    "PauseTime" : "PT5M"
+                }
+            }
         },
 		"elb_": {
 			"Properties": {
