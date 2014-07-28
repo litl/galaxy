@@ -771,6 +771,7 @@ func main() {
 				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
 				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
 				cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
+				cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
 			},
 		},
 		{
@@ -825,6 +826,7 @@ func main() {
 				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
 				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
 				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
+				cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
 			},
 		},
 	}

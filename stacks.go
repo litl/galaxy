@@ -400,6 +400,11 @@ func stackPool(c *cli.Context, update bool) {
 		log.Fatal(err)
 	}
 
+	if c.Bool("print") {
+		fmt.Println(string(poolTmpl))
+		return
+	}
+
 	switch update {
 	case true:
 		updatePool(poolTmpl, stackName, options)
