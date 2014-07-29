@@ -336,7 +336,9 @@ func stackPool(c *cli.Context, update bool) {
 		volumeSize = oldPool.VolumeSize
 	}
 
-	// TODO: add more options
+	// TODO: we need a way to losslessly convert a stack.Pool to a pool's raw
+	// JSON and back again. The missmatch between this confuration struct and
+	// the JSON is making this very complicated and error-prone.
 	pool := stack.Pool{
 		Name:            poolName,
 		Env:             poolEnv,
