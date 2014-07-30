@@ -145,7 +145,6 @@ func appList(c *cli.Context) {
 
 func appCreate(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 
 	app := c.Args().First()
@@ -160,16 +159,6 @@ func appCreate(c *cli.Context) {
 		return
 	}
 
-	exists, err := serviceRegistry.PoolExists()
-	if err != nil {
-		log.Printf("ERROR: Could not create app: %s\n", err)
-		return
-	}
-	if !exists {
-		log.Printf("ERROR: Pool %s does not exist. Create it first.\n", serviceRegistry.Pool)
-		return
-	}
-
 	created, err := serviceRegistry.CreateApp(app)
 
 	if err != nil {
@@ -177,15 +166,14 @@ func appCreate(c *cli.Context) {
 		return
 	}
 	if created {
-		log.Printf("Created %s in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("Created %s in env %s.\n", app, utils.GalaxyEnv(c))
 	} else {
-		log.Printf("%s already exists in in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("%s already exists in in env %s.\n", app, utils.GalaxyEnv(c))
 	}
 }
 
 func appDelete(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 
 	app := ensureAppParam(c, "app:delete")
@@ -201,9 +189,9 @@ func appDelete(c *cli.Context) {
 		return
 	}
 	if deleted {
-		log.Printf("Deleted %s from env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("Deleted %s from env %s.\n", app, utils.GalaxyEnv(c))
 	} else {
-		log.Printf("%s does not exists in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("%s does not exists in env %s.\n", app, utils.GalaxyEnv(c))
 	}
 
 }

@@ -228,10 +228,6 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 		return false, err
 	}
 
-	if exists, err := r.PoolExists(); !exists || err != nil {
-		return false, err
-	}
-
 	emptyConfig := NewServiceConfig(app, "")
 	emptyConfig.environmentVMap.Set("ENV", r.Env)
 
