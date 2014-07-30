@@ -161,7 +161,8 @@ func (r *ServiceRegistry) PoolExists() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return utils.StringInSlice(r.Pool, pools), nil
+	_, ok := pools[r.Pool]
+	return ok, nil
 }
 
 func (r *ServiceRegistry) AppExists(app string) (bool, error) {
@@ -239,17 +240,31 @@ func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
 	return removed == 1, nil
 }
 
-func (r *ServiceRegistry) ListPools() ([]string, error) {
+func (r *ServiceRegistry) ListPools() (map[string][]string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	// TODO: convert to scan
-	matches, err := redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", "*")))
+	assignments := make(map[string][]string)
+	// TODO: convert to SCAN
+	matches, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "pools", "*")))
 	if err != nil {
-		return nil, err
+		return assignments, err
 	}
 
-	return matches, nil
+	for _, match := range matches {
+		parts := strings.Split(match, "/")
+		if parts[2] == "*" {
+			continue
+		}
+		members, err := redis.Strings(conn.Do("SMEMBERS", match))
+		if err != nil {
+			return assignments, err
+		}
+
+		assignments[parts[0]] = members
+	}
+
+	return assignments, nil
 }
 
 func (r *ServiceRegistry) CreateApp(app string) (bool, error) {

@@ -592,9 +592,14 @@ func poolList(c *cli.Context) {
 		return
 	}
 
-	for _, pool := range pools {
-		log.Println(pool)
+	columns := []string{"POOL | APPS "}
+	for name, assigments := range pools {
+		columns = append(columns, strings.Join([]string{
+			name,
+			strings.Join(assigments, ",")}, " | "))
 	}
+	output, _ := columnize.SimpleFormat(columns)
+	log.Println(output)
 }
 
 func poolDelete(c *cli.Context) {
