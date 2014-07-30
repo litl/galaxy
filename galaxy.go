@@ -210,7 +210,6 @@ func appDelete(c *cli.Context) {
 
 func appDeploy(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 	initRuntime(c)
 

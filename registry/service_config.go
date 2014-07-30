@@ -189,7 +189,7 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 		return false, err
 	}
 
-	err = r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "ports"),
+	err = r.saveVMap(path.Join(r.Env, svcCfg.Name, "ports"),
 		svcCfg.portsVMap)
 
 	if err != nil {
