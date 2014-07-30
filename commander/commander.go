@@ -166,7 +166,6 @@ func restartContainers(app string, cmdChan chan string) {
 				if !loop {
 					return
 				}
-
 				continue
 			}
 
@@ -180,7 +179,6 @@ func restartContainers(app string, cmdChan chan string) {
 				if !loop {
 					return
 				}
-
 				continue
 			}
 
@@ -197,7 +195,6 @@ func restartContainers(app string, cmdChan chan string) {
 					if !loop {
 						return
 					}
-
 					// if we can't pull the image, leave whatever is running alone
 					continue
 				}
@@ -373,6 +370,10 @@ func main() {
 	}
 
 	if loop {
+		log.Printf("Starting commander %s", buildVersion)
+		log.Printf("Using env = %s, pool = %s",
+			env, pool)
+
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
