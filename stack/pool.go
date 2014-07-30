@@ -11,18 +11,86 @@ const (
 	lcType  = "AWS::AutoScaling::LaunchConfiguration"
 )
 
-type NewPool struct {
+// TODO: make more things public
+
+// A Pool can be marshaled directly into a Cloudformation template for our pools.
+// This is Purposely constrained to our usage, with some values specifically
+// using intrinsic functions, and other assumed prerequisites. This should only
+// matter if the poolTmpl is modified, or we attempt to update an arbitrarily
+// added pool template.
+type Pool struct {
+	// pre-initialized values from the template
+	ASGTemplate *asg `json:"-"`
+	ELBTemplate *elb `json:"-"`
+	LCTemplate  *lc  `json:"-"`
+
 	AWSTemplateFormatVersion string
 	Description              string
 	Resources                map[string]interface{}
 }
 
-func (p *NewPool) UnmarshalJSON(b []byte) error {
-	p.AWSTemplateFormatVersion = "2010-09-09"
-	p.Description = "Galaxy Pool Template"
+func NewPool() *Pool {
+	p := &Pool{}
+	// use our pool template to initialize some defaults
+	if err := json.Unmarshal(poolTmpl, p); err != nil {
+		panic("corrupt pool template" + err.Error())
+	}
 
+	// move the template structs out of the final Resources
+	for k, v := range p.Resources {
+		switch r := v.(type) {
+		case *elb:
+			p.ELBTemplate = r
+		case *asg:
+			p.ASGTemplate = r
+		case *lc:
+			p.LCTemplate = r
+		}
+		delete(p.Resources, k)
+	}
+
+	return p
+}
+
+func (p *Pool) ASG() *asg {
+	for _, i := range p.Resources {
+		if r, ok := i.(*asg); ok {
+			return r
+		}
+	}
+	return nil
+}
+
+func (p *Pool) ELB() *elb {
+	for _, i := range p.Resources {
+		if r, ok := i.(*elb); ok {
+			return r
+		}
+	}
+	return nil
+}
+
+func (p *Pool) LC() *lc {
+	for _, i := range p.Resources {
+		if r, ok := i.(*lc); ok {
+			return r
+		}
+	}
+	return nil
+}
+
+func (p *Pool) UnmarshalJSON(b []byte) error {
 	base := make(map[string]json.RawMessage)
+
 	if err := json.Unmarshal(b, &base); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(base["AWSTemplateFormatVersion"], &p.AWSTemplateFormatVersion); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(base["Description"], &p.Description); err != nil {
 		return err
 	}
 
@@ -31,7 +99,7 @@ func (p *NewPool) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 
-	// beak out the resources by name
+	// break out the resources by name
 	tmpResources := make(map[string]json.RawMessage)
 	if err := json.Unmarshal(rawResources, &tmpResources); err != nil {
 		return err
@@ -83,29 +151,26 @@ func (p *NewPool) UnmarshalJSON(b []byte) error {
 }
 
 type asg struct {
-	name         string
 	Type         string
 	Properties   asgProp
-	UpdatePolicy asgUpdatePolicy
+	UpdatePolicy asgUpdatePolicy `json:",omitempty"`
 }
 
 type asgProp struct {
-	AvailabilityZones intrinsic
-	Cooldown          int `json:",string"`
-	DesiredCapacity   int `json:",string"`
-
+	AvailabilityZones       Intrinsic
+	Cooldown                int `json:",string"`
+	DesiredCapacity         int `json:",string"`
 	HealthCheckGracePeriod  int `json:",string"`
 	HealthCheckType         string
-	LaunchConfigurationName intrinsic
-	LoadBalancerNames       []intrinsic
+	LaunchConfigurationName Intrinsic
+	LoadBalancerNames       []Intrinsic
 	MaxSize                 int `json:",string"`
 	MinSize                 int `json:",string"`
-	Tags                    []tag
+	Tags                    []Tag
 	VPCZoneIdentifier       []string
 }
 
 type elb struct {
-	name       string
 	Type       string
 	Properties elbProp
 }
@@ -114,30 +179,27 @@ type elbProp struct {
 	Subnets        []string
 	SecurityGroups []string
 	HealthCheck    healthCheck
-	Listeners      []listener
+	Listeners      []*Listener
 }
 
 type healthCheck struct {
-	HealthyThreshold int `json:",string"`
-
-	Interval int `json:",string"`
-
+	HealthyThreshold   int `json:",string"`
+	Interval           int `json:",string"`
 	Target             string
 	Timeout            int `json:",string"`
 	UnhealthyThreshold int `json:",string"`
 }
 
-type listener struct {
-	InstancePort int `json:",string"`
-
+type Listener struct {
+	InstancePort     int `json:",string"`
 	InstanceProtocol string
 	LoadBalancerPort int `json:",string"`
 	Protocol         string
-	SSLCertificateId *string `json:",omitempty"`
+	PolicyNames      []string `json:",omitempty"`
+	SSLCertificateId string   `json:",omitempty"`
 }
 
 type lc struct {
-	name       string
 	Type       string
 	Properties lcProp
 }
@@ -146,17 +208,17 @@ type lcProp struct {
 	AssociatePublicIpAddress bool
 	BlockDeviceMappings      []bdMapping
 	EbsOptimized             bool
-	IamInstanceProfile       *string `json:",omitempty"`
-	ImageId                  *string `json:",omitempty"`
-	InstanceId               *string `json:",omitempty"`
-	InstanceMonitoring       *bool   `json:",omitempty"`
+	IamInstanceProfile       string `json:",omitempty"`
+	ImageId                  string `json:",omitempty"`
+	InstanceId               string `json:",omitempty"`
+	InstanceMonitoring       *bool  `json:",omitempty"`
 	InstanceType             string
-	KernelId                 *string  `json:",omitempty"`
-	KeyName                  *string  `json:",omitempty"`
-	RamDiskId                *string  `json:",omitempty"`
+	KernelId                 string   `json:",omitempty"`
+	KeyName                  string   `json:",omitempty"`
+	RamDiskId                string   `json:",omitempty"`
 	SecurityGroups           []string `json:",omitempty"`
-	SpotPrice                *string  `json:",omitempty"`
-	UserData                 *string  `json:",omitempty"`
+	SpotPrice                string   `json:",omitempty"`
+	UserData                 string   `json:",omitempty"`
 }
 
 type bdMapping struct {
@@ -166,9 +228,9 @@ type bdMapping struct {
 }
 
 type ebsDev struct {
-	DeleteOnTermination *bool   `json:",omitempty"`
-	Iops                *int    `json:",omitempty"`
-	SnapshotId          *string `json:",omitempty"`
+	DeleteOnTermination *bool  `json:",omitempty"`
+	Iops                *int   `json:",omitempty"`
+	SnapshotId          string `json:",omitempty"`
 	VolumeSize          int
 	VolumeType          string
 }
@@ -183,7 +245,7 @@ type asgUpdate struct {
 	PauseTime             string
 }
 
-type tag struct {
+type Tag struct {
 	Key               string
 	Value             string
 	PropagateAtLaunch *bool `json:",omitempty"`
@@ -191,4 +253,4 @@ type tag struct {
 
 // use this to indicate we're specifically using an intrinsic function over an
 // actual map of values
-type intrinsic map[string]string
+type Intrinsic map[string]string
