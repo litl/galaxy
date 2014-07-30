@@ -501,15 +501,21 @@ func poolAssign(c *cli.Context) {
 	ensurePoolArg(c)
 	initRegistry(c)
 
-	app := c.Args().First()
-	if app == "" {
-		log.Println("ERROR: app name missing")
-		cli.ShowCommandHelp(c, "pool:assign")
-		os.Exit(1)
-	}
+	app := ensureAppParam(c, "pool:assign")
 
 	// Don't allow deleting runtime hosts entries
 	if app == "hosts" || app == "pools" {
+		return
+	}
+
+	exists, err := serviceRegistry.PoolExists()
+	if err != nil {
+		log.Printf("ERROR: Could not assign app: %s\n", err)
+		return
+	}
+
+	if !exists {
+		log.Printf("ERROR: Pool %s does not exist.  Create it first.\n", utils.GalaxyPool(c))
 		return
 	}
 
