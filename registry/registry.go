@@ -235,26 +235,17 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
 
-	deletedOne := false
-	deleted, err := conn.Do("DEL", path.Join(r.Env, app))
+	svcCfg, err := r.GetServiceConfig(app)
 	if err != nil {
 		return false, err
 	}
 
-	deletedOne = deletedOne || deleted.(int64) == 1
-
-	for _, k := range []string{"environment", "version", "ports"} {
-		deleted, err = conn.Do("DEL", path.Join(r.Env, app, k))
-		if err != nil {
-			return false, err
-		}
-		deletedOne = deletedOne || deleted.(int64) == 1
+	if svcCfg == nil {
+		return true, nil
 	}
 
-	return deletedOne, nil
+	return r.DeleteServiceConfig(svcCfg)
 }
 
 func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {

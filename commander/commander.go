@@ -196,6 +196,7 @@ func restartContainers(app string, cmdChan chan string) {
 
 			if serviceConfig == nil {
 				log.Errorf("%s no longer exists.  Stopping worker.", app)
+				serviceRuntime.StopAllMatching(app)
 				return
 			}
 
@@ -250,6 +251,7 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 				name := changedConfig.ServiceConfig.Name
 				ch := make(chan string)
 				workerChans[name] = ch
+				wg.Add(1)
 				go restartContainers(name, ch)
 				ch <- "deploy"
 

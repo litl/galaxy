@@ -163,6 +163,39 @@ func (s *ServiceRuntime) InspectImage(image string) (*docker.Image, error) {
 	return s.ensureDockerClient().InspectImage(image)
 }
 
+func (s *ServiceRuntime) StopAllMatching(name string) error {
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, container := range containers {
+
+		// We name all galaxy managed containers
+		if len(container.Names) == 0 {
+			continue
+		}
+
+		// Container name does match one that would be started w/ this service config
+		if !strings.HasPrefix(strings.TrimPrefix(container.Names[0], "/"), name+"_") {
+			continue
+		}
+
+		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
+		_, ok := err.(*docker.NoSuchContainer)
+		// container is not actually running. Skip it and leave old ones.
+		if err != nil && ok {
+			continue
+		}
+
+		s.stopContainer(dockerContainer)
+	}
+	return nil
+
+}
+
 func (s *ServiceRuntime) Stop(serviceConfig *registry.ServiceConfig) error {
 	latestName := serviceConfig.ContainerName()
 	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
