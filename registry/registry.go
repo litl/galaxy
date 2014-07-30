@@ -176,6 +176,21 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 	return len(matches) > 0, nil
 }
 
+func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	if exists, err := r.AppExists(app); exists || err != nil {
+		return false, err
+	}
+
+	added, err := redis.Int(conn.Do("SADD", path.Join(r.Env, "pools", r.Pool), app))
+	if err != nil {
+		return false, err
+	}
+	return added == 1, nil
+}
+
 func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()

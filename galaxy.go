@@ -496,6 +496,36 @@ func cfgDir() string {
 	return configDir
 }
 
+func poolAssign(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
+	initRegistry(c)
+
+	app := c.Args().First()
+	if app == "" {
+		log.Println("ERROR: app name missing")
+		cli.ShowCommandHelp(c, "pool:assign")
+		os.Exit(1)
+	}
+
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return
+	}
+
+	created, err := serviceRegistry.AssignApp(app)
+
+	if err != nil {
+		log.Printf("ERROR: Could not assign app: %s\n", err)
+		return
+	}
+	if created {
+		log.Printf("Assigned %s in env %s to pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+	} else {
+		log.Printf("%s already assigned to pool %s in env %s.\n", app, utils.GalaxyPool(c), utils.GalaxyEnv(c))
+	}
+}
+
 func poolCreate(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
@@ -730,7 +760,12 @@ func main() {
 			Action:      poolList,
 			Description: "pool",
 		},
-
+		{
+			Name:        "pool:assign",
+			Usage:       "assign an app to a pool",
+			Action:      poolAssign,
+			Description: "pool:assign",
+		},
 		{
 			Name:        "pool:create",
 			Usage:       "create a pool",
