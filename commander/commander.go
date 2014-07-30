@@ -64,6 +64,16 @@ func initOrDie() {
 	}
 }
 
+func pullImageAsync(serviceConfig registry.ServiceConfig, errChan chan error) {
+	// err logged via pullImage
+	_, err := pullImage(&serviceConfig)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	errChan <- nil
+}
+
 func pullAllImages() error {
 	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
@@ -78,16 +88,7 @@ func pullAllImages() error {
 
 	errChan := make(chan error)
 	for _, serviceConfig := range serviceConfigs {
-		go func(serviceConfig registry.ServiceConfig, errChan chan error) {
-			// err logged via pullImage
-			_, err := pullImage(&serviceConfig)
-			if err != nil {
-				errChan <- err
-				return
-			}
-			errChan <- nil
-
-		}(serviceConfig, errChan)
+		go pullImageAsync(serviceConfig, errChan)
 	}
 
 	for i := 0; i < len(serviceConfigs); i++ {
