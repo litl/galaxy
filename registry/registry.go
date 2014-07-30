@@ -177,6 +177,13 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 	return len(matches) > 0, nil
 }
 
+func (r *ServiceRegistry) ListAssignments(pool string) ([]string, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	return redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", pool)))
+}
+
 func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
@@ -245,23 +252,19 @@ func (r *ServiceRegistry) ListPools() (map[string][]string, error) {
 	defer conn.Close()
 
 	assignments := make(map[string][]string)
-	// TODO: convert to SCAN
-	matches, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "pools", "*")))
+
+	matches, err := redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", "*")))
 	if err != nil {
 		return assignments, err
 	}
 
-	for _, match := range matches {
-		parts := strings.Split(match, "/")
-		if parts[2] == "*" {
-			continue
-		}
-		members, err := redis.Strings(conn.Do("SMEMBERS", match))
+	for _, pool := range matches {
+
+		members, err := r.ListAssignments(pool)
 		if err != nil {
 			return assignments, err
 		}
-
-		assignments[parts[0]] = members
+		assignments[pool] = members
 	}
 
 	return assignments, nil
