@@ -526,6 +526,36 @@ func poolAssign(c *cli.Context) {
 	}
 }
 
+func poolUnassign(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
+	initRegistry(c)
+
+	app := c.Args().First()
+	if app == "" {
+		log.Println("ERROR: app name missing")
+		cli.ShowCommandHelp(c, "pool:assign")
+		os.Exit(1)
+	}
+
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return
+	}
+
+	deleted, err := serviceRegistry.UnassignApp(app)
+	if err != nil {
+		log.Printf("ERROR: Could not unassign app: %s\n", err)
+		return
+	}
+
+	if deleted {
+		log.Printf("Unassigned %s in env %s from pool %s\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+	} else {
+		log.Printf("%s could not be unassigned.\n", utils.GalaxyPool(c))
+	}
+}
+
 func poolCreate(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
@@ -766,6 +796,13 @@ func main() {
 			Action:      poolAssign,
 			Description: "pool:assign",
 		},
+		{
+			Name:        "pool:unassign",
+			Usage:       "unassign an app from a pool",
+			Action:      poolUnassign,
+			Description: "pool:unassign",
+		},
+
 		{
 			Name:        "pool:create",
 			Usage:       "create a pool",

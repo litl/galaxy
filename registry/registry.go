@@ -191,6 +191,23 @@ func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 	return added == 1, nil
 }
 
+func (r *ServiceRegistry) UnassignApp(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	//FIXME: Scan keys to make sure there are no deploye apps before
+	//deleting the pool.
+
+	//FIXME: Shutdown the associated auto-scaling groups tied to the
+	//pool
+
+	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", r.Pool), app))
+	if err != nil {
+		return false, err
+	}
+	return removed == 1, nil
+}
+
 func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
