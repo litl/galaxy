@@ -240,6 +240,15 @@ func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
 	//FIXME: Shutdown the associated auto-scaling groups tied to the
 	//pool
 
+	assignments, err := r.ListAssignments(name)
+	if err != nil {
+		return false, err
+	}
+
+	if len(assignments) > 0 {
+		return false, nil
+	}
+
 	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", "*"), name))
 	if err != nil {
 		return false, err
