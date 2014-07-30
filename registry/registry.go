@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -188,7 +190,7 @@ func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if exists, err := r.AppExists(app); exists || err != nil {
+	if exists, err := r.AppExists(app); !exists || err != nil {
 		return false, err
 	}
 
@@ -196,6 +198,12 @@ func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	err = r.NotifyRestart(app)
+	if err != nil {
+		return added == 1, err
+	}
+
 	return added == 1, nil
 }
 
@@ -213,6 +221,12 @@ func (r *ServiceRegistry) UnassignApp(app string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	err = r.NotifyRestart(app)
+	if err != nil {
+		return removed == 1, err
+	}
+
 	return removed == 1, nil
 }
 
@@ -294,6 +308,17 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
+
+	pools, err := r.ListPools()
+	if err != nil {
+		return false, err
+	}
+
+	for pool, assignments := range pools {
+		if utils.StringInSlice(app, assignments) {
+			return false, errors.New(fmt.Sprintf("app is assigned to pool %s", pool))
+		}
+	}
 
 	svcCfg, err := r.GetServiceConfig(app)
 	if err != nil {

@@ -153,7 +153,6 @@ func (r *ServiceRegistry) subscribeChanges() {
 				case redis.Message:
 					msg := string(n.Data)
 					if msg == "config" {
-						log.Printf("Config changed. Re-deploying containers.\n")
 						r.CheckForChangesNow()
 					} else if strings.HasPrefix(msg, "restart") {
 						parts := strings.Split(msg, " ")

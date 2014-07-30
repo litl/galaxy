@@ -48,13 +48,18 @@ func initOrDie() {
 	serviceRegistry.Connect(redisHost)
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
-	serviceConfigs, err := serviceRegistry.ListApps()
+	apps, err := serviceRegistry.ListAssignments(pool)
 	if err != nil {
 		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 	}
 
 	workerChans = make(map[string]chan string)
-	for _, serviceConfig := range serviceConfigs {
+	for _, app := range apps {
+		serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+		if err != nil {
+			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s\n", env, pool, err)
+		}
+
 		workerChans[serviceConfig.Name] = make(chan string)
 	}
 }
@@ -130,6 +135,18 @@ func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
 	}
 }
 
+func appAssigned(app string) (bool, error) {
+	assignments, err := serviceRegistry.ListAssignments(pool)
+	if err != nil {
+		return false, err
+	}
+
+	if !utils.StringInSlice(app, assignments) {
+		return false, nil
+	}
+	return true, nil
+}
+
 func restartContainers(app string, cmdChan chan string) {
 	defer wg.Done()
 	logOnce := true
@@ -141,6 +158,21 @@ func restartContainers(app string, cmdChan chan string) {
 		select {
 
 		case cmd := <-cmdChan:
+
+			assigned, err := appAssigned(app)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving assignments for %s: %s\n", app, err)
+				if !loop {
+					return
+				}
+
+				continue
+			}
+
+			if !assigned {
+				continue
+			}
+
 			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
@@ -194,9 +226,20 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			if serviceConfig == nil {
+			assigned, err := appAssigned(app)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				if !loop {
+					return
+				}
+
+				continue
+			}
+
+			if serviceConfig == nil || !assigned {
 				log.Errorf("%s no longer exists.  Stopping worker.", app)
 				serviceRuntime.StopAllMatching(app)
+				delete(workerChans, app)
 				return
 			}
 
@@ -237,12 +280,26 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 		select {
 
 		case changedConfig = <-changedConfigs:
+
 			if changedConfig.Error != nil {
 				log.Errorf("ERROR: Error watching changes: %s\n", changedConfig.Error)
 				continue
 			}
 
 			if changedConfig.ServiceConfig == nil {
+				continue
+			}
+
+			assigned, err := appAssigned(changedConfig.ServiceConfig.Name)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", changedConfig.ServiceConfig.Name, err)
+				if !loop {
+					return
+				}
+				continue
+			}
+
+			if !assigned {
 				continue
 			}
 

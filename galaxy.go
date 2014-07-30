@@ -179,7 +179,7 @@ func appDelete(c *cli.Context) {
 	app := ensureAppParam(c, "app:delete")
 
 	// Don't allow deleting runtime hosts entries
-	if app == "hosts" {
+	if app == "hosts" || app == "pools" {
 		return
 	}
 
