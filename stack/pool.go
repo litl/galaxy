@@ -222,9 +222,19 @@ type lc struct {
 	Properties lcProp
 }
 
+func (c *lc) SetVolumeSize(size int) {
+	if len(c.Properties.BlockDeviceMappings) == 0 {
+		return
+	}
+	if c.Properties.BlockDeviceMappings[0].Ebs == nil {
+		return
+	}
+	c.Properties.BlockDeviceMappings[0].Ebs.VolumeSize = size
+}
+
 type lcProp struct {
 	AssociatePublicIpAddress bool
-	BlockDeviceMappings      []bdMapping
+	BlockDeviceMappings      []bdMapping `json:",omitempty"`
 	EbsOptimized             bool
 	IamInstanceProfile       string `json:",omitempty"`
 	ImageId                  string `json:",omitempty"`

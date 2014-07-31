@@ -319,7 +319,7 @@ func stackCreatePool(c *cli.Context) {
 	}
 
 	// WARNING: magic constant needs a config somewhere
-	lc.Properties.BlockDeviceMappings[0].Ebs.VolumeSize = 100
+	lc.SetVolumeSize(100)
 
 	pool.Resources[lcName] = lc
 
