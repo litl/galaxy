@@ -21,14 +21,14 @@ var poolTmpl = []byte(`
                 "HealthCheckType": "EC2",
                 "LaunchConfigurationName": {},
 				"MinSize": "1",
-				"MaxSize": "1",
+				"MaxSize": "2",
 				"Tags": [],
 				"VPCZoneIdentifier": []
             },
 			"Type": "AWS::AutoScaling::AutoScalingGroup",
             "UpdatePolicy" : {
                 "AutoScalingRollingUpdate" : {
-                    "MinInstancesInService" : "0",
+                    "MinInstancesInService" : "1",
                     "MaxBatchSize" : "1",
                     "PauseTime" : "PT5M"
                 }
