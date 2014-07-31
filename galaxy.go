@@ -117,16 +117,15 @@ func appExists(app string) (bool, error) {
 
 func appList(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 
-	appList, err := serviceRegistry.ListApps("")
+	appList, err := serviceRegistry.ListApps()
 	if err != nil {
 		log.Printf("ERROR: %s\n", err)
 		return
 	}
 
-	columns := []string{"NAME | VERSION | PORT | REGISTERED | POOL | ENV"}
+	columns := []string{"NAME | VERSION | PORT | REGISTERED | ENV"}
 	for _, app := range appList {
 		name := app.Name
 		port := app.EnvGet("GALAXY_PORT")
@@ -138,7 +137,6 @@ func appList(c *cli.Context) {
 			versionDeployed,
 			port,
 			strconv.Itoa(registered),
-			utils.GalaxyPool(c),
 			utils.GalaxyEnv(c)}, " | "))
 	}
 	output, _ := columnize.SimpleFormat(columns)
@@ -147,7 +145,6 @@ func appList(c *cli.Context) {
 
 func appCreate(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 
 	app := c.Args().First()
@@ -162,16 +159,6 @@ func appCreate(c *cli.Context) {
 		return
 	}
 
-	exists, err := serviceRegistry.PoolExists()
-	if err != nil {
-		log.Printf("ERROR: Could not create app: %s\n", err)
-		return
-	}
-	if !exists {
-		log.Printf("ERROR: Pool %s does not exist. Create it first.\n", serviceRegistry.Pool)
-		return
-	}
-
 	created, err := serviceRegistry.CreateApp(app)
 
 	if err != nil {
@@ -179,21 +166,20 @@ func appCreate(c *cli.Context) {
 		return
 	}
 	if created {
-		log.Printf("Created %s in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("Created %s in env %s.\n", app, utils.GalaxyEnv(c))
 	} else {
-		log.Printf("%s already exists in in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("%s already exists in in env %s.\n", app, utils.GalaxyEnv(c))
 	}
 }
 
 func appDelete(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 
 	app := ensureAppParam(c, "app:delete")
 
 	// Don't allow deleting runtime hosts entries
-	if app == "hosts" {
+	if app == "hosts" || app == "pools" {
 		return
 	}
 
@@ -203,16 +189,15 @@ func appDelete(c *cli.Context) {
 		return
 	}
 	if deleted {
-		log.Printf("Deleted %s from env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("Deleted %s from env %s.\n", app, utils.GalaxyEnv(c))
 	} else {
-		log.Printf("%s does not exists in env %s on pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+		log.Printf("%s does not exists in env %s.\n", app, utils.GalaxyEnv(c))
 	}
 
 }
 
 func appDeploy(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 	initRuntime(c)
 
@@ -511,6 +496,72 @@ func cfgDir() string {
 	return configDir
 }
 
+func poolAssign(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
+	initRegistry(c)
+
+	app := ensureAppParam(c, "pool:assign")
+
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return
+	}
+
+	exists, err := serviceRegistry.PoolExists()
+	if err != nil {
+		log.Printf("ERROR: Could not assign app: %s\n", err)
+		return
+	}
+
+	if !exists {
+		log.Printf("ERROR: Pool %s does not exist.  Create it first.\n", utils.GalaxyPool(c))
+		return
+	}
+
+	created, err := serviceRegistry.AssignApp(app)
+
+	if err != nil {
+		log.Printf("ERROR: Could not assign app: %s\n", err)
+		return
+	}
+	if created {
+		log.Printf("Assigned %s in env %s to pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+	} else {
+		log.Printf("%s already assigned to pool %s in env %s.\n", app, utils.GalaxyPool(c), utils.GalaxyEnv(c))
+	}
+}
+
+func poolUnassign(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
+	initRegistry(c)
+
+	app := c.Args().First()
+	if app == "" {
+		log.Println("ERROR: app name missing")
+		cli.ShowCommandHelp(c, "pool:assign")
+		os.Exit(1)
+	}
+
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return
+	}
+
+	deleted, err := serviceRegistry.UnassignApp(app)
+	if err != nil {
+		log.Printf("ERROR: Could not unassign app: %s\n", err)
+		return
+	}
+
+	if deleted {
+		log.Printf("Unassigned %s in env %s from pool %s\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+	} else {
+		log.Printf("%s could not be unassigned.\n", utils.GalaxyPool(c))
+	}
+}
+
 func poolCreate(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
@@ -547,9 +598,14 @@ func poolList(c *cli.Context) {
 		return
 	}
 
-	for _, pool := range pools {
-		log.Println(pool)
+	columns := []string{"POOL | APPS "}
+	for name, assigments := range pools {
+		columns = append(columns, strings.Join([]string{
+			name,
+			strings.Join(assigments, ",")}, " | "))
 	}
+	output, _ := columnize.SimpleFormat(columns)
+	log.Println(output)
 }
 
 func poolDelete(c *cli.Context) {
@@ -565,7 +621,7 @@ func poolDelete(c *cli.Context) {
 	if created {
 		log.Printf("Pool %s delete\n", utils.GalaxyPool(c))
 	} else {
-		log.Printf("Pool %s has apps configured. Delete them first.\n", utils.GalaxyPool(c))
+		log.Printf("Pool %s has apps assigned. Unassign them first.\n", utils.GalaxyPool(c))
 	}
 }
 
@@ -744,6 +800,18 @@ func main() {
 			Usage:       "list the pools",
 			Action:      poolList,
 			Description: "pool",
+		},
+		{
+			Name:        "pool:assign",
+			Usage:       "assign an app to a pool",
+			Action:      poolAssign,
+			Description: "pool:assign",
+		},
+		{
+			Name:        "pool:unassign",
+			Usage:       "unassign an app from a pool",
+			Action:      poolUnassign,
+			Description: "pool:unassign",
 		},
 
 		{

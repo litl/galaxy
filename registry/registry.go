@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -161,7 +163,8 @@ func (r *ServiceRegistry) PoolExists() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return utils.StringInSlice(r.Pool, pools), nil
+	_, ok := pools[r.Pool]
+	return ok, nil
 }
 
 func (r *ServiceRegistry) AppExists(app string) (bool, error) {
@@ -174,6 +177,57 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 		return false, err
 	}
 	return len(matches) > 0, nil
+}
+
+func (r *ServiceRegistry) ListAssignments(pool string) ([]string, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	return redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", pool)))
+}
+
+func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	if exists, err := r.AppExists(app); !exists || err != nil {
+		return false, err
+	}
+
+	added, err := redis.Int(conn.Do("SADD", path.Join(r.Env, "pools", r.Pool), app))
+	if err != nil {
+		return false, err
+	}
+
+	err = r.NotifyRestart(app)
+	if err != nil {
+		return added == 1, err
+	}
+
+	return added == 1, nil
+}
+
+func (r *ServiceRegistry) UnassignApp(app string) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	//FIXME: Scan keys to make sure there are no deploye apps before
+	//deleting the pool.
+
+	//FIXME: Shutdown the associated auto-scaling groups tied to the
+	//pool
+
+	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", r.Pool), app))
+	if err != nil {
+		return false, err
+	}
+
+	err = r.NotifyRestart(app)
+	if err != nil {
+		return removed == 1, err
+	}
+
+	return removed == 1, nil
 }
 
 func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
@@ -200,6 +254,15 @@ func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
 	//FIXME: Shutdown the associated auto-scaling groups tied to the
 	//pool
 
+	assignments, err := r.ListAssignments(name)
+	if err != nil {
+		return false, err
+	}
+
+	if len(assignments) > 0 {
+		return false, nil
+	}
+
 	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", "*"), name))
 	if err != nil {
 		return false, err
@@ -207,17 +270,27 @@ func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
 	return removed == 1, nil
 }
 
-func (r *ServiceRegistry) ListPools() ([]string, error) {
+func (r *ServiceRegistry) ListPools() (map[string][]string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	// TODO: convert to scan
+	assignments := make(map[string][]string)
+
 	matches, err := redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", "*")))
 	if err != nil {
-		return nil, err
+		return assignments, err
 	}
 
-	return matches, nil
+	for _, pool := range matches {
+
+		members, err := r.ListAssignments(pool)
+		if err != nil {
+			return assignments, err
+		}
+		assignments[pool] = members
+	}
+
+	return assignments, nil
 }
 
 func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
@@ -228,10 +301,6 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 		return false, err
 	}
 
-	if exists, err := r.PoolExists(); !exists || err != nil {
-		return false, err
-	}
-
 	emptyConfig := NewServiceConfig(app, "")
 	emptyConfig.environmentVMap.Set("ENV", r.Env)
 
@@ -239,29 +308,31 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
 
-	deletedOne := false
-	deleted, err := conn.Do("DEL", path.Join(r.Env, app))
+	pools, err := r.ListPools()
 	if err != nil {
 		return false, err
 	}
 
-	deletedOne = deletedOne || deleted.(int64) == 1
-
-	for _, k := range []string{"environment", "version", "ports"} {
-		deleted, err = conn.Do("DEL", path.Join(r.Env, app, k))
-		if err != nil {
-			return false, err
+	for pool, assignments := range pools {
+		if utils.StringInSlice(app, assignments) {
+			return false, errors.New(fmt.Sprintf("app is assigned to pool %s", pool))
 		}
-		deletedOne = deletedOne || deleted.(int64) == 1
 	}
 
-	return deletedOne, nil
+	svcCfg, err := r.GetServiceConfig(app)
+	if err != nil {
+		return false, err
+	}
+
+	if svcCfg == nil {
+		return true, nil
+	}
+
+	return r.DeleteServiceConfig(svcCfg)
 }
 
-func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
+func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -269,10 +340,6 @@ func (r *ServiceRegistry) ListApps(pool string) ([]ServiceConfig, error) {
 		conn.Close()
 		r.reconnectRedis()
 		return nil, conn.Err()
-	}
-
-	if pool == "" {
-		pool = r.Pool
 	}
 
 	// TODO: convert to scan

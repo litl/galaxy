@@ -189,7 +189,7 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 		return false, err
 	}
 
-	err = r.saveVMap(path.Join(r.Env, r.Pool, svcCfg.Name, "ports"),
+	err = r.saveVMap(path.Join(r.Env, svcCfg.Name, "ports"),
 		svcCfg.portsVMap)
 
 	if err != nil {
@@ -202,4 +202,35 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	}
 
 	return true, nil
+}
+
+func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	deletedOne := false
+	deleted, err := conn.Do("DEL", path.Join(r.Env, svcCfg.Name))
+	if err != nil {
+		return false, err
+	}
+
+	deletedOne = deletedOne || deleted.(int64) == 1
+
+	for _, k := range []string{"environment", "version", "ports"} {
+		deleted, err = conn.Do("DEL", path.Join(r.Env, svcCfg.Name, k))
+		if err != nil {
+			return false, err
+		}
+		deletedOne = deletedOne || deleted.(int64) == 1
+	}
+
+	if deletedOne {
+		err = r.notifyChanged()
+		if err != nil {
+			return deletedOne, err
+		}
+	}
+
+	return deletedOne, nil
+
 }

@@ -19,7 +19,7 @@ func (r *ServiceRegistry) CheckForChangesNow() {
 func (r *ServiceRegistry) checkForChanges() {
 	lastVersion := make(map[string]int64)
 	for {
-		serviceConfigs, err := r.ListApps("")
+		serviceConfigs, err := r.ListApps()
 		if err != nil {
 			restartChan <- &ConfigChange{
 				Error: err,
@@ -37,7 +37,7 @@ func (r *ServiceRegistry) checkForChanges() {
 
 	for {
 		<-r.pollCh
-		serviceConfigs, err := r.ListApps("")
+		serviceConfigs, err := r.ListApps()
 		if err != nil {
 			restartChan <- &ConfigChange{
 				Error: err,
@@ -153,7 +153,6 @@ func (r *ServiceRegistry) subscribeChanges() {
 				case redis.Message:
 					msg := string(n.Data)
 					if msg == "config" {
-						log.Printf("Config changed. Re-deploying containers.\n")
 						r.CheckForChangesNow()
 					} else if strings.HasPrefix(msg, "restart") {
 						parts := strings.Split(msg, " ")

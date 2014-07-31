@@ -48,19 +48,34 @@ func initOrDie() {
 	serviceRegistry.Connect(redisHost)
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
-	serviceConfigs, err := serviceRegistry.ListApps("")
+	apps, err := serviceRegistry.ListAssignments(pool)
 	if err != nil {
 		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 	}
 
 	workerChans = make(map[string]chan string)
-	for _, serviceConfig := range serviceConfigs {
+	for _, app := range apps {
+		serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+		if err != nil {
+			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s\n", env, pool, err)
+		}
+
 		workerChans[serviceConfig.Name] = make(chan string)
 	}
 }
 
+func pullImageAsync(serviceConfig registry.ServiceConfig, errChan chan error) {
+	// err logged via pullImage
+	_, err := pullImage(&serviceConfig)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	errChan <- nil
+}
+
 func pullAllImages() error {
-	serviceConfigs, err := serviceRegistry.ListApps("")
+	serviceConfigs, err := serviceRegistry.ListApps()
 	if err != nil {
 		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 		return err
@@ -73,16 +88,7 @@ func pullAllImages() error {
 
 	errChan := make(chan error)
 	for _, serviceConfig := range serviceConfigs {
-		go func(serviceConfig registry.ServiceConfig, errChan chan error) {
-			// err logged via pullImage
-			_, err := pullImage(&serviceConfig)
-			if err != nil {
-				errChan <- err
-				return
-			}
-			errChan <- nil
-
-		}(serviceConfig, errChan)
+		go pullImageAsync(serviceConfig, errChan)
 	}
 
 	for i := 0; i < len(serviceConfigs); i++ {
@@ -130,6 +136,18 @@ func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
 	}
 }
 
+func appAssigned(app string) (bool, error) {
+	assignments, err := serviceRegistry.ListAssignments(pool)
+	if err != nil {
+		return false, err
+	}
+
+	if !utils.StringInSlice(app, assignments) {
+		return false, nil
+	}
+	return true, nil
+}
+
 func restartContainers(app string, cmdChan chan string) {
 	defer wg.Done()
 	logOnce := true
@@ -141,13 +159,26 @@ func restartContainers(app string, cmdChan chan string) {
 		select {
 
 		case cmd := <-cmdChan:
+
+			assigned, err := appAssigned(app)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving assignments for %s: %s\n", app, err)
+				if !loop {
+					return
+				}
+				continue
+			}
+
+			if !assigned {
+				continue
+			}
+
 			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
 				if !loop {
 					return
 				}
-
 				continue
 			}
 
@@ -164,7 +195,6 @@ func restartContainers(app string, cmdChan chan string) {
 					if !loop {
 						return
 					}
-
 					// if we can't pull the image, leave whatever is running alone
 					continue
 				}
@@ -194,8 +224,20 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			if serviceConfig == nil {
+			assigned, err := appAssigned(app)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				if !loop {
+					return
+				}
+
+				continue
+			}
+
+			if serviceConfig == nil || !assigned {
 				log.Errorf("%s no longer exists.  Stopping worker.", app)
+				serviceRuntime.StopAllMatching(app)
+				delete(workerChans, app)
 				return
 			}
 
@@ -236,6 +278,7 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 		select {
 
 		case changedConfig = <-changedConfigs:
+
 			if changedConfig.Error != nil {
 				log.Errorf("ERROR: Error watching changes: %s\n", changedConfig.Error)
 				continue
@@ -245,11 +288,25 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 				continue
 			}
 
+			assigned, err := appAssigned(changedConfig.ServiceConfig.Name)
+			if err != nil {
+				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", changedConfig.ServiceConfig.Name, err)
+				if !loop {
+					return
+				}
+				continue
+			}
+
+			if !assigned {
+				continue
+			}
+
 			ch, ok := workerChans[changedConfig.ServiceConfig.Name]
 			if !ok {
 				name := changedConfig.ServiceConfig.Name
 				ch := make(chan string)
 				workerChans[name] = ch
+				wg.Add(1)
 				go restartContainers(name, ch)
 				ch <- "deploy"
 
@@ -313,6 +370,10 @@ func main() {
 	}
 
 	if loop {
+		log.Printf("Starting commander %s", buildVersion)
+		log.Printf("Using env = %s, pool = %s",
+			env, pool)
+
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
