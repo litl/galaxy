@@ -350,7 +350,7 @@ func stackCreatePool(c *cli.Context) {
 		asg.Properties.DesiredCapacity = desiredCap
 	}
 
-	asg.Properties.LaunchConfigurationName = stack.Intrinsic{"Ref": lcName}
+	asg.SetLaunchConfiguration(lcName)
 	asg.Properties.VPCZoneIdentifier = resources.ListSubnets()
 	if maxSize > 0 {
 		asg.Properties.MaxSize = maxSize

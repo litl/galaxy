@@ -157,17 +157,21 @@ type asg struct {
 }
 
 func (a *asg) AddLoadBalancer(name string) {
-	a.Properties.LoadBalancerNames = append(a.Properties.LoadBalancerNames, Intrinsic{"Ref": name})
+	a.Properties.LoadBalancerNames = append(a.Properties.LoadBalancerNames, intrinsic{"Ref": name})
+}
+
+func (a *asg) SetLaunchConfiguration(name string) {
+	a.Properties.LaunchConfigurationName = intrinsic{"Ref": name}
 }
 
 type asgProp struct {
-	AvailabilityZones       Intrinsic
+	AvailabilityZones       intrinsic
 	Cooldown                int `json:",string"`
 	DesiredCapacity         int `json:",string"`
 	HealthCheckGracePeriod  int `json:",string"`
 	HealthCheckType         string
-	LaunchConfigurationName Intrinsic
-	LoadBalancerNames       []Intrinsic `json:",omitempty"`
+	LaunchConfigurationName intrinsic
+	LoadBalancerNames       []intrinsic `json:",omitempty"`
 	MaxSize                 int         `json:",string"`
 	MinSize                 int         `json:",string"`
 	Tags                    []Tag
@@ -257,4 +261,4 @@ type Tag struct {
 
 // use this to indicate we're specifically using an intrinsic function over an
 // actual map of values
-type Intrinsic map[string]string
+type intrinsic map[string]string
