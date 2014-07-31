@@ -11,7 +11,7 @@ const (
 	lcType  = "AWS::AutoScaling::LaunchConfiguration"
 )
 
-// TODO: make more things public
+// TODO: add more public functions to conveniently build out a pool
 
 // A Pool can be marshaled directly into a Cloudformation template for our pools.
 // This is Purposely constrained to our usage, with some values specifically
@@ -156,17 +156,35 @@ type asg struct {
 	UpdatePolicy asgUpdatePolicy `json:",omitempty"`
 }
 
+func (a *asg) AddLoadBalancer(name string) {
+	a.Properties.LoadBalancerNames = append(a.Properties.LoadBalancerNames, intrinsic{"Ref": name})
+}
+
+func (a *asg) SetLaunchConfiguration(name string) {
+	a.Properties.LaunchConfigurationName = intrinsic{"Ref": name}
+}
+
+func (a *asg) AddTag(key, value string, propagateAtLauch bool) {
+	t := tag{
+		Key:               key,
+		Value:             value,
+		PropagateAtLaunch: &propagateAtLauch,
+	}
+
+	a.Properties.Tags = append(a.Properties.Tags, t)
+}
+
 type asgProp struct {
-	AvailabilityZones       Intrinsic
+	AvailabilityZones       intrinsic
 	Cooldown                int `json:",string"`
 	DesiredCapacity         int `json:",string"`
 	HealthCheckGracePeriod  int `json:",string"`
 	HealthCheckType         string
-	LaunchConfigurationName Intrinsic
-	LoadBalancerNames       []Intrinsic
-	MaxSize                 int `json:",string"`
-	MinSize                 int `json:",string"`
-	Tags                    []Tag
+	LaunchConfigurationName intrinsic
+	LoadBalancerNames       []intrinsic `json:",omitempty"`
+	MaxSize                 int         `json:",string"`
+	MinSize                 int         `json:",string"`
+	Tags                    []tag
 	VPCZoneIdentifier       []string
 }
 
@@ -176,8 +194,8 @@ type elb struct {
 }
 
 type elbProp struct {
-	Subnets        []string
-	SecurityGroups []string
+	Subnets        []string `json:",omitempty"`
+	SecurityGroups []string `json:",omitempty"`
 	HealthCheck    healthCheck
 	Listeners      []*Listener
 }
@@ -245,7 +263,7 @@ type asgUpdate struct {
 	PauseTime             string
 }
 
-type Tag struct {
+type tag struct {
 	Key               string
 	Value             string
 	PropagateAtLaunch *bool `json:",omitempty"`
@@ -253,4 +271,4 @@ type Tag struct {
 
 // use this to indicate we're specifically using an intrinsic function over an
 // actual map of values
-type Intrinsic map[string]string
+type intrinsic map[string]string

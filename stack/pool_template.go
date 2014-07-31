@@ -21,7 +21,7 @@ var poolTmpl = []byte(`
                 "HealthCheckType": "EC2",
                 "LaunchConfigurationName": {},
 				"MinSize": "1",
-				"MaxSize": "1",
+				"MaxSize": "2",
 				"Tags": [],
 				"VPCZoneIdentifier": []
             },
