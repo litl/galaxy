@@ -17,8 +17,6 @@ There are three sub-projects: commander, discovery and shuttle.
     configures routes using the Shuttle API.
   * Shuttle - A TCP proxy that can be configured through a HTTP based API.
 
-
-
 ## Dev Setup
 
 You need to have a docker 0.9+ env available.  Set that up w/ boot2docker or use the provided
