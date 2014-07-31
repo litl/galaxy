@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -48,8 +49,9 @@ func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) 
 		statusCode = " status=" + strconv.FormatInt(int64(a.GetResponse().StatusCode), 10)
 	}
 
-	log.Printf("id=%d method=%s clientIp=%s url=%s backend=%s%s duration=%s%s",
+	log.Printf("cnt=%d id=%s method=%s clientIp=%s url=%s backend=%s%s duration=%s%s",
 		req.GetId(),
+		req.GetHttpRequest().Header.Get("X-Request-Id"),
 		req.GetHttpRequest().Method,
 		req.GetHttpRequest().RemoteAddr,
 		req.GetHttpRequest().Host+req.GetHttpRequest().RequestURI,
@@ -59,7 +61,15 @@ func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) 
 
 type SSLRedirect struct{}
 
+func genId() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
+
 func (s *SSLRedirect) ProcessRequest(r request.Request) (*http.Response, error) {
+	r.GetHttpRequest().Header.Set("X-Request-Id", genId())
+
 	if sslOnly && r.GetHttpRequest().Header.Get("X-Forwarded-Proto") != "https" {
 
 		resp := &http.Response{
