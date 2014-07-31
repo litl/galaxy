@@ -14,6 +14,7 @@ import (
 	"github.com/crowdmob/goamz/aws"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/stack"
+	"github.com/litl/galaxy/utils"
 )
 
 func promptValue(prompt, dflt string) string {
@@ -222,21 +223,39 @@ func stackTemplate(c *cli.Context) {
 	}
 }
 
+func sharedResources(c *cli.Context) stack.SharedResources {
+	// get the resources we need from the base stack
+	resources, err := stack.GetSharedResources(c.GlobalString("base"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	keyPair := c.GlobalString("keyname")
+	if keyPair != "" {
+		resources.Parameters["KeyPair"] = keyPair
+	}
+
+	amiID := c.GlobalString("ami")
+	if amiID != "" {
+		resources.Parameters["PoolImageId"] = amiID
+	}
+
+	instanceType := c.GlobalString("instance-type")
+	if instanceType != "" {
+		resources.Parameters["PoolInstanceType"] = instanceType
+	}
+
+	return resources
+}
+
 func stackCreatePool(c *cli.Context) {
-	stackPool(c, false)
-}
-
-func stackUpdatePool(c *cli.Context) {
-	stackPool(c, true)
-}
-
-// TODO: this function has gotten very long
-// manually create a pool stack
-func stackPool(c *cli.Context, update bool) {
 	var err error
-	options := make(map[string]string)
 
-	poolName := c.GlobalString("pool")
+	// there's some json "omitempty" bool fields we need to set
+	True := new(bool)
+	*True = true
+
+	poolName := utils.GalaxyPool(c)
 	if poolName == "" {
 		log.Fatal("pool name required")
 	}
@@ -253,149 +272,130 @@ func stackPool(c *cli.Context, update bool) {
 
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
 
-	if policy := c.String("update-policy"); policy != "" && update {
-		policyJSON, err := jsonFromArg(policy)
-		if err != nil {
-			log.Fatal("policy error:", err)
-		}
-
-		options["StackPolicyDuringUpdateBody"] = string(policyJSON)
-	}
+	pool := stack.NewPool()
 
 	// get the resources we need from the base stack
-	resources, err := stack.GetSharedResources(baseStack)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var oldPool stack.Pool
-	if update {
-		oldPool, err = stack.DescribePoolStack(stackName)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	keyPair := c.GlobalString("keyname")
-	if keyPair == "" {
-		keyPair = oldPool.KeyName
-	}
-	if keyPair == "" {
-		keyPair = resources.Parameters["KeyPair"]
-	}
-	if keyPair == "" {
-		log.Fatal("KeyPair required")
-	}
-
-	amiID := c.GlobalString("ami")
-	if amiID == "" {
-		amiID = oldPool.ImageID
-	}
-	if amiID == "" {
-		amiID = resources.Parameters["PoolImageId"]
-	}
-
-	instanceType := c.GlobalString("instance-type")
-	if instanceType == "" {
-		instanceType = oldPool.InstanceType
-	}
-	if instanceType == "" {
-		instanceType = resources.Parameters["PoolInstanceType"]
-	}
-
-	// add all subnets
-	subnets := []string{}
-	for _, val := range resources.Subnets {
-		subnets = append(subnets, val)
-	}
+	resources := sharedResources(c)
 
 	desiredCap := c.Int("desired-size")
-	if desiredCap == 0 {
-		desiredCap = oldPool.DesiredCapacity
-	}
-
 	minSize := c.Int("min-size")
-	if minSize == 0 {
-		minSize = oldPool.MinSize
-	}
-
 	maxSize := c.Int("max-size")
-	if maxSize == 0 {
-		maxSize = oldPool.MaxSize
-	}
-
-	sslCert := c.String("ssl-cert")
-
 	httpPort := c.Int("http-port")
 	if httpPort == 0 {
 		httpPort = 80
 	}
 
-	volumeSize := 100
-	if oldPool.VolumeSize > 0 {
-		volumeSize = oldPool.VolumeSize
-	}
-
-	// TODO: add more options
-	pool := stack.Pool{
-		Name:            poolName,
-		Env:             poolEnv,
-		DesiredCapacity: desiredCap,
-		MinSize:         minSize,
-		MaxSize:         maxSize,
-		KeyName:         keyPair,
-		InstanceType:    instanceType,
-		ImageID:         amiID,
-		IAMRole:         resources.Roles["galaxyInstanceProfile"],
-		SubnetIDs:       subnets,
-		SecurityGroups: []string{
-			resources.SecurityGroups["sshSG"],
-			resources.SecurityGroups["defaultSG"],
-		},
-		VolumeSize:    volumeSize,
-		BaseStackName: baseStack,
-	}
-
-	if strings.Contains(poolName, "web") {
-		elb := stack.PoolELB{
-			Name: poolEnv + poolName,
-
-			SecurityGroups: []string{
-				resources.SecurityGroups["webSG"],
-				resources.SecurityGroups["defaultSG"],
-			},
-			HealthCheck: fmt.Sprintf("HTTP:%d/", httpPort),
+	sslCert := ""
+	if cert := c.String("ssl-cert"); cert != "" {
+		sslCert = resources.ServerCerts[sslCert]
+		if sslCert == "" {
+			log.Fatalf("Could not find certificate '%s'", sslCert)
 		}
+	}
 
-		listener := stack.PoolELBListener{
+	// Create our Launch Config
+	lc := pool.LCTemplate
+	lcName := "lc" + poolEnv + poolName
+
+	if amiID := c.GlobalString("ami"); amiID != "" {
+		lc.Properties.ImageId = amiID
+	} else {
+		lc.Properties.ImageId = resources.Parameters["PoolImageId"]
+	}
+
+	if insType := c.GlobalString("instance-type"); insType != "" {
+		lc.Properties.InstanceType = insType
+	} else {
+		lc.Properties.InstanceType = resources.Parameters["PoolInstanceType"]
+	}
+
+	if keyName := c.GlobalString("keypair"); keyName != "" {
+		lc.Properties.KeyName = keyName
+	} else {
+		lc.Properties.KeyName = resources.Parameters["KeyPair"]
+	}
+
+	lc.Properties.IamInstanceProfile = resources.Roles["galaxyInstanceProfile"]
+
+	lc.Properties.SecurityGroups = []string{
+		resources.SecurityGroups["sshSG"],
+		resources.SecurityGroups["defaultSG"],
+	}
+
+	// WARNING: magic constant needs a config somewhere
+	lc.Properties.BlockDeviceMappings[0].Ebs.VolumeSize = 100
+
+	pool.Resources[lcName] = lc
+
+	// Create the Auto Scaling Group
+	asg := pool.ASGTemplate
+	asgName := "asg" + poolEnv + poolName
+
+	asg.Properties.Tags = []stack.Tag{
+		{Key: "Name",
+			Value:             fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName),
+			PropagateAtLaunch: True},
+		{Key: "env",
+			Value:             poolEnv,
+			PropagateAtLaunch: True},
+		{Key: "pool",
+			Value:             poolName,
+			PropagateAtLaunch: True},
+		{Key: "source",
+			Value:             "galaxy",
+			PropagateAtLaunch: True},
+	}
+
+	if desiredCap > 0 {
+		asg.Properties.DesiredCapacity = desiredCap
+	}
+
+	asg.Properties.LaunchConfigurationName = stack.Intrinsic{"Ref": lcName}
+	asg.Properties.VPCZoneIdentifier = resources.ListSubnets()
+	if maxSize > 0 {
+		asg.Properties.MaxSize = maxSize
+	}
+	if minSize > 0 {
+		asg.Properties.MinSize = minSize
+	}
+
+	pool.Resources[asgName] = asg
+
+	// Optionally create the Elastic Load Balancer
+	if strings.Contains(poolName, "web") {
+		elb := pool.ELBTemplate
+		elbName := "elb" + poolEnv + poolName
+
+		elb.Properties.SecurityGroups = []string{
+			resources.SecurityGroups["webSG"],
+			resources.SecurityGroups["defaultSG"],
+		}
+		elb.Properties.HealthCheck.Target = fmt.Sprintf("HTTP:%d/", httpPort)
+
+		listener := &stack.Listener{
 			LoadBalancerPort: 80,
 			Protocol:         "HTTP",
 			InstancePort:     httpPort,
 			InstanceProtocol: "HTTP",
 		}
 
-		elb.Listeners = append(elb.Listeners, listener)
+		elb.Properties.Listeners = []*stack.Listener{listener}
 
 		if sslCert != "" {
-			certID := resources.ServerCerts[sslCert]
-			if certID == "" {
-				log.Fatalf("Could not find certificate '%s'", sslCert)
-			}
-
-			listener := stack.PoolELBListener{
+			listener := &stack.Listener{
 				LoadBalancerPort: 443,
 				Protocol:         "HTTPS",
 				InstancePort:     httpPort,
 				InstanceProtocol: "HTTP",
-				SSLCertificateId: certID,
+				SSLCertificateId: sslCert,
 			}
-			elb.Listeners = append(elb.Listeners, listener)
+			elb.Properties.Listeners = append(elb.Properties.Listeners, listener)
 		}
 
-		pool.ELBs = append(pool.ELBs, elb)
+		pool.Resources[elbName] = elb
 	}
 
-	poolTmpl, err := stack.CreatePoolTemplate(pool)
+	poolTmpl, err := json.MarshalIndent(pool, "", "    ")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -405,16 +405,7 @@ func stackPool(c *cli.Context, update bool) {
 		return
 	}
 
-	switch update {
-	case true:
-		updatePool(poolTmpl, stackName, options)
-	case false:
-		createPool(poolTmpl, stackName, options)
-	}
-}
-
-func createPool(poolTmpl []byte, stackName string, opts map[string]string) {
-	if err := stack.Create(stackName, poolTmpl, opts); err != nil {
+	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
 		log.Fatal(err)
 	}
 
@@ -425,8 +416,109 @@ func createPool(poolTmpl []byte, stackName string, opts map[string]string) {
 	log.Println("CreateStack complete")
 }
 
-func updatePool(poolTmpl []byte, stackName string, opts map[string]string) {
-	if err := stack.Update(stackName, poolTmpl, opts); err != nil {
+func stackUpdatePool(c *cli.Context) {
+	poolName := utils.GalaxyPool(c)
+	if poolName == "" {
+		log.Fatal("pool name required")
+	}
+
+	baseStack := c.GlobalString("base")
+	if baseStack == "" {
+		log.Fatal("base stack required")
+	}
+
+	poolEnv := c.GlobalString("env")
+	if poolEnv == "" {
+		log.Fatal("env required")
+	}
+
+	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
+
+	pool, err := stack.GetPool(stackName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	options := make(map[string]string)
+	if policy := c.String("update-policy"); policy != "" {
+		policyJSON, err := jsonFromArg(policy)
+		if err != nil {
+			log.Fatal("policy error:", err)
+		}
+
+		options["StackPolicyDuringUpdateBody"] = string(policyJSON)
+	}
+
+	resources := sharedResources(c)
+
+	asg := pool.ASG()
+	if asg == nil {
+		log.Fatal("missing ASG")
+	}
+
+	if c.Int("desired-size") > 0 {
+		asg.Properties.DesiredCapacity = c.Int("desired-size")
+	}
+
+	if c.Int("min-size") > 0 {
+		asg.Properties.MinSize = c.Int("min-size")
+	}
+
+	if c.Int("max-size") > 0 {
+		asg.Properties.MaxSize = c.Int("max-size")
+	}
+
+	elb := pool.ELB()
+
+	sslCert := ""
+	if cert := c.String("ssl-cert"); cert != "" {
+		sslCert = resources.ServerCerts[sslCert]
+		if sslCert == "" {
+			log.Fatalf("Could not find certificate '%s'", sslCert)
+		}
+	}
+
+	httpPort := c.Int("http-port")
+
+	if (sslCert != "" || httpPort > 0) && elb == nil {
+		log.Fatal("Pool does not have an ELB")
+	}
+
+	for _, l := range elb.Properties.Listeners {
+		fmt.Printf("LISTENER: %+v\n", l)
+		if sslCert != "" && l.Protocol == "HTTPS" {
+			l.SSLCertificateId = sslCert
+		}
+
+		if httpPort > 0 {
+			l.InstancePort = httpPort
+		}
+	}
+
+	lc := pool.LC()
+	if amiID := c.GlobalString("ami"); amiID != "" {
+		lc.Properties.ImageId = amiID
+	} else {
+		lc.Properties.ImageId = resources.Parameters["PoolImageId"]
+	}
+
+	if insType := c.GlobalString("instance-type"); insType != "" {
+		lc.Properties.InstanceType = insType
+	} else {
+		lc.Properties.InstanceType = resources.Parameters["PoolInstanceType"]
+	}
+
+	poolTmpl, err := json.MarshalIndent(pool, "", "    ")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if c.Bool("print") {
+		fmt.Println(string(poolTmpl))
+		return
+	}
+
+	if err := stack.Update(stackName, poolTmpl, options); err != nil {
 		log.Fatal(err)
 	}
 

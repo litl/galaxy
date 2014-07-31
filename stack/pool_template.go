@@ -1,33 +1,11 @@
 package stack
 
-/* fields that _must_ be written out to this template
-Resources.asg_
-         .asg_.Properties.LaunchConfigurationName {"Ref": }
-         .asg_.Properties.LoadBalancerNames [{"Ref": }]
-		 .asg_.Properties.MinSize
-		 .asg_.Properties.MaxSize
-		 .asg_.Properties.DesiredCapacity
-         .asg_.Tags // must have PropagateAtLaunch
-         .asg_.VPCZoneIdentifier = [SubnetIds,]
-
-		 .elb_
-         .elb_.Properties.HealthCheck.Target
-		 .elb_.Properties.SecurityGroups = [webSG, defaultSG]
-		 .elb_.Properties.Subnets [SubnetIds,]
-		 .elb_.Propertied.Listeners
-
-		 .lc_
-         .lc_.Properties.ImageId
-		 .lc_.Properties.InstanceType
-		 .lc_.Properties.KeyName
-		 .lc_.Properties.SecurityGroups [defaultSG, sshSG]
-
-
-This JSON document lays out the basic structure of the CloudFormation template
-for our pool stacks. "Resources" needs to be replaced, and populated with
-correctly named asg_, elb_, and lc_ entries.
-*/
-var pool_template = []byte(`
+// This JSON document lays out the basic structure of the CloudFormation
+// template for our pool stacks. The Resources here will be transfered to the
+// Pool.*Template attributes.
+// Make certain that the appropriate Pool structures are modified when changing
+// the structure of this template.
+var poolTmpl = []byte(`
 {
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "Galaxy Pool Template",
@@ -38,12 +16,12 @@ var pool_template = []byte(`
                     "Fn::GetAZs": ""
                 },
                 "Cooldown": "300",
-                "DesiredCapacity": "",
+				"DesiredCapacity": "1",
                 "HealthCheckGracePeriod": "300",
                 "HealthCheckType": "EC2",
-                "LaunchConfigurationName": "",
-				"MaxSize": "",
-				"MinSize": "",
+                "LaunchConfigurationName": {},
+				"MinSize": "1",
+				"MaxSize": "1",
 				"Tags": [],
 				"VPCZoneIdentifier": []
             },
@@ -85,13 +63,13 @@ var pool_template = []byte(`
 					{
 						"DeviceName": "/dev/sda1",
 						"Ebs": {
+							"VolumeType": "gp2",
 							"VolumeSize": 8
 						}
 					}
 				],
-				"ImageId": {},
-				"InstanceType": {},
-				"KeyName": {},
+				"InstanceType": "",
+				"KeyName": "",
 				"SecurityGroups": []
 			},
 			"Type": "AWS::AutoScaling::LaunchConfiguration"
