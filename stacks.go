@@ -366,6 +366,11 @@ func stackCreatePool(c *cli.Context) {
 		elb := pool.ELBTemplate
 		elbName := "elb" + poolEnv + poolName
 
+		// make sure to add this to the ASG
+		asg.AddLoadBalancer(elbName)
+
+		elb.Properties.Subnets = resources.ListSubnets()
+
 		elb.Properties.SecurityGroups = []string{
 			resources.SecurityGroups["webSG"],
 			resources.SecurityGroups["defaultSG"],
@@ -485,7 +490,6 @@ func stackUpdatePool(c *cli.Context) {
 	}
 
 	for _, l := range elb.Properties.Listeners {
-		fmt.Printf("LISTENER: %+v\n", l)
 		if sslCert != "" && l.Protocol == "HTTPS" {
 			l.SSLCertificateId = sslCert
 		}

@@ -28,7 +28,7 @@ var poolTmpl = []byte(`
 			"Type": "AWS::AutoScaling::AutoScalingGroup",
             "UpdatePolicy" : {
                 "AutoScalingRollingUpdate" : {
-                    "MinInstancesInService" : "1",
+                    "MinInstancesInService" : "0",
                     "MaxBatchSize" : "1",
                     "PauseTime" : "PT5M"
                 }

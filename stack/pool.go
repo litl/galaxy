@@ -11,7 +11,7 @@ const (
 	lcType  = "AWS::AutoScaling::LaunchConfiguration"
 )
 
-// TODO: make more things public
+// TODO: add more public functions to conveniently build out a pool
 
 // A Pool can be marshaled directly into a Cloudformation template for our pools.
 // This is Purposely constrained to our usage, with some values specifically
@@ -156,6 +156,10 @@ type asg struct {
 	UpdatePolicy asgUpdatePolicy `json:",omitempty"`
 }
 
+func (a *asg) AddLoadBalancer(name string) {
+	a.Properties.LoadBalancerNames = append(a.Properties.LoadBalancerNames, Intrinsic{"Ref": name})
+}
+
 type asgProp struct {
 	AvailabilityZones       Intrinsic
 	Cooldown                int `json:",string"`
@@ -163,9 +167,9 @@ type asgProp struct {
 	HealthCheckGracePeriod  int `json:",string"`
 	HealthCheckType         string
 	LaunchConfigurationName Intrinsic
-	LoadBalancerNames       []Intrinsic
-	MaxSize                 int `json:",string"`
-	MinSize                 int `json:",string"`
+	LoadBalancerNames       []Intrinsic `json:",omitempty"`
+	MaxSize                 int         `json:",string"`
+	MinSize                 int         `json:",string"`
 	Tags                    []Tag
 	VPCZoneIdentifier       []string
 }
@@ -176,8 +180,8 @@ type elb struct {
 }
 
 type elbProp struct {
-	Subnets        []string
-	SecurityGroups []string
+	Subnets        []string `json:",omitempty"`
+	SecurityGroups []string `json:",omitempty"`
 	HealthCheck    healthCheck
 	Listeners      []*Listener
 }
