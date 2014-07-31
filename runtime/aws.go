@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func ec2PublicHostname() (string, error) {
+func EC2PublicHostname() (string, error) {
 	transport := http.Transport{
 		Dial: func(network, addr string) (net.Conn, error) {
 			return net.DialTimeout(network, addr, time.Duration(1*time.Second))

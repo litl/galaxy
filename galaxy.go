@@ -578,6 +578,12 @@ func poolCreate(c *cli.Context) {
 		log.Printf("Pool %s already exists\n", utils.GalaxyPool(c))
 	}
 
+	ec2host, err := runtime.EC2PublicHostname()
+	if err != nil || ec2host == "" {
+		log.Debug("not running from AWS, skipping pool creation")
+		return
+	}
+
 	// now create the cloudformation stack
 	// is this fails, the stack can be created separately with stack:create_pool
 	stackCreatePool(c)
@@ -702,6 +708,21 @@ func main() {
 	// Don't print date, etc..
 	log.DefaultLogger.SetFlags(0)
 
+	// declare one superset of flags for stack operations, so we don't pollute the global flags
+	stackFlags := []cli.Flag{
+		cli.StringFlag{Name: "base", Usage: "base stack name"},
+		cli.StringFlag{Name: "keyname", Usage: "ssh keypair name"},
+		cli.StringFlag{Name: "ami", Usage: "ami id"},
+		cli.StringFlag{Name: "instance-type", Usage: "instance type"},
+		cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
+		cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
+		cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
+		cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
+		cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
+		cli.IntFlag{Name: "http-port", Usage: "instance http port"},
+		cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
+	}
+
 	app := cli.NewApp()
 	app.Name = "galaxy"
 	app.Usage = "galaxy cli"
@@ -710,10 +731,6 @@ func main() {
 		cli.StringFlag{Name: "redis", Value: utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: "", Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: "", Usage: "pool (web, worker, etc.)"},
-		cli.StringFlag{Name: "base", Usage: "base stack name"},
-		cli.StringFlag{Name: "keypair", Usage: "ssh keypair"},
-		cli.StringFlag{Name: "ami", Usage: "ami id"},
-		cli.StringFlag{Name: "instance-type", Usage: "instance type"},
 	}
 
 	app.Commands = []cli.Command{
@@ -819,28 +836,14 @@ func main() {
 			Usage:       "create a pool",
 			Action:      poolCreate,
 			Description: "pool:create",
-			Flags: []cli.Flag{
-				cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
-				cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
-				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
-				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
-				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
-			},
+			Flags:       stackFlags,
 		},
 		{
 			Name:        "pool:update",
 			Usage:       "update a pool's stack",
 			Action:      poolUpdate,
 			Description: "pool:update",
-			Flags: []cli.Flag{
-				cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
-				cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
-				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
-				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
-				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
-				cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
-				cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
-			},
+			Flags:       stackFlags,
 		},
 		{
 			Name:        "pool:delete",
@@ -865,14 +868,10 @@ func main() {
 		},
 		{
 			Name:        "stack:update",
-			Usage:       "update the base stack",
+			Usage:       "update the base stack directly by name. Requires a template.",
 			Action:      stackUpdate,
 			Description: "stack:update <stack_name>",
-			Flags: []cli.Flag{
-				cli.StringFlag{Name: "parameters", Usage: "JSON stack parameters"},
-				cli.StringFlag{Name: "template", Usage: "stack template file"},
-				cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
-			},
+			Flags:       stackFlags,
 		},
 		{
 			Name:        "stack:delete",
@@ -884,18 +883,18 @@ func main() {
 			},
 		},
 		{
-			Name:        "stack:create_pool",
+			Name:        "stack:pool_create",
 			Usage:       "create a pool stack directly",
 			Action:      stackCreatePool,
-			Description: "stack:create_pool",
-			Flags: []cli.Flag{
-				cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
-				cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
-				cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
-				cli.IntFlag{Name: "http-port", Usage: "instance http port"},
-				cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
-				cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
-			},
+			Description: "stack:pool_update",
+			Flags:       stackFlags,
+		},
+		{
+			Name:        "stack:pool_update",
+			Usage:       "update a pool's stack",
+			Action:      stackUpdatePool,
+			Description: "stack:pool_update",
+			Flags:       stackFlags,
 		},
 	}
 	app.Run(os.Args)
