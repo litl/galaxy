@@ -2,7 +2,7 @@ package stack
 
 import (
 	"encoding/json"
-	"fmt"
+	"strings"
 )
 
 const (
@@ -118,7 +118,6 @@ func (p *Pool) UnmarshalJSON(b []byte) error {
 		resType := tmpRes["Type"]
 		var t string
 		if err := json.Unmarshal(resType, &t); err != nil {
-			fmt.Println("ERROR GETTING TYPE")
 			return err
 
 		}
@@ -127,21 +126,18 @@ func (p *Pool) UnmarshalJSON(b []byte) error {
 			res := &asg{}
 			p.Resources[name] = res
 			if err := json.Unmarshal(rawRes, res); err != nil {
-				fmt.Println("ERROR GETTING asg")
 				return err
 			}
 		case elbType:
 			res := &elb{}
 			p.Resources[name] = res
 			if err := json.Unmarshal(rawRes, res); err != nil {
-				fmt.Println("ERROR GETTING elb")
 				return err
 			}
 		case lcType:
 			res := &lc{}
 			p.Resources[name] = res
 			if err := json.Unmarshal(rawRes, res); err != nil {
-				fmt.Println("ERROR GETTING lc")
 				return err
 			}
 		}
@@ -193,11 +189,38 @@ type elb struct {
 	Properties elbProp
 }
 
+// Add a listener, replacing an existing listener with the same port
+func (e *elb) AddListener(port int, proto string, instancePort int, instanceProto string, sslCert string, policyNames []string) {
+	// take our current listeners
+	current := []listener{}
+
+	for _, l := range e.Properties.Listeners {
+		// skip this one if the port matches what we're setting
+		if l.LoadBalancerPort != port {
+			current = append(current, l)
+		}
+	}
+
+	proto = strings.ToUpper(proto)
+	instanceProto = strings.ToUpper(instanceProto)
+
+	l := listener{
+		InstancePort:     instancePort,
+		InstanceProtocol: instanceProto,
+		LoadBalancerPort: port,
+		Protocol:         proto,
+		PolicyNames:      policyNames,
+		SSLCertificateId: sslCert,
+	}
+
+	e.Properties.Listeners = append(current, l)
+}
+
 type elbProp struct {
 	Subnets        []string `json:",omitempty"`
 	SecurityGroups []string `json:",omitempty"`
 	HealthCheck    healthCheck
-	Listeners      []*Listener
+	Listeners      []listener
 }
 
 type healthCheck struct {
@@ -208,7 +231,7 @@ type healthCheck struct {
 	UnhealthyThreshold int `json:",string"`
 }
 
-type Listener struct {
+type listener struct {
 	InstancePort     int `json:",string"`
 	InstanceProtocol string
 	LoadBalancerPort int `json:",string"`

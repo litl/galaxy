@@ -283,9 +283,9 @@ func stackCreatePool(c *cli.Context) {
 
 	sslCert := ""
 	if cert := c.String("ssl-cert"); cert != "" {
-		sslCert = resources.ServerCerts[sslCert]
+		sslCert = resources.ServerCerts[cert]
 		if sslCert == "" {
-			log.Fatalf("Could not find certificate '%s'", sslCert)
+			log.Fatalf("Could not find certificate '%s'", cert)
 		}
 	}
 
@@ -361,26 +361,13 @@ func stackCreatePool(c *cli.Context) {
 			resources.SecurityGroups["webSG"],
 			resources.SecurityGroups["defaultSG"],
 		}
+
 		elb.Properties.HealthCheck.Target = fmt.Sprintf("HTTP:%d/", httpPort)
 
-		listener := &stack.Listener{
-			LoadBalancerPort: 80,
-			Protocol:         "HTTP",
-			InstancePort:     httpPort,
-			InstanceProtocol: "HTTP",
-		}
-
-		elb.Properties.Listeners = []*stack.Listener{listener}
+		elb.AddListener(80, "HTTP", httpPort, "HTTP", "", nil)
 
 		if sslCert != "" {
-			listener := &stack.Listener{
-				LoadBalancerPort: 443,
-				Protocol:         "HTTPS",
-				InstancePort:     httpPort,
-				InstanceProtocol: "HTTP",
-				SSLCertificateId: sslCert,
-			}
-			elb.Properties.Listeners = append(elb.Properties.Listeners, listener)
+			elb.AddListener(443, "HTTPS", httpPort, "HTTP", sslCert, nil)
 		}
 
 		pool.Resources[elbName] = elb
