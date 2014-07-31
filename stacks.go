@@ -251,10 +251,6 @@ func sharedResources(c *cli.Context) stack.SharedResources {
 func stackCreatePool(c *cli.Context) {
 	var err error
 
-	// there's some json "omitempty" bool fields we need to set
-	True := new(bool)
-	*True = true
-
 	poolName := utils.GalaxyPool(c)
 	if poolName == "" {
 		log.Fatal("pool name required")
@@ -331,20 +327,10 @@ func stackCreatePool(c *cli.Context) {
 	asg := pool.ASGTemplate
 	asgName := "asg" + poolEnv + poolName
 
-	asg.Properties.Tags = []stack.Tag{
-		{Key: "Name",
-			Value:             fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName),
-			PropagateAtLaunch: True},
-		{Key: "env",
-			Value:             poolEnv,
-			PropagateAtLaunch: True},
-		{Key: "pool",
-			Value:             poolName,
-			PropagateAtLaunch: True},
-		{Key: "source",
-			Value:             "galaxy",
-			PropagateAtLaunch: True},
-	}
+	asg.AddTag("Name", fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName), true)
+	asg.AddTag("env", poolEnv, true)
+	asg.AddTag("pool", poolName, true)
+	asg.AddTag("source", "galaxy", true)
 
 	if desiredCap > 0 {
 		asg.Properties.DesiredCapacity = desiredCap

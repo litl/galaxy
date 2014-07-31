@@ -164,6 +164,16 @@ func (a *asg) SetLaunchConfiguration(name string) {
 	a.Properties.LaunchConfigurationName = intrinsic{"Ref": name}
 }
 
+func (a *asg) AddTag(key, value string, propagateAtLauch bool) {
+	t := tag{
+		Key:               key,
+		Value:             value,
+		PropagateAtLaunch: &propagateAtLauch,
+	}
+
+	a.Properties.Tags = append(a.Properties.Tags, t)
+}
+
 type asgProp struct {
 	AvailabilityZones       intrinsic
 	Cooldown                int `json:",string"`
@@ -174,7 +184,7 @@ type asgProp struct {
 	LoadBalancerNames       []intrinsic `json:",omitempty"`
 	MaxSize                 int         `json:",string"`
 	MinSize                 int         `json:",string"`
-	Tags                    []Tag
+	Tags                    []tag
 	VPCZoneIdentifier       []string
 }
 
@@ -253,7 +263,7 @@ type asgUpdate struct {
 	PauseTime             string
 }
 
-type Tag struct {
+type tag struct {
 	Key               string
 	Value             string
 	PropagateAtLaunch *bool `json:",omitempty"`
