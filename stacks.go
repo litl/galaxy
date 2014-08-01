@@ -67,7 +67,7 @@ func getInitOpts(c *cli.Context) map[string]string {
 	}
 
 	opts := map[string]string{
-		"KeyPair":                keyName,
+		"KeyName":                keyName,
 		"ControllerImageId":      controllerAMI,
 		"ControllerInstanceType": controllerInstance,
 		"PoolImageId":            poolAMI,
@@ -241,7 +241,7 @@ func sharedResources(c *cli.Context) stack.SharedResources {
 
 	keyName := c.String("keyname")
 	if keyName != "" {
-		resources.Parameters["KeyPair"] = keyName
+		resources.Parameters["KeyName"] = keyName
 	}
 
 	amiID := c.String("ami")
@@ -317,7 +317,7 @@ func stackCreatePool(c *cli.Context) {
 	if keyName := c.String("keyname"); keyName != "" {
 		lc.Properties.KeyName = keyName
 	} else {
-		lc.Properties.KeyName = resources.Parameters["KeyPair"]
+		lc.Properties.KeyName = resources.Parameters["KeyName"]
 	}
 
 	lc.Properties.IamInstanceProfile = resources.Roles["galaxyInstanceProfile"]
