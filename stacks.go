@@ -42,11 +42,11 @@ func promptValue(prompt, dflt string) string {
 
 func getInitOpts(c *cli.Context) map[string]string {
 
-	keyPair := c.GlobalString("keypair")
-	if keyPair == "" {
-		keyPair = promptValue("EC2 Keypair Name", "required")
-		if keyPair == "required" {
-			log.Fatal("keypair required")
+	keyName := c.String("keyname")
+	if keyName == "" {
+		keyName = promptValue("EC2 Keypair Name", "required")
+		if keyName == "required" {
+			log.Fatal("keyname required")
 		}
 	}
 
@@ -67,7 +67,7 @@ func getInitOpts(c *cli.Context) map[string]string {
 	}
 
 	opts := map[string]string{
-		"KeyPair":                keyPair,
+		"KeyPair":                keyName,
 		"ControllerImageId":      controllerAMI,
 		"ControllerInstanceType": controllerInstance,
 		"PoolImageId":            poolAMI,
@@ -225,22 +225,22 @@ func stackTemplate(c *cli.Context) {
 
 func sharedResources(c *cli.Context) stack.SharedResources {
 	// get the resources we need from the base stack
-	resources, err := stack.GetSharedResources(c.GlobalString("base"))
+	resources, err := stack.GetSharedResources(c.String("base"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	keyPair := c.GlobalString("keyname")
-	if keyPair != "" {
-		resources.Parameters["KeyPair"] = keyPair
+	keyName := c.String("keyname")
+	if keyName != "" {
+		resources.Parameters["KeyPair"] = keyName
 	}
 
-	amiID := c.GlobalString("ami")
+	amiID := c.String("ami")
 	if amiID != "" {
 		resources.Parameters["PoolImageId"] = amiID
 	}
 
-	instanceType := c.GlobalString("instance-type")
+	instanceType := c.String("instance-type")
 	if instanceType != "" {
 		resources.Parameters["PoolInstanceType"] = instanceType
 	}
@@ -256,12 +256,12 @@ func stackCreatePool(c *cli.Context) {
 		log.Fatal("pool name required")
 	}
 
-	baseStack := c.GlobalString("base")
+	baseStack := c.String("base")
 	if baseStack == "" {
 		log.Fatal("base stack required")
 	}
 
-	poolEnv := c.GlobalString("env")
+	poolEnv := utils.GalaxyEnv(c)
 	if poolEnv == "" {
 		log.Fatal("env required")
 	}
@@ -283,9 +283,9 @@ func stackCreatePool(c *cli.Context) {
 
 	sslCert := ""
 	if cert := c.String("ssl-cert"); cert != "" {
-		sslCert = resources.ServerCerts[sslCert]
+		sslCert = resources.ServerCerts[cert]
 		if sslCert == "" {
-			log.Fatalf("Could not find certificate '%s'", sslCert)
+			log.Fatalf("Could not find certificate '%s'", cert)
 		}
 	}
 
@@ -293,19 +293,19 @@ func stackCreatePool(c *cli.Context) {
 	lc := pool.LCTemplate
 	lcName := "lc" + poolEnv + poolName
 
-	if amiID := c.GlobalString("ami"); amiID != "" {
+	if amiID := c.String("ami"); amiID != "" {
 		lc.Properties.ImageId = amiID
 	} else {
 		lc.Properties.ImageId = resources.Parameters["PoolImageId"]
 	}
 
-	if insType := c.GlobalString("instance-type"); insType != "" {
+	if insType := c.String("instance-type"); insType != "" {
 		lc.Properties.InstanceType = insType
 	} else {
 		lc.Properties.InstanceType = resources.Parameters["PoolInstanceType"]
 	}
 
-	if keyName := c.GlobalString("keypair"); keyName != "" {
+	if keyName := c.String("keyname"); keyName != "" {
 		lc.Properties.KeyName = keyName
 	} else {
 		lc.Properties.KeyName = resources.Parameters["KeyPair"]
@@ -319,7 +319,7 @@ func stackCreatePool(c *cli.Context) {
 	}
 
 	// WARNING: magic constant needs a config somewhere
-	lc.Properties.BlockDeviceMappings[0].Ebs.VolumeSize = 100
+	lc.SetVolumeSize(100)
 
 	pool.Resources[lcName] = lc
 
@@ -361,26 +361,13 @@ func stackCreatePool(c *cli.Context) {
 			resources.SecurityGroups["webSG"],
 			resources.SecurityGroups["defaultSG"],
 		}
+
 		elb.Properties.HealthCheck.Target = fmt.Sprintf("HTTP:%d/", httpPort)
 
-		listener := &stack.Listener{
-			LoadBalancerPort: 80,
-			Protocol:         "HTTP",
-			InstancePort:     httpPort,
-			InstanceProtocol: "HTTP",
-		}
-
-		elb.Properties.Listeners = []*stack.Listener{listener}
+		elb.AddListener(80, "HTTP", httpPort, "HTTP", "", nil)
 
 		if sslCert != "" {
-			listener := &stack.Listener{
-				LoadBalancerPort: 443,
-				Protocol:         "HTTPS",
-				InstancePort:     httpPort,
-				InstanceProtocol: "HTTP",
-				SSLCertificateId: sslCert,
-			}
-			elb.Properties.Listeners = append(elb.Properties.Listeners, listener)
+			elb.AddListener(443, "HTTPS", httpPort, "HTTP", sslCert, nil)
 		}
 
 		pool.Resources[elbName] = elb
@@ -413,12 +400,12 @@ func stackUpdatePool(c *cli.Context) {
 		log.Fatal("pool name required")
 	}
 
-	baseStack := c.GlobalString("base")
+	baseStack := c.String("base")
 	if baseStack == "" {
 		log.Fatal("base stack required")
 	}
 
-	poolEnv := c.GlobalString("env")
+	poolEnv := c.String("env")
 	if poolEnv == "" {
 		log.Fatal("env required")
 	}
@@ -486,13 +473,13 @@ func stackUpdatePool(c *cli.Context) {
 	}
 
 	lc := pool.LC()
-	if amiID := c.GlobalString("ami"); amiID != "" {
+	if amiID := c.String("ami"); amiID != "" {
 		lc.Properties.ImageId = amiID
 	} else {
 		lc.Properties.ImageId = resources.Parameters["PoolImageId"]
 	}
 
-	if insType := c.GlobalString("instance-type"); insType != "" {
+	if insType := c.String("instance-type"); insType != "" {
 		lc.Properties.InstanceType = insType
 	} else {
 		lc.Properties.InstanceType = resources.Parameters["PoolInstanceType"]

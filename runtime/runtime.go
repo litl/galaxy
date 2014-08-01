@@ -439,7 +439,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 		args = append(args, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":"+port)
 	}
 
-	publicDns, err := ec2PublicHostname()
+	publicDns, err := EC2PublicHostname()
 	if err != nil {
 		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
 		publicDns = "127.0.0.1"
@@ -505,7 +505,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
-	publicDns, err := ec2PublicHostname()
+	publicDns, err := EC2PublicHostname()
 	if err != nil {
 		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
 		publicDns = "127.0.0.1"
