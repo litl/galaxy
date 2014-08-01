@@ -715,7 +715,7 @@ func main() {
 		cli.StringFlag{Name: "ami", Usage: "ami id"},
 		cli.StringFlag{Name: "instance-type", Usage: "instance type"},
 		cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
-		cli.StringFlag{Name: "update-policy", Usage: "stack update policy"},
+		cli.StringFlag{Name: "policy", Usage: "stack policy"},
 		cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
 		cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
 		cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
