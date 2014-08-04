@@ -22,7 +22,7 @@ var cloudformation_template = []byte(`{
             "Description": "Default galaxy pool instance type",
             "Type": "String"
         },
-        "KeyPair": {
+        "KeyName": {
             "Description": "The name of an EC2 Key Pair to allow SSH access to the instance.",
             "Type": "String"
         },
@@ -227,7 +227,7 @@ var cloudformation_template = []byte(`{
                     "Ref": "ControllerInstanceType"
                 },
                 "KeyName": {
-                    "Ref": "KeyPair"
+                    "Ref": "KeyName"
                 }
             },
             "Type": "AWS::AutoScaling::LaunchConfiguration"
@@ -254,7 +254,7 @@ var cloudformation_template = []byte(`{
                     "Ref": "ControllerInstanceType"
                 },
                 "KeyName": {
-                    "Ref": "KeyPair"
+                    "Ref": "KeyName"
                 },
                 "SecurityGroups": [
                     {

@@ -67,7 +67,7 @@ func getInitOpts(c *cli.Context) map[string]string {
 	}
 
 	opts := map[string]string{
-		"KeyPair":                keyName,
+		"KeyName":                keyName,
 		"ControllerImageId":      controllerAMI,
 		"ControllerInstanceType": controllerInstance,
 		"PoolImageId":            poolAMI,
@@ -163,6 +163,15 @@ func stackUpdate(c *cli.Context) {
 		}
 	}
 
+	if policy := c.String("policy"); policy != "" {
+		policyJSON, err := jsonFromArg(policy)
+		if err != nil {
+			log.Fatal("policy error:", err)
+		}
+
+		params["StackPolicyDuringUpdateBody"] = string(policyJSON)
+	}
+
 	if len(stackTmpl) == 0 {
 		// get the current running template
 		stackTmpl, err = stack.GetTemplate(stackName)
@@ -232,7 +241,7 @@ func sharedResources(c *cli.Context) stack.SharedResources {
 
 	keyName := c.String("keyname")
 	if keyName != "" {
-		resources.Parameters["KeyPair"] = keyName
+		resources.Parameters["KeyName"] = keyName
 	}
 
 	amiID := c.String("ami")
@@ -308,7 +317,7 @@ func stackCreatePool(c *cli.Context) {
 	if keyName := c.String("keyname"); keyName != "" {
 		lc.Properties.KeyName = keyName
 	} else {
-		lc.Properties.KeyName = resources.Parameters["KeyPair"]
+		lc.Properties.KeyName = resources.Parameters["KeyName"]
 	}
 
 	lc.Properties.IamInstanceProfile = resources.Roles["galaxyInstanceProfile"]
@@ -394,6 +403,9 @@ func stackCreatePool(c *cli.Context) {
 	log.Println("CreateStack complete")
 }
 
+// TODO: Add an option to allow or prevent a rolling update of nodes.
+//       This will sometimes require 2 stack updates, one to *only* change the
+//       ASG UpdatePolicy, and one to push the new Template.
 func stackUpdatePool(c *cli.Context) {
 	poolName := utils.GalaxyPool(c)
 	if poolName == "" {
@@ -405,7 +417,7 @@ func stackUpdatePool(c *cli.Context) {
 		log.Fatal("base stack required")
 	}
 
-	poolEnv := c.String("env")
+	poolEnv := utils.GalaxyEnv(c)
 	if poolEnv == "" {
 		log.Fatal("env required")
 	}
@@ -418,7 +430,7 @@ func stackUpdatePool(c *cli.Context) {
 	}
 
 	options := make(map[string]string)
-	if policy := c.String("update-policy"); policy != "" {
+	if policy := c.String("policy"); policy != "" {
 		policyJSON, err := jsonFromArg(policy)
 		if err != nil {
 			log.Fatal("policy error:", err)
@@ -462,13 +474,15 @@ func stackUpdatePool(c *cli.Context) {
 		log.Fatal("Pool does not have an ELB")
 	}
 
-	for _, l := range elb.Properties.Listeners {
-		if sslCert != "" && l.Protocol == "HTTPS" {
-			l.SSLCertificateId = sslCert
-		}
+	if elb != nil {
+		for _, l := range elb.Properties.Listeners {
+			if sslCert != "" && l.Protocol == "HTTPS" {
+				l.SSLCertificateId = sslCert
+			}
 
-		if httpPort > 0 {
-			l.InstancePort = httpPort
+			if httpPort > 0 {
+				l.InstancePort = httpPort
+			}
 		}
 	}
 

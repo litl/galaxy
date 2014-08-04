@@ -316,7 +316,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 	shared.ServerCerts = make(map[string]string)
 
 	// we need to use DescribeStacks to get any parameters that were used in
-	// the base stack, such as KeyPair
+	// the base stack, such as KeyName
 	descResp, err := DescribeStacks()
 	if err != nil {
 		return shared, err
