@@ -184,6 +184,15 @@ type asgProp struct {
 	VPCZoneIdentifier       []string
 }
 
+type asgUpdatePolicy struct {
+	AutoScalingRollingUpdate asgUpdate
+}
+
+type asgUpdate struct {
+	MinInstancesInService string
+	MaxBatchSize          string
+	PauseTime             string
+}
 type elb struct {
 	Type       string
 	Properties elbProp
@@ -284,16 +293,6 @@ type ebsDev struct {
 	SnapshotId          string `json:",omitempty"`
 	VolumeSize          int
 	VolumeType          string
-}
-
-type asgUpdatePolicy struct {
-	AutoScalingRollingUpdate asgUpdate
-}
-
-type asgUpdate struct {
-	MinInstancesInService string
-	MaxBatchSize          string
-	PauseTime             string
 }
 
 type tag struct {
