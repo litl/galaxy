@@ -25,14 +25,7 @@ var poolTmpl = []byte(`
 				"Tags": [],
 				"VPCZoneIdentifier": []
             },
-			"Type": "AWS::AutoScaling::AutoScalingGroup",
-            "UpdatePolicy" : {
-                "AutoScalingRollingUpdate" : {
-                    "MinInstancesInService" : "1",
-                    "MaxBatchSize" : "1",
-                    "PauseTime" : "PT5M"
-                }
-            }
+			"Type": "AWS::AutoScaling::AutoScalingGroup"
         },
 		"elb_": {
 			"Properties": {
