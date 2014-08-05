@@ -2,7 +2,9 @@ package stack
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -149,7 +151,7 @@ func (p *Pool) UnmarshalJSON(b []byte) error {
 type asg struct {
 	Type         string
 	Properties   asgProp
-	UpdatePolicy asgUpdatePolicy `json:",omitempty"`
+	UpdatePolicy *asgUpdatePolicy `json:",omitempty"`
 }
 
 func (a *asg) AddLoadBalancer(name string) {
@@ -193,6 +195,19 @@ type asgUpdate struct {
 	MaxBatchSize          string
 	PauseTime             string
 }
+
+// Generate an ASGUpdatePolicy
+func (a *asg) SetASGUpdatePolicy(min, batch int, pause time.Duration) {
+	a.UpdatePolicy = &asgUpdatePolicy{
+		AutoScalingRollingUpdate: asgUpdate{
+			MinInstancesInService: strconv.Itoa(min),
+			MaxBatchSize:          strconv.Itoa(batch),
+			// XML duration -- close enough for now.
+			PauseTime: "PT" + strings.ToUpper(pause.String()),
+		},
+	}
+}
+
 type elb struct {
 	Type       string
 	Properties elbProp

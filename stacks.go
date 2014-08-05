@@ -354,6 +354,11 @@ func stackCreatePool(c *cli.Context) {
 		asg.Properties.MinSize = minSize
 	}
 
+	if c.Bool("auto-update") {
+		// TODO: configure this somehow
+		asg.SetASGUpdatePolicy(1, 1, 5*time.Minute)
+	}
+
 	pool.Resources[asgName] = asg
 
 	// Optionally create the Elastic Load Balancer
@@ -456,6 +461,11 @@ func stackUpdatePool(c *cli.Context) {
 
 	if c.Int("max-size") > 0 {
 		asg.Properties.MaxSize = c.Int("max-size")
+	}
+
+	if c.Bool("auto-update") {
+		// TODO: configure this somehow
+		asg.SetASGUpdatePolicy(1, 1, 5*time.Minute)
 	}
 
 	elb := pool.ELB()

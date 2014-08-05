@@ -723,6 +723,7 @@ func main() {
 		cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
 		cli.IntFlag{Name: "http-port", Usage: "instance http port"},
 		cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
+		cli.BoolFlag{Name: "auto-update", Usage: "add an ASG UpdatePolicy"},
 	}
 
 	app := cli.NewApp()
