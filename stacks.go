@@ -15,7 +15,51 @@ import (
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/stack"
 	"github.com/litl/galaxy/utils"
+	"github.com/ryanuber/columnize"
 )
+
+// return --base, or try to find a base clodformation stack
+func getBase(c *cli.Context) string {
+	errNoBase := fmt.Errorf("could not identify a unique base stack")
+
+	base := c.String("base")
+	if base != "" {
+		return base
+	}
+
+	stacks, err := stack.List()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, name := range stacks {
+		parts := strings.Split(name, "-")
+
+		// the best we can do for now is look for a stack with a single word
+		if len(parts) == 1 {
+			if base != "" {
+				err = errNoBase
+			}
+			base = name
+		}
+
+		// or check for "-base" in the name
+		for _, p := range parts {
+			if p == "base" {
+				if base != "" {
+					err = errNoBase
+				}
+				base = name
+			}
+		}
+	}
+
+	if err != nil {
+		log.Fatalf("%s: %s", err, "use --base")
+	}
+
+	return base
+}
 
 func promptValue(prompt, dflt string) string {
 	if !tty {
@@ -148,10 +192,15 @@ func stackUpdate(c *cli.Context) {
 	}
 
 	params := make(map[string]string)
-	if c.String("parameters") != "" {
-		err := json.Unmarshal([]byte(c.String("parameters")), &params)
+	if p := c.String("parameters"); p != "" {
+		paramJSON, err := jsonFromArg(p)
 		if err != nil {
 			log.Fatal("Error decoding parameters:", err)
+		}
+
+		err = json.Unmarshal(paramJSON, &params)
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 
@@ -234,7 +283,7 @@ func stackTemplate(c *cli.Context) {
 
 func sharedResources(c *cli.Context) stack.SharedResources {
 	// get the resources we need from the base stack
-	resources, err := stack.GetSharedResources(c.String("base"))
+	resources, err := stack.GetSharedResources(getBase(c))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -265,10 +314,7 @@ func stackCreatePool(c *cli.Context) {
 		log.Fatal("pool name required")
 	}
 
-	baseStack := c.String("base")
-	if baseStack == "" {
-		log.Fatal("base stack required")
-	}
+	baseStack := getBase(c)
 
 	poolEnv := utils.GalaxyEnv(c)
 	if poolEnv == "" {
@@ -417,10 +463,7 @@ func stackUpdatePool(c *cli.Context) {
 		log.Fatal("pool name required")
 	}
 
-	baseStack := c.String("base")
-	if baseStack == "" {
-		log.Fatal("base stack required")
-	}
+	baseStack := getBase(c)
 
 	poolEnv := utils.GalaxyEnv(c)
 	if poolEnv == "" {
@@ -554,4 +597,14 @@ func stackDelete(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func stackList(c *cli.Context) {
+	stacks, err := stack.List()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	output, _ := columnize.SimpleFormat(stacks)
+	log.Println(output)
 }

@@ -208,6 +208,21 @@ func DescribeStacks() (DescribeStacksResponse, error) {
 	return descResp, nil
 }
 
+// return a list of all stack names
+func List() ([]string, error) {
+	resp, err := DescribeStacks()
+	if err != nil {
+		return nil, err
+	}
+
+	stacks := []string{}
+	for _, stack := range resp.Stacks {
+		stacks = append(stacks, stack.Name)
+	}
+
+	return stacks, nil
+}
+
 func Exists(name string) (bool, error) {
 	resp, err := DescribeStacks()
 	if err != nil {
