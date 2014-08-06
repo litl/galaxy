@@ -626,6 +626,9 @@ func poolDelete(c *cli.Context) {
 
 	if created {
 		log.Printf("Pool %s delete\n", utils.GalaxyPool(c))
+		// now delete the Cloudformation Stack
+		stackDeletePool(c)
+
 	} else {
 		log.Printf("Pool %s has apps assigned. Unassign them first.\n", utils.GalaxyPool(c))
 	}

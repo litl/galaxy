@@ -574,6 +574,27 @@ func stackUpdatePool(c *cli.Context) {
 	log.Println("UpdateStack complete")
 }
 
+func stackDeletePool(c *cli.Context) {
+	poolName := utils.GalaxyPool(c)
+	if poolName == "" {
+		log.Fatal("pool name required")
+	}
+
+	baseStack := getBase(c)
+
+	poolEnv := utils.GalaxyEnv(c)
+	if poolEnv == "" {
+		log.Fatal("env required")
+	}
+
+	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
+
+	err := stack.Delete(stackName)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 // delete a pool
 func stackDelete(c *cli.Context) {
 	stackName := c.Args().First()
