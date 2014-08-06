@@ -899,6 +899,13 @@ func main() {
 			Description: "stack:pool_update",
 			Flags:       stackFlags,
 		},
+		{
+			Name:        "stack",
+			Usage:       "list all stacks",
+			Action:      stackList,
+			Description: "stack",
+			Flags:       stackFlags,
+		},
 	}
 	app.Run(os.Args)
 }
