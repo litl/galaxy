@@ -180,7 +180,7 @@ func ListStackResources(stackName string) (ListStackResourcesResponse, error) {
 }
 
 // Describe all running stacks
-func DescribeStacks() (DescribeStacksResponse, error) {
+func DescribeStacks(name string) (DescribeStacksResponse, error) {
 	descResp := DescribeStacksResponse{}
 
 	svc, err := getService("cf")
@@ -190,6 +190,10 @@ func DescribeStacks() (DescribeStacksResponse, error) {
 
 	params := map[string]string{
 		"Action": "DescribeStacks",
+	}
+
+	if name != "" {
+		params["StackName"] = name
 	}
 
 	resp, err := svc.Query("POST", "/", params)
@@ -212,7 +216,7 @@ func DescribeStacks() (DescribeStacksResponse, error) {
 
 // return a list of all stack names
 func List() ([]string, error) {
-	resp, err := DescribeStacks()
+	resp, err := DescribeStacks("")
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +230,7 @@ func List() ([]string, error) {
 }
 
 func Exists(name string) (bool, error) {
-	resp, err := DescribeStacks()
+	resp, err := DescribeStacks(name)
 	if err != nil {
 		return false, err
 	}
@@ -248,7 +252,7 @@ func Exists(name string) (bool, error) {
 func Wait(name string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
-		resp, err := DescribeStacks()
+		resp, err := DescribeStacks(name)
 		if err != nil {
 			// I guess we should sleep and retry here, in case of intermittent
 			// errors
@@ -276,7 +280,6 @@ func Wait(name string, timeout time.Duration) error {
 
 		time.Sleep(5 * time.Second)
 	}
-
 }
 
 // Get a list of SSL certificates from the IAM service.
@@ -321,11 +324,6 @@ func ListServerCertificates() (ListServerCertsResponse, error) {
 // pool template.
 func GetSharedResources(stackName string) (SharedResources, error) {
 	shared := SharedResources{}
-	res, err := ListStackResources(stackName)
-	if err != nil {
-		return shared, err
-	}
-
 	shared.SecurityGroups = make(map[string]string)
 	shared.Subnets = make(map[string]string)
 	shared.Roles = make(map[string]string)
@@ -334,7 +332,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 
 	// we need to use DescribeStacks to get any parameters that were used in
 	// the base stack, such as KeyName
-	descResp, err := DescribeStacks()
+	descResp, err := DescribeStacks(stackName)
 	if err != nil {
 		return shared, err
 	}
@@ -346,6 +344,11 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 				shared.Parameters[param.Key] = param.Value
 			}
 		}
+	}
+
+	res, err := ListStackResources(stackName)
+	if err != nil {
+		return shared, err
 	}
 
 	for _, resource := range res.Resources {

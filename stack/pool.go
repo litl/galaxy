@@ -21,7 +21,9 @@ const (
 // matter if the poolTmpl is modified, or we attempt to update an arbitrarily
 // added pool template.
 type Pool struct {
-	// pre-initialized values from the template
+	// The *Template attributes hold the pre-initialed types from the pool
+	// template.  These are not serialized to json, and should be used to
+	// create the proper Resources.
 	ASGTemplate *asg `json:"-"`
 	ELBTemplate *elb `json:"-"`
 	LCTemplate  *lc  `json:"-"`

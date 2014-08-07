@@ -326,6 +326,7 @@ func stackCreatePool(c *cli.Context) {
 	pool := stack.NewPool()
 
 	// get the resources we need from the base stack
+	// TODO: this may search for the base stack a second time
 	resources := sharedResources(c)
 
 	desiredCap := c.Int("desired-size")
