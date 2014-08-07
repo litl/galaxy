@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/crowdmob/goamz/aws"
@@ -81,6 +82,38 @@ type serverCert struct {
 type ListServerCertsResponse struct {
 	RequestId string       `xml:"ResponseMetadata>RequestId"`
 	Certs     []serverCert `xml:"ListServerCertificatesResult>ServerCertificateMetadataList>member"`
+}
+
+type stackEvent struct {
+	EventId              string
+	LogicalResourceId    string
+	PhysicalResourceId   string
+	ResourceProperties   string
+	ResourceStatus       string
+	ResourceStatusReason string
+	ResourceType         string
+	StackId              string
+	StackName            string
+	Timestamp            time.Time
+}
+
+type DescribeStackEventsResult struct {
+	Events []stackEvent `xml:"DescribeStackEventsResult>StackEvents>member"`
+}
+
+type stackSummary struct {
+	CreationTime        time.Time
+	DeletionTime        time.Time
+	LastUpdatedTime     time.Time
+	StackId             string
+	StackName           string
+	StackStatus         string
+	StackStatusReason   string
+	TemplateDescription string
+}
+
+type ListStacksResponse struct {
+	Stacks []stackSummary `xml:"ListStacksResult>StackSummaries>member"`
 }
 
 // Resources from the base stack that may need to be referenced from other
@@ -214,8 +247,43 @@ func DescribeStacks(name string) (DescribeStacksResponse, error) {
 	return descResp, nil
 }
 
-// return a list of all stack names
-func List() ([]string, error) {
+// Describe a Stack's Events
+func DescribeStackEvents(name string) (DescribeStackEventsResult, error) {
+	descResp := DescribeStackEventsResult{}
+
+	svc, err := getService("cf")
+	if err != nil {
+		return descResp, err
+	}
+
+	params := map[string]string{
+		"Action": "DescribeStackEvents",
+	}
+
+	if name != "" {
+		params["StackName"] = name
+	}
+
+	resp, err := svc.Query("POST", "/", params)
+	if err != nil {
+		return descResp, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err := svc.BuildError(resp)
+		return descResp, err
+	}
+	defer resp.Body.Close()
+
+	err = xml.NewDecoder(resp.Body).Decode(&descResp)
+	if err != nil {
+		return descResp, err
+	}
+	return descResp, nil
+}
+
+// return a list of all actives stacks
+func ListActive() ([]string, error) {
 	resp, err := DescribeStacks("")
 	if err != nil {
 		return nil, err
@@ -227,6 +295,39 @@ func List() ([]string, error) {
 	}
 
 	return stacks, nil
+}
+
+// List all stacks
+// This lists all stacks including inactive and deleted.
+func List() (ListStacksResponse, error) {
+	listResp := ListStacksResponse{}
+
+	svc, err := getService("cf")
+	if err != nil {
+		return listResp, err
+	}
+
+	params := map[string]string{
+		"Action": "ListStacks",
+	}
+
+	resp, err := svc.Query("POST", "/", params)
+	if err != nil {
+		return listResp, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err := svc.BuildError(resp)
+		return listResp, err
+	}
+	defer resp.Body.Close()
+
+	err = xml.NewDecoder(resp.Body).Decode(&listResp)
+	if err != nil {
+		return listResp, err
+	}
+	return listResp, nil
+
 }
 
 func Exists(name string) (bool, error) {
@@ -280,6 +381,35 @@ func Wait(name string, timeout time.Duration) error {
 		}
 
 	SLEEP:
+		if time.Now().After(deadline) {
+			return ErrTimeout
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+}
+
+// Like the Wait function, but instead if returning as soon as there is an
+// error, always wait for a final status.
+// ** This assumes all _COMPLETE statuses are final, and all final statuses end
+//    in _COMPLETE.
+func WaitForComplete(id string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		resp, err := DescribeStackEvents(id)
+		if err != nil {
+			return err
+		} else if len(resp.Events) == 0 {
+			return fmt.Errorf("no events for stack %s", id)
+		}
+
+		//TODO: are these always in order?!
+		latest := resp.Events[0]
+
+		if strings.HasSuffix(latest.ResourceStatus, "_COMPLETE") {
+			return nil
+		}
+
 		if time.Now().After(deadline) {
 			return ErrTimeout
 		}
@@ -385,7 +515,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 func GetTemplate(name string) ([]byte, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	params := map[string]string{

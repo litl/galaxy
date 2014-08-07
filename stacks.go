@@ -27,7 +27,7 @@ func getBase(c *cli.Context) string {
 		return base
 	}
 
-	stacks, err := stack.List()
+	stacks, err := stack.ListActive()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -450,9 +450,43 @@ func stackCreatePool(c *cli.Context) {
 
 	// do we want to wait on this by default?
 	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
+		log.Error(err)
+		log.Error("CreateStack Failed, attempting to delete")
+
+		waitAndDelete(stackName)
+		return
+	}
+
+	log.Println("CreateStack complete")
+}
+
+// wait until a stack is in a final state, then delete it
+func waitAndDelete(name string) {
+	// we need to get the StackID in order to lookup DELETE events
+	desc, err := stack.DescribeStacks(name)
+	if err != nil {
+		log.Fatal(err)
+	} else if len(desc.Stacks) == 0 {
+		log.Fatal("could not describe stack:", name)
+	}
+
+	stackId := desc.Stacks[0].Id
+
+	err := stack.WaitForComplete(stackId, 5*time.Minute)
+	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("CreateStack complete")
+
+	err = stack.Delete(name)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// wait
+	err = stack.WaitForComplete(stackId, 5*time.Minute)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Update an existing Pool Stack
