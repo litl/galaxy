@@ -454,9 +454,7 @@ func stackCreatePool(c *cli.Context) {
 	log.Println("CreateStack complete")
 }
 
-// TODO: Add an option to allow or prevent a rolling update of nodes.
-//       This will sometimes require 2 stack updates, one to *only* change the
-//       ASG UpdatePolicy, and one to push the new Template.
+// Update an existing Pool Stack
 func stackUpdatePool(c *cli.Context) {
 	poolName := utils.GalaxyPool(c)
 	if poolName == "" {
@@ -508,6 +506,7 @@ func stackUpdatePool(c *cli.Context) {
 
 	if c.Bool("auto-update") {
 		// TODO: configure this somehow
+		// note that the max pause is only PT5M30S
 		asg.SetASGUpdatePolicy(1, 1, 5*time.Minute)
 	}
 

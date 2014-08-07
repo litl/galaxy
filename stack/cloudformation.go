@@ -19,6 +19,8 @@ if someone wants to write out the entire API.
 TODO: this is going to need some DRY love
 */
 
+var ErrTimeout = fmt.Errorf("timeout")
+
 type GetTemplateResponse struct {
 	TemplateBody []byte `xml:"GetTemplateResult>TemplateBody"`
 }
@@ -239,10 +241,10 @@ func Exists(name string) (bool, error) {
 }
 
 // Wait for a stack creation to complete.
-// Poll every 5s while the stack is in the CREATE_IN_PROGRESS state, and
-// return nil when it enters CREATE_COMPLETE, or and error if it enters
-// another state.
-// Return and error of "timeout" if the timeout is reached.
+// Poll every 5s while the stack is in the CREATE_IN_PROGRESS or
+// UPDATE_IN_PROGRESS state, and succeed when it enters a successful _COMPLETE
+// state.
+// Return and error of ErrTimeout if the timeout is reached.
 func Wait(name string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -269,7 +271,7 @@ func Wait(name string, timeout time.Duration) error {
 
 	SLEEP:
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout")
+			return ErrTimeout
 		}
 
 		time.Sleep(5 * time.Second)
