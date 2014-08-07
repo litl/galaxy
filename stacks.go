@@ -621,9 +621,16 @@ func stackDelete(c *cli.Context) {
 }
 
 func stackList(c *cli.Context) {
-	stacks, err := stack.List()
+	descResp, err := stack.DescribeStacks("")
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	stacks := []string{"stack | status | "}
+
+	for _, stack := range descResp.Stacks {
+		s := fmt.Sprintf("%s | %s | %s", stack.Name, stack.Status, stack.StatusReason)
+		stacks = append(stacks, s)
 	}
 
 	output, _ := columnize.SimpleFormat(stacks)
