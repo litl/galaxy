@@ -244,7 +244,7 @@ func Exists(name string) (bool, error) {
 	return false, nil
 }
 
-// Wait for a stack creation to complete.
+// Wait for a stack event to complete.
 // Poll every 5s while the stack is in the CREATE_IN_PROGRESS or
 // UPDATE_IN_PROGRESS state, and succeed when it enters a successful _COMPLETE
 // state.
@@ -254,6 +254,12 @@ func Wait(name string, timeout time.Duration) error {
 	for {
 		resp, err := DescribeStacks(name)
 		if err != nil {
+			if err, ok := err.(*aws.Error); ok {
+				// the call was successful, but AWS returned an error
+				// no need to wait.
+				return err
+			}
+
 			// I guess we should sleep and retry here, in case of intermittent
 			// errors
 			log.Println("DescribeStacks:", err)

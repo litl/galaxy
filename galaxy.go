@@ -585,7 +585,8 @@ func poolCreate(c *cli.Context) {
 	}
 
 	// now create the cloudformation stack
-	// is this fails, the stack can be created separately with stack:create_pool
+	// is this fails, the stack can be created separately with
+	// stack:create_pool
 	stackCreatePool(c)
 }
 
