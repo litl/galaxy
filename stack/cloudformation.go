@@ -381,7 +381,7 @@ func Wait(name string, timeout time.Duration) error {
 
 			// I guess we should sleep and retry here, in case of intermittent
 			// errors
-			log.Println("DescribeStacks:", err)
+			log.Errorln("DescribeStacks:", err)
 			goto SLEEP
 		}
 
@@ -592,10 +592,10 @@ func GetTemplate(name string) ([]byte, error) {
 // Create a CloudFormation stack
 // Request parameters which are taken from the options:
 //   StackPolicyDuringUpdateBody
-func Create(name string, stackTmpl []byte, options map[string]string) error {
+func Create(name string, stackTmpl []byte, options map[string]string) (*CreateStackResponse, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	params := map[string]string{
@@ -617,34 +617,31 @@ func Create(name string, stackTmpl []byte, options map[string]string) error {
 
 	resp, err := svc.Query("POST", "/", params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		err := svc.BuildError(resp)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	createResp := CreateStackResponse{}
-	err = xml.NewDecoder(resp.Body).Decode(&createResp)
+	createResp := &CreateStackResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(createResp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("CreateStack started")
-	log.Println("RequestId:", createResp.RequestId)
-	log.Println("StackId:", createResp.StackId)
-	return nil
+	return createResp, nil
 }
 
 // Update an existing CloudFormation stack.
 // Request parameters which are taken from the options:
 //   StackPolicyDuringUpdateBody
-func Update(name string, stackTmpl []byte, options map[string]string) error {
+func Update(name string, stackTmpl []byte, options map[string]string) (*UpdateStackResponse, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	params := map[string]string{
@@ -666,33 +663,30 @@ func Update(name string, stackTmpl []byte, options map[string]string) error {
 
 	resp, err := svc.Query("POST", "/", params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		err := svc.BuildError(resp)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	updateResp := UpdateStackResponse{}
-	err = xml.NewDecoder(resp.Body).Decode(&updateResp)
+	updateResp := &UpdateStackResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(updateResp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("UpdateStack started")
-	log.Println("RequestId:", updateResp.RequestId)
-	log.Println("StackId:", updateResp.StackId)
-	return nil
+	return updateResp, nil
 
 }
 
 // Delete and entire stack by name
-func Delete(name string) error {
+func Delete(name string) (*DeleteStackResponse, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	params := map[string]string{
@@ -702,24 +696,22 @@ func Delete(name string) error {
 
 	resp, err := svc.Query("POST", "/", params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		err := svc.BuildError(resp)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	deleteResp := DeleteStackResponse{}
-	err = xml.NewDecoder(resp.Body).Decode(&deleteResp)
+	deleteResp := &DeleteStackResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(deleteResp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("DeleteStack started")
-	log.Println("RequestId:", deleteResp.RequestId)
-	return nil
+	return deleteResp, nil
 }
 
 // The default template used to create our base stack.

@@ -131,7 +131,7 @@ func jsonFromArg(arg string) ([]byte, error) {
 
 	arg = strings.TrimSpace(arg)
 
-	// assume that an opening brack mean the json is given directly
+	// assume that an opening bracket mean the json is given directly
 	if strings.HasPrefix(arg, "{") {
 		jsonArg = []byte(arg)
 	} else if arg == "STDIN" {
@@ -175,10 +175,11 @@ func stackInit(c *cli.Context) {
 
 	opts := getInitOpts(c)
 
-	err = stack.Create(stackName, stackTmpl, opts)
+	_, err = stack.Create(stackName, stackTmpl, opts)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Initializing stack", stackName)
 }
 
 // update the base stack
@@ -246,10 +247,11 @@ func stackUpdate(c *cli.Context) {
 	ok := promptValue(fmt.Sprintf("\nUpdate the [%s] stack with:\n%s\nAccept?", stackName, string(p)), "n")
 	switch strings.ToLower(ok) {
 	case "y", "yes":
-		err = stack.Update(stackName, stackTmpl, params)
+		_, err = stack.Update(stackName, stackTmpl, params)
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.Println("Updating stack:", stackName)
 	default:
 		log.Fatal("aborted")
 	}
@@ -444,9 +446,12 @@ func stackCreatePool(c *cli.Context) {
 		return
 	}
 
-	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
+	_, err = stack.Create(stackName, poolTmpl, nil)
+	if err != nil {
 		log.Fatal(err)
 	}
+
+	log.Println("Creating stack:", stackName)
 
 	// do we want to wait on this by default?
 	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
@@ -462,6 +467,7 @@ func stackCreatePool(c *cli.Context) {
 
 // wait until a stack is in a final state, then delete it
 func waitAndDelete(name string) {
+	log.Println("Attempting to delete stack:", name)
 	// we need to get the StackID in order to lookup DELETE events
 	desc, err := stack.DescribeStacks(name)
 	if err != nil {
@@ -477,7 +483,7 @@ func waitAndDelete(name string) {
 		log.Fatal(err)
 	}
 
-	err = stack.Delete(name)
+	_, err = stack.Delete(name)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -487,6 +493,7 @@ func waitAndDelete(name string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Deleted stack:", name)
 }
 
 // Update an existing Pool Stack
@@ -596,7 +603,8 @@ func stackUpdatePool(c *cli.Context) {
 		return
 	}
 
-	if err := stack.Update(stackName, poolTmpl, options); err != nil {
+	log.Println("Updating stack:", stackName)
+	if _, err := stack.Update(stackName, poolTmpl, options); err != nil {
 		log.Fatal(err)
 	}
 
@@ -623,7 +631,7 @@ func stackDeletePool(c *cli.Context) {
 
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
 
-	err := stack.Delete(stackName)
+	_, err := stack.Delete(stackName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -648,10 +656,11 @@ func stackDelete(c *cli.Context) {
 		log.Fatal("aborted")
 	}
 
-	err := stack.Delete(stackName)
+	_, err := stack.Delete(stackName)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Deleted stack:", stackName)
 }
 
 func stackList(c *cli.Context) {
