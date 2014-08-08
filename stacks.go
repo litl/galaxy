@@ -472,7 +472,7 @@ func waitAndDelete(name string) {
 
 	stackId := desc.Stacks[0].Id
 
-	err := stack.WaitForComplete(stackId, 5*time.Minute)
+	err = stack.WaitForComplete(stackId, 5*time.Minute)
 	if err != nil {
 		log.Fatal(err)
 	}

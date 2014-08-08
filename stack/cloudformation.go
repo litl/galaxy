@@ -22,6 +22,23 @@ TODO: this is going to need some DRY love
 
 var ErrTimeout = fmt.Errorf("timeout")
 
+// thie error type also provides a list of failures from the stack's events
+type FailuresError struct {
+	messages []string
+}
+
+func (f *FailuresError) List() []string {
+	return f.messages
+}
+
+// The basic Error returns the oldest failure in the list
+func (f *FailuresError) Error() string {
+	if len(f.messages) == 0 {
+		return ""
+	}
+	return f.messages[len(f.messages)-1]
+}
+
 type GetTemplateResponse struct {
 	TemplateBody []byte `xml:"GetTemplateResult>TemplateBody"`
 }
@@ -351,7 +368,8 @@ func Exists(name string) (bool, error) {
 // state.
 // Return and error of ErrTimeout if the timeout is reached.
 func Wait(name string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
+	start := time.Now()
+	deadline := start.Add(timeout)
 	for {
 		resp, err := DescribeStacks(name)
 		if err != nil {
@@ -375,7 +393,19 @@ func Wait(name string, timeout time.Duration) error {
 				case "CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS":
 					return nil
 				default:
-					return fmt.Errorf("%s:%s", stack.Status, stack.StatusReason)
+					// see if we can caught the actual FAILURE
+					// start looking slightly before we started the watch.
+					// We're more likely to catch a quick event than we are to
+					// pickup something from a previous transaction.
+					failures, _ := ListFailures(name, start.Add(-2*time.Second))
+					if len(failures) > 0 {
+						return &FailuresError{
+							messages: failures,
+						}
+					}
+
+					// we didn't catch the events for some reason, return our current status
+					return fmt.Errorf("%s: %s", stack.Status, stack.StatusReason)
 				}
 			}
 		}
@@ -387,6 +417,25 @@ func Wait(name string, timeout time.Duration) error {
 
 		time.Sleep(5 * time.Second)
 	}
+}
+
+// List failures on a stack as "STATUS:REASON"
+func ListFailures(id string, since time.Time) ([]string, error) {
+	resp, err := DescribeStackEvents(id)
+	if err != nil {
+		return nil, err
+	}
+
+	fails := []string{}
+
+	for _, event := range resp.Events {
+		status, reason := event.ResourceStatus, event.ResourceStatusReason
+		if event.Timestamp.After(since) && strings.HasSuffix(status, "_FAILED") {
+			fails = append(fails, fmt.Sprintf("%s: %s", status, reason))
+		}
+	}
+
+	return fails, nil
 }
 
 // Like the Wait function, but instead if returning as soon as there is an
