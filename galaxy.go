@@ -904,6 +904,12 @@ func main() {
 			Flags:       stackFlags,
 		},
 		{
+			Name:        "stack:events",
+			Usage:       "list recent events for a stack",
+			Action:      stackListEvents,
+			Description: "stack:events",
+		},
+		{
 			Name:        "stack",
 			Usage:       "list all stacks",
 			Action:      stackList,

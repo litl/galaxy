@@ -679,3 +679,40 @@ func stackList(c *cli.Context) {
 	output, _ := columnize.SimpleFormat(stacks)
 	log.Println(output)
 }
+
+// List recent events for a stack
+// Shows up to 20 events, or 24 hours of events.
+func stackListEvents(c *cli.Context) {
+	stackName := c.Args().First()
+	if stackName == "" {
+		log.Fatal("stack name required")
+	}
+
+	resp, err := stack.DescribeStackEvents(stackName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(resp.Events) == 0 {
+		log.Println("no events for", stackName)
+		return
+	}
+
+	firstTS := resp.Events[0].Timestamp.Add(-24 * time.Hour)
+	lines := []string{"timestamp | logicalID | status | reason"}
+	format := "%s | %s | %s | %s"
+
+	for i, e := range resp.Events {
+		if i > 20 || e.Timestamp.Before(firstTS) {
+			break
+		}
+
+		displayTime := e.Timestamp.Format(time.Stamp)
+
+		line := fmt.Sprintf(format, displayTime, e.LogicalResourceId, e.ResourceStatus, e.ResourceStatusReason)
+		lines = append(lines, line)
+	}
+
+	output, _ := columnize.SimpleFormat(lines)
+	log.Println(output)
+}
