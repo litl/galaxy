@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/litl/galaxy/utils"
@@ -32,6 +33,8 @@ var (
 type RequestLogger struct{}
 
 type HTTPRouter struct {
+	sync.Mutex
+	listener  net.Listener
 	router    *hostroute.HostRouter
 	balancers map[string]*roundrobin.RoundRobin
 }
@@ -101,6 +104,8 @@ func NewHTTPRouter() *HTTPRouter {
 }
 
 func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
+	s.Lock()
+	defer s.Unlock()
 
 	if vhost == "" || url == "" {
 		return nil
@@ -146,6 +151,8 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 }
 
 func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
+	s.Lock()
+	defer s.Unlock()
 
 	if vhost == "" || url == "" {
 		return nil
@@ -172,14 +179,14 @@ func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
 
 // Remove all backends for vhost that are not listed in addrs
 func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
-
 	if vhost == "" {
 		return
 	}
 
 	// Remove backends that are no longer registered
-
+	s.Lock()
 	balancer := s.balancers[vhost]
+	s.Unlock()
 	if balancer == nil {
 		return
 	}
@@ -194,6 +201,9 @@ func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
 
 // Removes a virtual host router
 func (s *HTTPRouter) RemoveRouter(vhost string) {
+	s.Lock()
+	defer s.Unlock()
+
 	if vhost == "" {
 		return
 	}
@@ -204,6 +214,9 @@ func (s *HTTPRouter) RemoveRouter(vhost string) {
 }
 
 func (s *HTTPRouter) adminHandler(w http.ResponseWriter, r *http.Request) {
+	s.Lock()
+	defer s.Unlock()
+
 	if len(s.balancers) == 0 {
 		w.WriteHeader(503)
 		return
@@ -226,6 +239,7 @@ func (s *HTTPRouter) adminHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 		host := r.Host
@@ -238,7 +252,11 @@ func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
 			}
 		}
 
-		if _, exists := s.balancers[host]; !exists {
+		s.Lock()
+		_, exists := s.balancers[host]
+		s.Unlock()
+
+		if !exists {
 			s.adminHandler(w, r)
 			return
 		}
@@ -246,7 +264,12 @@ func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
 	})
 }
 
-func (s *HTTPRouter) Start() {
+// Start the HTTP Router frontend.
+// Takes a channel to notify when the listener is started
+// to safely synchronize tests.
+func (s *HTTPRouter) Start(ready chan bool) {
+	//FIXME: poor locking strategy
+	s.Lock()
 
 	if debug {
 		// init the vulcan logging
@@ -273,11 +296,31 @@ func (s *HTTPRouter) Start() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	log.Errorf("%s", server.ListenAndServe())
+	// make a separate listener so we can kill it with Stop()
+	s.listener, err = net.Listen("tcp", listenAddr)
+	if err != nil {
+		log.Errorf("%s", err)
+		s.Unlock()
+		return
+	}
+
+	s.Unlock()
+	if ready != nil {
+		close(ready)
+	}
+
+	// This will log a closed connection error every time we Stop
+	// but that's mostly a testing issue.
+	log.Errorf("%s", server.Serve(s.listener))
+}
+
+func (s *HTTPRouter) Stop() {
+	s.listener.Close()
 }
 
 func startHTTPServer() {
+	//FIXME: this global wg?
 	defer wg.Done()
 	httpRouter = NewHTTPRouter()
-	httpRouter.Start()
+	httpRouter.Start(nil)
 }
