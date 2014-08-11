@@ -12,14 +12,14 @@ import (
 )
 
 type ServiceRegistration struct {
-	Name          string    `json:"NAME",omitempty`
-	ExternalIP    string    `json:"EXTERNAL_IP",omitempty`
-	ExternalPort  string    `json:"EXTERNAL_PORT",omitempty`
-	InternalIP    string    `json:"INTERNAL_IP",omitempty`
-	InternalPort  string    `json:"INTERNAL_PORT",omitempty`
+	Name          string    `json:"NAME,omitempty"`
+	ExternalIP    string    `json:"EXTERNAL_IP,omitempty"`
+	ExternalPort  string    `json:"EXTERNAL_PORT,omitempty"`
+	InternalIP    string    `json:"INTERNAL_IP,omitempty"`
+	InternalPort  string    `json:"INTERNAL_PORT,omitempty"`
 	ContainerID   string    `json:"CONTAINER_ID"`
 	ContainerName string    `json:"CONTAINER_NAME"`
-	Image         string    `json:"IMAGE",omitempty`
+	Image         string    `json:"IMAGE,omitempty"`
 	StartedAt     time.Time `json:"STARTED_AT"`
 	Expires       time.Time `json:"-"`
 	Path          string    `json:"-"`
