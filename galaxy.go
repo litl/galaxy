@@ -585,7 +585,8 @@ func poolCreate(c *cli.Context) {
 	}
 
 	// now create the cloudformation stack
-	// is this fails, the stack can be created separately with stack:create_pool
+	// is this fails, the stack can be created separately with
+	// stack:create_pool
 	stackCreatePool(c)
 }
 
@@ -626,6 +627,9 @@ func poolDelete(c *cli.Context) {
 
 	if created {
 		log.Printf("Pool %s delete\n", utils.GalaxyPool(c))
+		// now delete the Cloudformation Stack
+		stackDeletePool(c)
+
 	} else {
 		log.Printf("Pool %s has apps assigned. Unassign them first.\n", utils.GalaxyPool(c))
 	}
@@ -898,6 +902,12 @@ func main() {
 			Action:      stackUpdatePool,
 			Description: "stack:pool_update",
 			Flags:       stackFlags,
+		},
+		{
+			Name:        "stack:events",
+			Usage:       "list recent events for a stack",
+			Action:      stackListEvents,
+			Description: "stack:events",
 		},
 		{
 			Name:        "stack",

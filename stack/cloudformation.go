@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/crowdmob/goamz/aws"
@@ -18,6 +19,25 @@ if someone wants to write out the entire API.
 
 TODO: this is going to need some DRY love
 */
+
+var ErrTimeout = fmt.Errorf("timeout")
+
+// thie error type also provides a list of failures from the stack's events
+type FailuresError struct {
+	messages []string
+}
+
+func (f *FailuresError) List() []string {
+	return f.messages
+}
+
+// The basic Error returns the oldest failure in the list
+func (f *FailuresError) Error() string {
+	if len(f.messages) == 0 {
+		return ""
+	}
+	return f.messages[len(f.messages)-1]
+}
 
 type GetTemplateResponse struct {
 	TemplateBody []byte `xml:"GetTemplateResult>TemplateBody"`
@@ -79,6 +99,38 @@ type serverCert struct {
 type ListServerCertsResponse struct {
 	RequestId string       `xml:"ResponseMetadata>RequestId"`
 	Certs     []serverCert `xml:"ListServerCertificatesResult>ServerCertificateMetadataList>member"`
+}
+
+type stackEvent struct {
+	EventId              string
+	LogicalResourceId    string
+	PhysicalResourceId   string
+	ResourceProperties   string
+	ResourceStatus       string
+	ResourceStatusReason string
+	ResourceType         string
+	StackId              string
+	StackName            string
+	Timestamp            time.Time
+}
+
+type DescribeStackEventsResult struct {
+	Events []stackEvent `xml:"DescribeStackEventsResult>StackEvents>member"`
+}
+
+type stackSummary struct {
+	CreationTime        time.Time
+	DeletionTime        time.Time
+	LastUpdatedTime     time.Time
+	StackId             string
+	StackName           string
+	StackStatus         string
+	StackStatusReason   string
+	TemplateDescription string
+}
+
+type ListStacksResponse struct {
+	Stacks []stackSummary `xml:"ListStacksResult>StackSummaries>member"`
 }
 
 // Resources from the base stack that may need to be referenced from other
@@ -178,7 +230,7 @@ func ListStackResources(stackName string) (ListStackResourcesResponse, error) {
 }
 
 // Describe all running stacks
-func DescribeStacks() (DescribeStacksResponse, error) {
+func DescribeStacks(name string) (DescribeStacksResponse, error) {
 	descResp := DescribeStacksResponse{}
 
 	svc, err := getService("cf")
@@ -188,6 +240,10 @@ func DescribeStacks() (DescribeStacksResponse, error) {
 
 	params := map[string]string{
 		"Action": "DescribeStacks",
+	}
+
+	if name != "" {
+		params["StackName"] = name
 	}
 
 	resp, err := svc.Query("POST", "/", params)
@@ -208,9 +264,44 @@ func DescribeStacks() (DescribeStacksResponse, error) {
 	return descResp, nil
 }
 
-// return a list of all stack names
-func List() ([]string, error) {
-	resp, err := DescribeStacks()
+// Describe a Stack's Events
+func DescribeStackEvents(name string) (DescribeStackEventsResult, error) {
+	descResp := DescribeStackEventsResult{}
+
+	svc, err := getService("cf")
+	if err != nil {
+		return descResp, err
+	}
+
+	params := map[string]string{
+		"Action": "DescribeStackEvents",
+	}
+
+	if name != "" {
+		params["StackName"] = name
+	}
+
+	resp, err := svc.Query("POST", "/", params)
+	if err != nil {
+		return descResp, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err := svc.BuildError(resp)
+		return descResp, err
+	}
+	defer resp.Body.Close()
+
+	err = xml.NewDecoder(resp.Body).Decode(&descResp)
+	if err != nil {
+		return descResp, err
+	}
+	return descResp, nil
+}
+
+// return a list of all actives stacks
+func ListActive() ([]string, error) {
+	resp, err := DescribeStacks("")
 	if err != nil {
 		return nil, err
 	}
@@ -223,8 +314,41 @@ func List() ([]string, error) {
 	return stacks, nil
 }
 
+// List all stacks
+// This lists all stacks including inactive and deleted.
+func List() (ListStacksResponse, error) {
+	listResp := ListStacksResponse{}
+
+	svc, err := getService("cf")
+	if err != nil {
+		return listResp, err
+	}
+
+	params := map[string]string{
+		"Action": "ListStacks",
+	}
+
+	resp, err := svc.Query("POST", "/", params)
+	if err != nil {
+		return listResp, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err := svc.BuildError(resp)
+		return listResp, err
+	}
+	defer resp.Body.Close()
+
+	err = xml.NewDecoder(resp.Body).Decode(&listResp)
+	if err != nil {
+		return listResp, err
+	}
+	return listResp, nil
+
+}
+
 func Exists(name string) (bool, error) {
-	resp, err := DescribeStacks()
+	resp, err := DescribeStacks(name)
 	if err != nil {
 		return false, err
 	}
@@ -238,19 +362,26 @@ func Exists(name string) (bool, error) {
 	return false, nil
 }
 
-// Wait for a stack creation to complete.
-// Poll every 5s while the stack is in the CREATE_IN_PROGRESS state, and
-// return nil when it enters CREATE_COMPLETE, or and error if it enters
-// another state.
-// Return and error of "timeout" if the timeout is reached.
+// Wait for a stack event to complete.
+// Poll every 5s while the stack is in the CREATE_IN_PROGRESS or
+// UPDATE_IN_PROGRESS state, and succeed when it enters a successful _COMPLETE
+// state.
+// Return and error of ErrTimeout if the timeout is reached.
 func Wait(name string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
+	start := time.Now()
+	deadline := start.Add(timeout)
 	for {
-		resp, err := DescribeStacks()
+		resp, err := DescribeStacks(name)
 		if err != nil {
+			if err, ok := err.(*aws.Error); ok {
+				// the call was successful, but AWS returned an error
+				// no need to wait.
+				return err
+			}
+
 			// I guess we should sleep and retry here, in case of intermittent
 			// errors
-			log.Println("DescribeStacks:", err)
+			log.Errorln("DescribeStacks:", err)
 			goto SLEEP
 		}
 
@@ -262,19 +393,78 @@ func Wait(name string, timeout time.Duration) error {
 				case "CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS":
 					return nil
 				default:
-					return fmt.Errorf("%s:%s", stack.Status, stack.StatusReason)
+					// see if we can caught the actual FAILURE
+					// start looking slightly before we started the watch.
+					// We're more likely to catch a quick event than we are to
+					// pickup something from a previous transaction.
+					failures, _ := ListFailures(name, start.Add(-2*time.Second))
+					if len(failures) > 0 {
+						return &FailuresError{
+							messages: failures,
+						}
+					}
+
+					// we didn't catch the events for some reason, return our current status
+					return fmt.Errorf("%s: %s", stack.Status, stack.StatusReason)
 				}
 			}
 		}
 
 	SLEEP:
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout")
+			return ErrTimeout
 		}
 
 		time.Sleep(5 * time.Second)
 	}
+}
 
+// List failures on a stack as "STATUS:REASON"
+func ListFailures(id string, since time.Time) ([]string, error) {
+	resp, err := DescribeStackEvents(id)
+	if err != nil {
+		return nil, err
+	}
+
+	fails := []string{}
+
+	for _, event := range resp.Events {
+		status, reason := event.ResourceStatus, event.ResourceStatusReason
+		if event.Timestamp.After(since) && strings.HasSuffix(status, "_FAILED") {
+			fails = append(fails, fmt.Sprintf("%s: %s", status, reason))
+		}
+	}
+
+	return fails, nil
+}
+
+// Like the Wait function, but instead if returning as soon as there is an
+// error, always wait for a final status.
+// ** This assumes all _COMPLETE statuses are final, and all final statuses end
+//    in _COMPLETE.
+func WaitForComplete(id string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		resp, err := DescribeStackEvents(id)
+		if err != nil {
+			return err
+		} else if len(resp.Events) == 0 {
+			return fmt.Errorf("no events for stack %s", id)
+		}
+
+		//TODO: are these always in order?!
+		latest := resp.Events[0]
+
+		if strings.HasSuffix(latest.ResourceStatus, "_COMPLETE") {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return ErrTimeout
+		}
+
+		time.Sleep(5 * time.Second)
+	}
 }
 
 // Get a list of SSL certificates from the IAM service.
@@ -319,11 +509,6 @@ func ListServerCertificates() (ListServerCertsResponse, error) {
 // pool template.
 func GetSharedResources(stackName string) (SharedResources, error) {
 	shared := SharedResources{}
-	res, err := ListStackResources(stackName)
-	if err != nil {
-		return shared, err
-	}
-
 	shared.SecurityGroups = make(map[string]string)
 	shared.Subnets = make(map[string]string)
 	shared.Roles = make(map[string]string)
@@ -332,7 +517,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 
 	// we need to use DescribeStacks to get any parameters that were used in
 	// the base stack, such as KeyName
-	descResp, err := DescribeStacks()
+	descResp, err := DescribeStacks(stackName)
 	if err != nil {
 		return shared, err
 	}
@@ -344,6 +529,11 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 				shared.Parameters[param.Key] = param.Value
 			}
 		}
+	}
+
+	res, err := ListStackResources(stackName)
+	if err != nil {
+		return shared, err
 	}
 
 	for _, resource := range res.Resources {
@@ -374,7 +564,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 func GetTemplate(name string) ([]byte, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	params := map[string]string{
@@ -402,10 +592,10 @@ func GetTemplate(name string) ([]byte, error) {
 // Create a CloudFormation stack
 // Request parameters which are taken from the options:
 //   StackPolicyDuringUpdateBody
-func Create(name string, stackTmpl []byte, options map[string]string) error {
+func Create(name string, stackTmpl []byte, options map[string]string) (*CreateStackResponse, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	params := map[string]string{
@@ -427,34 +617,31 @@ func Create(name string, stackTmpl []byte, options map[string]string) error {
 
 	resp, err := svc.Query("POST", "/", params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		err := svc.BuildError(resp)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	createResp := CreateStackResponse{}
-	err = xml.NewDecoder(resp.Body).Decode(&createResp)
+	createResp := &CreateStackResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(createResp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("CreateStack started")
-	log.Println("RequestId:", createResp.RequestId)
-	log.Println("StackId:", createResp.StackId)
-	return nil
+	return createResp, nil
 }
 
 // Update an existing CloudFormation stack.
 // Request parameters which are taken from the options:
 //   StackPolicyDuringUpdateBody
-func Update(name string, stackTmpl []byte, options map[string]string) error {
+func Update(name string, stackTmpl []byte, options map[string]string) (*UpdateStackResponse, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	params := map[string]string{
@@ -476,33 +663,30 @@ func Update(name string, stackTmpl []byte, options map[string]string) error {
 
 	resp, err := svc.Query("POST", "/", params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		err := svc.BuildError(resp)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	updateResp := UpdateStackResponse{}
-	err = xml.NewDecoder(resp.Body).Decode(&updateResp)
+	updateResp := &UpdateStackResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(updateResp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("UpdateStack started")
-	log.Println("RequestId:", updateResp.RequestId)
-	log.Println("StackId:", updateResp.StackId)
-	return nil
+	return updateResp, nil
 
 }
 
 // Delete and entire stack by name
-func Delete(name string) error {
+func Delete(name string) (*DeleteStackResponse, error) {
 	svc, err := getService("cf")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	params := map[string]string{
@@ -512,24 +696,22 @@ func Delete(name string) error {
 
 	resp, err := svc.Query("POST", "/", params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		err := svc.BuildError(resp)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	deleteResp := DeleteStackResponse{}
-	err = xml.NewDecoder(resp.Body).Decode(&deleteResp)
+	deleteResp := &DeleteStackResponse{}
+	err = xml.NewDecoder(resp.Body).Decode(deleteResp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("DeleteStack started")
-	log.Println("RequestId:", deleteResp.RequestId)
-	return nil
+	return deleteResp, nil
 }
 
 // The default template used to create our base stack.

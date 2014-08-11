@@ -27,7 +27,7 @@ func getBase(c *cli.Context) string {
 		return base
 	}
 
-	stacks, err := stack.List()
+	stacks, err := stack.ListActive()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func jsonFromArg(arg string) ([]byte, error) {
 
 	arg = strings.TrimSpace(arg)
 
-	// assume that an opening brack mean the json is given directly
+	// assume that an opening bracket mean the json is given directly
 	if strings.HasPrefix(arg, "{") {
 		jsonArg = []byte(arg)
 	} else if arg == "STDIN" {
@@ -175,10 +175,11 @@ func stackInit(c *cli.Context) {
 
 	opts := getInitOpts(c)
 
-	err = stack.Create(stackName, stackTmpl, opts)
+	_, err = stack.Create(stackName, stackTmpl, opts)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Initializing stack", stackName)
 }
 
 // update the base stack
@@ -246,10 +247,11 @@ func stackUpdate(c *cli.Context) {
 	ok := promptValue(fmt.Sprintf("\nUpdate the [%s] stack with:\n%s\nAccept?", stackName, string(p)), "n")
 	switch strings.ToLower(ok) {
 	case "y", "yes":
-		err = stack.Update(stackName, stackTmpl, params)
+		_, err = stack.Update(stackName, stackTmpl, params)
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.Println("Updating stack:", stackName)
 	default:
 		log.Fatal("aborted")
 	}
@@ -326,6 +328,7 @@ func stackCreatePool(c *cli.Context) {
 	pool := stack.NewPool()
 
 	// get the resources we need from the base stack
+	// TODO: this may search for the base stack a second time
 	resources := sharedResources(c)
 
 	desiredCap := c.Int("desired-size")
@@ -443,20 +446,57 @@ func stackCreatePool(c *cli.Context) {
 		return
 	}
 
-	if err := stack.Create(stackName, poolTmpl, nil); err != nil {
+	_, err = stack.Create(stackName, poolTmpl, nil)
+	if err != nil {
 		log.Fatal(err)
 	}
+
+	log.Println("Creating stack:", stackName)
 
 	// do we want to wait on this by default?
 	if err := stack.Wait(stackName, 5*time.Minute); err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		log.Error("CreateStack Failed, attempting to delete")
+
+		waitAndDelete(stackName)
+		return
 	}
+
 	log.Println("CreateStack complete")
 }
 
-// TODO: Add an option to allow or prevent a rolling update of nodes.
-//       This will sometimes require 2 stack updates, one to *only* change the
-//       ASG UpdatePolicy, and one to push the new Template.
+// wait until a stack is in a final state, then delete it
+func waitAndDelete(name string) {
+	log.Println("Attempting to delete stack:", name)
+	// we need to get the StackID in order to lookup DELETE events
+	desc, err := stack.DescribeStacks(name)
+	if err != nil {
+		log.Fatal(err)
+	} else if len(desc.Stacks) == 0 {
+		log.Fatal("could not describe stack:", name)
+	}
+
+	stackId := desc.Stacks[0].Id
+
+	err = stack.WaitForComplete(stackId, 5*time.Minute)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = stack.Delete(name)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// wait
+	err = stack.WaitForComplete(stackId, 5*time.Minute)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Deleted stack:", name)
+}
+
+// Update an existing Pool Stack
 func stackUpdatePool(c *cli.Context) {
 	poolName := utils.GalaxyPool(c)
 	if poolName == "" {
@@ -508,6 +548,7 @@ func stackUpdatePool(c *cli.Context) {
 
 	if c.Bool("auto-update") {
 		// TODO: configure this somehow
+		// note that the max pause is only PT5M30S
 		asg.SetASGUpdatePolicy(1, 1, 5*time.Minute)
 	}
 
@@ -562,7 +603,8 @@ func stackUpdatePool(c *cli.Context) {
 		return
 	}
 
-	if err := stack.Update(stackName, poolTmpl, options); err != nil {
+	log.Println("Updating stack:", stackName)
+	if _, err := stack.Update(stackName, poolTmpl, options); err != nil {
 		log.Fatal(err)
 	}
 
@@ -572,6 +614,27 @@ func stackUpdatePool(c *cli.Context) {
 	}
 
 	log.Println("UpdateStack complete")
+}
+
+func stackDeletePool(c *cli.Context) {
+	poolName := utils.GalaxyPool(c)
+	if poolName == "" {
+		log.Fatal("pool name required")
+	}
+
+	baseStack := getBase(c)
+
+	poolEnv := utils.GalaxyEnv(c)
+	if poolEnv == "" {
+		log.Fatal("env required")
+	}
+
+	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
+
+	_, err := stack.Delete(stackName)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // delete a pool
@@ -593,18 +656,63 @@ func stackDelete(c *cli.Context) {
 		log.Fatal("aborted")
 	}
 
-	err := stack.Delete(stackName)
+	_, err := stack.Delete(stackName)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("Deleted stack:", stackName)
 }
 
 func stackList(c *cli.Context) {
-	stacks, err := stack.List()
+	descResp, err := stack.DescribeStacks("")
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	stacks := []string{"stack | status | "}
+
+	for _, stack := range descResp.Stacks {
+		s := fmt.Sprintf("%s | %s | %s", stack.Name, stack.Status, stack.StatusReason)
+		stacks = append(stacks, s)
+	}
+
 	output, _ := columnize.SimpleFormat(stacks)
+	log.Println(output)
+}
+
+// List recent events for a stack
+// Shows up to 20 events, or 24 hours of events.
+func stackListEvents(c *cli.Context) {
+	stackName := c.Args().First()
+	if stackName == "" {
+		log.Fatal("stack name required")
+	}
+
+	resp, err := stack.DescribeStackEvents(stackName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(resp.Events) == 0 {
+		log.Println("no events for", stackName)
+		return
+	}
+
+	firstTS := resp.Events[0].Timestamp.Add(-24 * time.Hour)
+	lines := []string{"timestamp | logicalID | status | reason"}
+	format := "%s | %s | %s | %s"
+
+	for i, e := range resp.Events {
+		if i > 20 || e.Timestamp.Before(firstTS) {
+			break
+		}
+
+		displayTime := e.Timestamp.Format(time.Stamp)
+
+		line := fmt.Sprintf(format, displayTime, e.LogicalResourceId, e.ResourceStatus, e.ResourceStatusReason)
+		lines = append(lines, line)
+	}
+
+	output, _ := columnize.SimpleFormat(lines)
 	log.Println(output)
 }
