@@ -61,7 +61,7 @@ func (s *HTTPBackendSuite) SetUpTest(c *C) {
 
 func (s *HTTPBackendSuite) TearDownTest(c *C) {
 	for _, s := range s.servers {
-		s.Stop()
+		s.Close()
 	}
 	s.servers = nil
 	httpRouter.Stop()
