@@ -1,8 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"time"
 )
@@ -11,12 +15,13 @@ type testServer struct {
 	addr     string
 	sig      string
 	listener net.Listener
-	wg       sync.WaitGroup
+	wg       *sync.WaitGroup
 }
 
 // Start a tcp server which responds with it's addr after every read.
 func NewTestServer(addr string, c Tester) (*testServer, error) {
 	s := &testServer{}
+	s.wg = new(sync.WaitGroup)
 
 	var err error
 
@@ -77,4 +82,38 @@ func (s *testServer) Stop() {
 	// We may be imediately creating another identical server.
 	// Wait until all goroutines return to ensure we can bind again.
 	s.wg.Wait()
+}
+
+// Backend server for testing HTTP proxies
+type testHTTPServer struct {
+	*httptest.Server
+	addr string
+	name string
+}
+
+// make the handler a method of the server so we can get the server's address
+func (s *testHTTPServer) addrHandler(w http.ResponseWriter, r *http.Request) {
+	io.WriteString(w, s.addr)
+}
+
+// Start a tcp server which responds with it's addr after every read.
+func NewHTTPTestServer(addr string, c Tester) (*testHTTPServer, error) {
+	s := &testHTTPServer{
+		Server: httptest.NewUnstartedServer(nil),
+	}
+
+	s.addr = s.Listener.Addr().String()
+	if parts := strings.Split(s.addr, ":"); len(parts) == 2 {
+		s.name = fmt.Sprintf("http-%s.server.test", parts[1])
+	} else {
+		c.Fatal("error naming http server")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/addr", s.addrHandler)
+
+	s.Config.Handler = mux
+	s.Start()
+
+	return s, nil
 }

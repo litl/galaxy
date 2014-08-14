@@ -31,6 +31,7 @@ type Tester interface {
 	Fatalf(format string, args ...interface{})
 	Log(args ...interface{})
 	Logf(format string, args ...interface{})
+	Assert(interface{}, Checker, ...interface{})
 }
 
 func Test(t *testing.T) { TestingT(t) }
@@ -55,8 +56,10 @@ func mySetup(s *BasicSuite, t Tester) {
 	}
 
 	svcCfg := client.ServiceConfig{
-		Name: "testService",
-		Addr: "127.0.0.1:2000",
+		Name:          "testService",
+		Addr:          "127.0.0.1:2000",
+		ClientTimeout: 1000,
+		ServerTimeout: 1000,
 	}
 
 	if err := Registry.AddService(svcCfg); err != nil {
