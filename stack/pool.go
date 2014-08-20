@@ -162,11 +162,11 @@ type asg struct {
 }
 
 func (a *asg) AddLoadBalancer(name string) {
-	a.Properties.LoadBalancerNames = append(a.Properties.LoadBalancerNames, intrinsic{"Ref": name})
+	a.Properties.LoadBalancerNames = append(a.Properties.LoadBalancerNames, ref{name})
 }
 
 func (a *asg) SetLaunchConfiguration(name string) {
-	a.Properties.LaunchConfigurationName = intrinsic{"Ref": name}
+	a.Properties.LaunchConfigurationName = ref{name}
 }
 
 func (a *asg) AddTag(key, value string, propagateAtLauch bool) {
@@ -180,15 +180,15 @@ func (a *asg) AddTag(key, value string, propagateAtLauch bool) {
 }
 
 type asgProp struct {
-	AvailabilityZones       intrinsic
+	AvailabilityZones       fnGetAZs
 	Cooldown                int `json:",string"`
 	DesiredCapacity         int `json:",string"`
 	HealthCheckGracePeriod  int `json:",string"`
 	HealthCheckType         string
-	LaunchConfigurationName intrinsic
-	LoadBalancerNames       []intrinsic `json:",omitempty"`
-	MaxSize                 int         `json:",string"`
-	MinSize                 int         `json:",string"`
+	LaunchConfigurationName ref
+	LoadBalancerNames       []ref `json:",omitempty"`
+	MaxSize                 int   `json:",string"`
+	MinSize                 int   `json:",string"`
 	Tags                    []tag
 	VPCZoneIdentifier       []string
 }
@@ -325,13 +325,14 @@ type tag struct {
 	PropagateAtLaunch *bool `json:",omitempty"`
 }
 
-// use this to indicate we're specifically using an intrinsic function over an
-// actual map of values
-type intrinsic map[string]string
-
 // Ref intrinsic
 type ref struct {
 	Ref string
+}
+
+// getAZs intrinsic
+type fnGetAZs struct {
+	FnGetAZs string `json:"Fn::GetAZs"`
 }
 
 type scalingPolicy struct {
