@@ -308,6 +308,26 @@ func sharedResources(c *cli.Context) stack.SharedResources {
 	return resources
 }
 
+// seto autoscaling options for a pool
+func setCPUAutoScale(c *cli.Context, pool *stack.Pool) {
+	scaleAdj := c.Int("scale-adj")
+	scaleUpDel := c.Int("scale-up-delay")
+	scaleDownDel := c.Int("scale-down-delay")
+	scaleUpCPU := c.Int("scale-up-cpu")
+	scaleDownCPU := c.Int("scale-down-cpu")
+
+	asgName := pool.ASG().Name
+	if asgName == "" {
+		log.Fatal("Error: missing ASG Name")
+	}
+
+	// Any options set to 0 will use template defaults.
+	// Don't autoscale if no options are set.
+	if scaleAdj != 0 || scaleUpDel != 0 || scaleDownDel != 0 || scaleUpCPU != 0 || scaleDownCPU != 0 {
+		pool.SetCPUAutoScaling(asgName, scaleAdj, scaleUpCPU, scaleUpDel, scaleDownCPU, scaleDownDel)
+	}
+}
+
 func stackCreatePool(c *cli.Context) {
 	var err error
 
@@ -435,6 +455,9 @@ func stackCreatePool(c *cli.Context) {
 
 		pool.Resources[elbName] = elb
 	}
+
+	// add autoscaling if it's required
+	setCPUAutoScale(c, pool)
 
 	poolTmpl, err := json.MarshalIndent(pool, "", "    ")
 	if err != nil {
@@ -593,6 +616,9 @@ func stackUpdatePool(c *cli.Context) {
 		lc.Properties.InstanceType = resources.Parameters["PoolInstanceType"]
 	}
 
+	// add autoscaling if it's required
+	setCPUAutoScale(c, pool)
+
 	poolTmpl, err := json.MarshalIndent(pool, "", "    ")
 	if err != nil {
 		log.Fatal(err)
@@ -631,10 +657,7 @@ func stackDeletePool(c *cli.Context) {
 
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
 
-	_, err := stack.Delete(stackName)
-	if err != nil {
-		log.Fatal(err)
-	}
+	waitAndDelete(stackName)
 }
 
 // delete a pool
@@ -652,15 +675,7 @@ func stackDelete(c *cli.Context) {
 		}
 	}
 
-	if !ok {
-		log.Fatal("aborted")
-	}
-
-	_, err := stack.Delete(stackName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Deleted stack:", stackName)
+	waitAndDelete(stackName)
 }
 
 func stackList(c *cli.Context) {

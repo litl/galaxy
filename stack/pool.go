@@ -2,6 +2,7 @@ package stack
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -57,8 +58,9 @@ func NewPool() *Pool {
 }
 
 func (p *Pool) ASG() *asg {
-	for _, i := range p.Resources {
+	for name, i := range p.Resources {
 		if r, ok := i.(*asg); ok {
+			r.Name = name
 			return r
 		}
 	}
@@ -66,8 +68,9 @@ func (p *Pool) ASG() *asg {
 }
 
 func (p *Pool) ELB() *elb {
-	for _, i := range p.Resources {
+	for name, i := range p.Resources {
 		if r, ok := i.(*elb); ok {
+			r.Name = name
 			return r
 		}
 	}
@@ -75,8 +78,9 @@ func (p *Pool) ELB() *elb {
 }
 
 func (p *Pool) LC() *lc {
-	for _, i := range p.Resources {
+	for name, i := range p.Resources {
 		if r, ok := i.(*lc); ok {
+			r.Name = name
 			return r
 		}
 	}
@@ -151,6 +155,7 @@ func (p *Pool) UnmarshalJSON(b []byte) error {
 }
 
 type asg struct {
+	Name         string `json:"-"`
 	Type         string
 	Properties   asgProp
 	UpdatePolicy *asgUpdatePolicy `json:",omitempty"`
@@ -211,6 +216,7 @@ func (a *asg) SetASGUpdatePolicy(min, batch int, pause time.Duration) {
 }
 
 type elb struct {
+	Name       string `json:"-"`
 	Type       string
 	Properties elbProp
 }
@@ -267,6 +273,7 @@ type listener struct {
 }
 
 type lc struct {
+	Name       string `json:"-"`
 	Type       string
 	Properties lcProp
 }
@@ -321,3 +328,111 @@ type tag struct {
 // use this to indicate we're specifically using an intrinsic function over an
 // actual map of values
 type intrinsic map[string]string
+
+// Ref intrinsic
+type ref struct {
+	Ref string
+}
+
+type scalingPolicy struct {
+	Name       string `json:"-"`
+	Type       string
+	Properties spProp
+}
+
+type spProp struct {
+	AdjustmentType       string
+	AutoScalingGroupName *ref
+	Cooldown             int `json:",string"`
+	ScalingAdjustment    int `json:",string"`
+}
+
+type cloudWatchAlarm struct {
+	Name       string `json:"-"`
+	Type       string
+	Properties cwaProp
+}
+
+type cwaProp struct {
+	ActionsEnabled          bool `json:",string"`
+	AlarmActions            []ref
+	AlarmDescription        string `json:",omitempty"`
+	AlarmName               string `json:",omitempty"`
+	ComparisonOperator      string
+	Dimensions              []metricDim
+	EvaluationPeriods       int      `json:",string"`
+	InsufficientDataActions []string `json:",omitempty"`
+	MetricName              string
+	Namespace               string
+	OKActions               []string `json:",omitempty"`
+	Period                  int      `json:",string"`
+	Statistic               string
+	Threshold               string
+	Unit                    string `json:",omitempty"`
+}
+
+type metricDim struct {
+	Name  string
+	Value ref
+}
+
+// Add the appropriate Alarms and ScalingPolicies to autoscale a pool based on avg CPU usage
+func (p *Pool) SetCPUAutoScaling(asgName string, adj, scaleUpCPU, scaleUpDelay, scaleDownCPU, scaleDownDelay int) {
+	scaling := struct {
+		ScaleUp        *scalingPolicy
+		ScaleDown      *scalingPolicy
+		ScaleUpAlarm   *cloudWatchAlarm
+		ScaleDownAlarm *cloudWatchAlarm
+	}{}
+
+	// check for existing scaling resources
+	for name, res := range p.Resources {
+		switch name {
+		case "ScaleUp":
+			scaling.ScaleUp = res.(*scalingPolicy)
+		case "ScaleUpAlarm":
+			scaling.ScaleUpAlarm = res.(*cloudWatchAlarm)
+		case "ScaleDown":
+			scaling.ScaleDown = res.(*scalingPolicy)
+		case "ScaleDownAlarm":
+			scaling.ScaleDownAlarm = res.(*cloudWatchAlarm)
+		}
+	}
+
+	// load the template defaults if we don't have any defined
+	if scaling.ScaleUp == nil || scaling.ScaleDown == nil {
+		if err := json.Unmarshal(scalingTemplate, &scaling); err != nil {
+			panic("corrupt scaling template" + err.Error())
+		}
+	}
+
+	scaling.ScaleUp.Properties.AutoScalingGroupName.Ref = asgName
+	scaling.ScaleDown.Properties.AutoScalingGroupName.Ref = asgName
+
+	if adj > 0 {
+		scaling.ScaleUp.Properties.ScalingAdjustment = adj
+		scaling.ScaleDown.Properties.ScalingAdjustment = -adj
+	}
+
+	scaling.ScaleUpAlarm.Properties.Dimensions[0].Value.Ref = asgName
+	scaling.ScaleDownAlarm.Properties.Dimensions[0].Value.Ref = asgName
+
+	if scaleUpDelay > 0 {
+		scaling.ScaleUpAlarm.Properties.EvaluationPeriods = scaleUpDelay
+	}
+	if scaleDownDelay > 0 {
+		scaling.ScaleDownAlarm.Properties.EvaluationPeriods = scaleDownDelay
+	}
+
+	if scaleUpCPU > 0 {
+		scaling.ScaleUpAlarm.Properties.Threshold = fmt.Sprintf("%d.0", scaleUpCPU)
+	}
+	if scaleDownCPU > 0 {
+		scaling.ScaleDownAlarm.Properties.Threshold = fmt.Sprintf("%d.0", scaleDownCPU)
+	}
+
+	p.Resources["ScaleUp"] = scaling.ScaleUp
+	p.Resources["ScaleDown"] = scaling.ScaleDown
+	p.Resources["ScaleUpAlarm"] = scaling.ScaleUpAlarm
+	p.Resources["ScaleDownAlarm"] = scaling.ScaleDownAlarm
+}
