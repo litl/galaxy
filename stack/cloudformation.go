@@ -445,17 +445,16 @@ func ListFailures(id string, since time.Time) ([]string, error) {
 func WaitForComplete(id string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
-		resp, err := DescribeStackEvents(id)
+		resp, err := DescribeStacks(id)
 		if err != nil {
 			return err
-		} else if len(resp.Events) == 0 {
-			return fmt.Errorf("no events for stack %s", id)
+		} else if len(resp.Stacks) != 1 {
+			return fmt.Errorf("could not find stack: %s", id)
 		}
 
-		//TODO: are these always in order?!
-		latest := resp.Events[0]
+		stack := resp.Stacks[0]
 
-		if strings.HasSuffix(latest.ResourceStatus, "_COMPLETE") {
+		if strings.HasSuffix(stack.Status, "_COMPLETE") {
 			return nil
 		}
 

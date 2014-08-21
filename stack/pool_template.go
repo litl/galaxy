@@ -69,3 +69,81 @@ var poolTmpl = []byte(`
 		}
 	}
 }`)
+
+var scalingTemplate = []byte(`
+{
+    "ScaleDown": {
+        "Properties": {
+            "AdjustmentType": "ChangeInCapacity",
+            "AutoScalingGroupName": {
+                "Ref": "ASG"
+            },
+            "Cooldown": "300",
+            "ScalingAdjustment": "-1"
+        },
+        "Type": "AWS::AutoScaling::ScalingPolicy"
+    },
+    "ScaleDownAlarm": {
+        "Properties": {
+            "ActionsEnabled": "true",
+            "AlarmActions": [
+                {
+                    "Ref": "ScaleDown"
+                }
+            ],
+            "ComparisonOperator": "LessThanThreshold",
+            "Dimensions": [
+                {
+                    "Name": "AutoScalingGroupName",
+                    "Value": {
+                        "Ref": "ASG"
+                    }
+                }
+            ],
+            "EvaluationPeriods": "5",
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/EC2",
+            "Period": "60",
+            "Statistic": "Average",
+            "Threshold": "30.0"
+        },
+        "Type": "AWS::CloudWatch::Alarm"
+    },
+    "ScaleUp": {
+        "Properties": {
+            "AdjustmentType": "ChangeInCapacity",
+            "AutoScalingGroupName": {
+                "Ref": "ASG"
+            },
+            "Cooldown": "300",
+            "ScalingAdjustment": "1"
+        },
+        "Type": "AWS::AutoScaling::ScalingPolicy"
+    },
+    "ScaleUpAlarm": {
+        "Properties": {
+            "ActionsEnabled": "true",
+            "AlarmActions": [
+                {
+                    "Ref": "ScaleUp"
+                }
+            ],
+            "ComparisonOperator": "GreaterThanThreshold",
+            "Dimensions": [
+                {
+                    "Name": "AutoScalingGroupName",
+                    "Value": {
+                        "Ref": "ASG"
+                    }
+                }
+            ],
+            "EvaluationPeriods": "5",
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/EC2",
+            "Period": "60",
+            "Statistic": "Average",
+            "Threshold": "80.0"
+        },
+        "Type": "AWS::CloudWatch::Alarm"
+    }
+}`)

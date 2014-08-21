@@ -713,6 +713,8 @@ func main() {
 	log.DefaultLogger.SetFlags(0)
 
 	// declare one superset of flags for stack operations, so we don't pollute the global flags
+	// TODO: these need to be broken up into proper sets for each command to
+	//       prevent confusing help messages.
 	stackFlags := []cli.Flag{
 		cli.StringFlag{Name: "base", Usage: "base stack name"},
 		cli.StringFlag{Name: "keyname", Usage: "ssh keypair name"},
@@ -728,6 +730,11 @@ func main() {
 		cli.IntFlag{Name: "http-port", Usage: "instance http port"},
 		cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
 		cli.BoolFlag{Name: "auto-update", Usage: "add an ASG UpdatePolicy"},
+		cli.IntFlag{Name: "scale-adj", Usage: "number of instances to add/remove when scaling"},
+		cli.IntFlag{Name: "scale-up-delay", Usage: "minutes to wait for scaling up"},
+		cli.IntFlag{Name: "scale-down-delay", Usage: "minutes to wait for scaling down"},
+		cli.IntFlag{Name: "scale-up-cpu", Usage: "cpu threshold for scaling up"},
+		cli.IntFlag{Name: "scale-down-cpu", Usage: "cpu threshold for scaling down"},
 	}
 
 	app := cli.NewApp()
