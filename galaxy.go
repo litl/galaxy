@@ -764,6 +764,25 @@ func main() {
 			Description: "app",
 		},
 		{
+			Name:        "app:backup",
+			Usage:       "backup app configs to a file or stdout",
+			Action:      appBackup,
+			Description: "app:backup [app[,app2]]",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "file", Usage: "backup filename"},
+			},
+		},
+		{
+			Name:        "app:restore",
+			Usage:       "restore an app's config",
+			Action:      appRestore,
+			Description: "app:restore [app[,app2]]",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "file", Usage: "backup filename"},
+				cli.BoolFlag{Name: "force", Usage: "force overwrite of existing config"},
+			},
+		},
+		{
 			Name:        "app:create",
 			Usage:       "create a new app",
 			Action:      appCreate,
