@@ -50,7 +50,7 @@ func (s *ServiceRegistration) InternalAddr() string {
 }
 
 func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
-	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
+	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.HostIP, serviceConfig.Name)
 
 	serviceRegistration := r.newServiceRegistration(container)
 	serviceRegistration.Name = serviceConfig.Name
@@ -85,7 +85,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 func (r *ServiceRegistry) UnRegisterService(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
 
-	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
+	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.HostIP, serviceConfig.Name)
 
 	conn := r.redisPool.Get()
 	defer conn.Close()
@@ -105,7 +105,7 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 
 func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
 
-	regPath := path.Join(r.Env, r.Pool, "hosts", r.ensureHostname(), serviceConfig.Name)
+	regPath := path.Join(r.Env, r.Pool, "hosts", r.HostIP, serviceConfig.Name)
 
 	existingRegistration := ServiceRegistration{
 		Path: regPath,

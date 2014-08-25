@@ -3,7 +3,6 @@ package registry
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"strings"
 	"time"
@@ -56,18 +55,6 @@ func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *S
 		pollCh:      make(chan bool),
 	}
 
-}
-
-func (r *ServiceRegistry) ensureHostname() string {
-	if r.Hostname == "" {
-		hostname, err := os.Hostname()
-		if err != nil {
-			panic(err)
-		}
-		r.Hostname = hostname
-
-	}
-	return r.Hostname
 }
 
 // Build the Redis Pool
