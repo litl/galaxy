@@ -88,10 +88,8 @@ func (r *ServiceRegistry) restartApp(app string) {
 }
 
 func (r *ServiceRegistry) NotifyRestart(app string) error {
-	conn := r.redisPool.Get()
-	defer conn.Close()
 	// TODO: received count ignored, use it somehow?
-	_, err := redis.Int(conn.Do("PUBLISH", "galaxy", fmt.Sprintf("restart %s", app)))
+	_, err := r.backend.Notify("galaxy", fmt.Sprintf("restart %s", app))
 	if err != nil {
 		return err
 	}

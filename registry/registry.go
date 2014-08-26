@@ -28,6 +28,7 @@ const (
 
 type ServiceRegistry struct {
 	redisPool    redis.Pool
+	backend      RegistryBackend
 	Env          string
 	Pool         string
 	HostIP       string
@@ -57,6 +58,10 @@ func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *S
 
 }
 
+func (r *ServiceRegistry) getConn() redis.Conn {
+	return r.redisPool.Get()
+}
+
 // Build the Redis Pool
 func (r *ServiceRegistry) Connect(redisHost string) {
 	r.redisHost = redisHost
@@ -79,6 +84,9 @@ func (r *ServiceRegistry) Connect(redisHost string) {
 	}
 
 	r.redisPool = redisPool
+	r.backend = &RedisBackend{
+		redisPool: redisPool,
+	}
 }
 
 func (r *ServiceRegistry) reconnectRedis() {
@@ -117,12 +125,9 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 
 // TODO: log or return error?
 func (r *ServiceRegistry) CountInstances(app string) int {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	// TODO: convert to SCAN
 	// TODO: Should this just sum hosts? (this counts all services on all hosts)
-	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, r.Pool, "hosts", "*", app)))
+	matches, err := r.backend.Keys(path.Join(r.Env, r.Pool, "hosts", "*", app))
 	if err != nil {
 		log.Printf("ERROR: could not count instances - %s\n", err)
 	}
@@ -131,11 +136,8 @@ func (r *ServiceRegistry) CountInstances(app string) int {
 }
 
 func (r *ServiceRegistry) EnvExists() (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	// TODO: convert to SCAN
-	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, "*")))
+	matches, err := r.backend.Keys(path.Join(r.Env, "*"))
 	if err != nil {
 		return false, err
 	}
@@ -143,9 +145,6 @@ func (r *ServiceRegistry) EnvExists() (bool, error) {
 }
 
 func (r *ServiceRegistry) PoolExists() (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	pools, err := r.ListPools()
 	if err != nil {
 		return false, err
@@ -155,11 +154,7 @@ func (r *ServiceRegistry) PoolExists() (bool, error) {
 }
 
 func (r *ServiceRegistry) AppExists(app string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
-	// TODO: convert to SCAN
-	matches, err := redis.Values(conn.Do("KEYS", path.Join(r.Env, app, "*")))
+	matches, err := r.backend.Keys(path.Join(r.Env, app, "*"))
 	if err != nil {
 		return false, err
 	}
@@ -167,21 +162,15 @@ func (r *ServiceRegistry) AppExists(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) ListAssignments(pool string) ([]string, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
-	return redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", pool)))
+	return r.backend.Members(path.Join(r.Env, "pools", pool))
 }
 
 func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	if exists, err := r.AppExists(app); !exists || err != nil {
 		return false, err
 	}
 
-	added, err := redis.Int(conn.Do("SADD", path.Join(r.Env, "pools", r.Pool), app))
+	added, err := r.backend.AddMember(path.Join(r.Env, "pools", r.Pool), app)
 	if err != nil {
 		return false, err
 	}
@@ -195,17 +184,14 @@ func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) UnassignApp(app string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	//FIXME: Scan keys to make sure there are no deploye apps before
 	//deleting the pool.
 
 	//FIXME: Shutdown the associated auto-scaling groups tied to the
 	//pool
 
-	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", r.Pool), app))
-	if err != nil {
+	removed, err := r.backend.RemoveMember(path.Join(r.Env, "pools", r.Pool), app)
+	if removed == 0 || err != nil {
 		return false, err
 	}
 
@@ -218,13 +204,10 @@ func (r *ServiceRegistry) UnassignApp(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	//FIXME: Create an associated auto-scaling groups tied to the
 	//pool
 
-	added, err := redis.Int(conn.Do("SADD", path.Join(r.Env, "pools", "*"), name))
+	added, err := r.backend.AddMember(path.Join(r.Env, "pools", "*"), name)
 	if err != nil {
 		return false, err
 	}
@@ -232,9 +215,6 @@ func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
 }
 
 func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	//FIXME: Scan keys to make sure there are no deploye apps before
 	//deleting the pool.
 
@@ -250,7 +230,7 @@ func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
 		return false, nil
 	}
 
-	removed, err := redis.Int(conn.Do("SREM", path.Join(r.Env, "pools", "*"), name))
+	removed, err := r.backend.RemoveMember(path.Join(r.Env, "pools", "*"), name)
 	if err != nil {
 		return false, err
 	}
@@ -258,12 +238,9 @@ func (r *ServiceRegistry) DeletePool(name string) (bool, error) {
 }
 
 func (r *ServiceRegistry) ListPools() (map[string][]string, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	assignments := make(map[string][]string)
 
-	matches, err := redis.Strings(conn.Do("SMEMBERS", path.Join(r.Env, "pools", "*")))
+	matches, err := r.backend.Members(path.Join(r.Env, "pools", "*"))
 	if err != nil {
 		return assignments, err
 	}
@@ -281,9 +258,6 @@ func (r *ServiceRegistry) ListPools() (map[string][]string, error) {
 }
 
 func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	if exists, err := r.AppExists(app); exists || err != nil {
 		return false, err
 	}
@@ -330,7 +304,7 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	}
 
 	// TODO: convert to scan
-	apps, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "*", "environment")))
+	apps, err := r.backend.Keys(path.Join(r.Env, "*", "environment"))
 	if err != nil {
 		return nil, err
 	}
