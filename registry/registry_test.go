@@ -287,8 +287,8 @@ func TestAssignAppAddMemberNotifyRestart(t *testing.T) {
 			return 1, nil
 		},
 		NotifyFunc: func(key, value string) (int, error) {
-			if key != "galaxy" {
-				t.Errorf("AssignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy")
+			if key != "galaxy-dev" {
+				t.Errorf("AssignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy-dev")
 			}
 
 			if value != "restart foo" {
@@ -363,8 +363,8 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 			return 1, nil
 		},
 		NotifyFunc: func(key, value string) (int, error) {
-			if key != "galaxy" {
-				t.Errorf("UnassignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy")
+			if key != "galaxy-dev" {
+				t.Errorf("UnassignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy-dev")
 			}
 
 			if value != "restart foo" {
