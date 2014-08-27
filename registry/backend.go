@@ -13,6 +13,7 @@ type RegistryBackend interface {
 	Ttl(key string) (int, error)
 
 	//Pub/Sub
+	Subscribe(key string) chan string
 	Notify(key, value string) (int, error)
 
 	Connect()

@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/garyburd/redigo/redis"
 )
 
 var restartChan chan *ConfigChange
@@ -106,72 +103,20 @@ func (r *ServiceRegistry) notifyChanged() error {
 }
 
 func (r *ServiceRegistry) subscribeChanges() {
-	var wg sync.WaitGroup
 
-	redisPool := redis.Pool{
-		MaxIdle:     1,
-		IdleTimeout: 0,
-		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", r.redisHost)
-			if err != nil {
-				return nil, err
-			}
-			return c, err
-		},
-		// test every connection for now
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			if err != nil {
-				defer c.Close()
-			}
-			return err
-		},
-	}
-
+	msgs := r.backend.Subscribe("galaxy")
 	for {
 
-		conn := redisPool.Get()
-		defer conn.Close()
-		if conn.Err() != nil {
-			conn.Close()
-			log.Printf("ERROR: %v\n", conn.Err())
-			time.Sleep(5 * time.Second)
-			r.backend.Reconnect()
-			continue
+		msg := <-msgs
+		if msg == "config" {
+			r.CheckForChangesNow()
+		} else if strings.HasPrefix(msg, "restart") {
+			parts := strings.Split(msg, " ")
+			app := parts[1]
+			r.restartApp(app)
+		} else {
+			log.Printf("Ignoring notification: %s\n", msg)
 		}
-
-		wg.Add(2)
-		psc := redis.PubSubConn{Conn: conn}
-		go func() {
-			defer wg.Done()
-			for {
-				switch n := psc.Receive().(type) {
-				case redis.Message:
-					msg := string(n.Data)
-					if msg == "config" {
-						r.CheckForChangesNow()
-					} else if strings.HasPrefix(msg, "restart") {
-						parts := strings.Split(msg, " ")
-						app := parts[1]
-						r.restartApp(app)
-					} else {
-						log.Printf("Ignoring notification: %s %s\n", n.Channel, n.Data)
-					}
-
-				case error:
-					psc.Close()
-					log.Printf("ERROR: %v\n", n)
-					return
-				}
-			}
-		}()
-
-		go func() {
-			defer wg.Done()
-			psc.Subscribe("galaxy")
-			log.Printf("Monitoring for config changes on channel: galaxy\n")
-		}()
-		wg.Wait()
 	}
 }
 

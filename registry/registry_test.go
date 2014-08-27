@@ -68,6 +68,10 @@ func (f *fakeBackend) DeleteMulti(key string, fields ...string) (int, error) {
 	panic("not implemented")
 }
 
+func (f *fakeBackend) Subscribe(key string) chan string {
+	panic("not implemented")
+}
+
 func TestListAssignmentKeyFormat(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
