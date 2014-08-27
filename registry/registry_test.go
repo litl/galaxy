@@ -3,8 +3,6 @@ package registry
 import (
 	"errors"
 	"testing"
-
-	"github.com/litl/galaxy/utils"
 )
 
 type fakeBackend struct {
@@ -50,21 +48,23 @@ func (f *fakeBackend) Notify(key, value string) (int, error) {
 	return f.NotifyFunc(key, value)
 }
 
-func (f *fakeBackend) Set(key, field string, value []byte) (string, error) {
+func (f *fakeBackend) Set(key, field string, value string) (string, error) {
 	panic("not implemented")
 }
 
-func (f *fakeBackend) Get(key, field string) ([]byte, error) {
+func (f *fakeBackend) Get(key, field string) (string, error) {
 	panic("not implemented")
 }
 
-func (f *fakeBackend) LoadVMap(key string, dest *utils.VersionedMap) error {
+func (f *fakeBackend) GetAll(key string) (map[string]string, error) {
 	panic("not implemented")
 }
-func (f *fakeBackend) SaveVMap(key string, vmap *utils.VersionedMap) error {
+
+func (f *fakeBackend) SetMulti(key string, values map[string]string) (string, error) {
 	panic("not implemented")
 }
-func (f *fakeBackend) GcVMap(key string, vmap *utils.VersionedMap) error {
+
+func (f *fakeBackend) DeleteMulti(key string, fields ...string) (int, error) {
 	panic("not implemented")
 }
 

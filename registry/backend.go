@@ -1,9 +1,5 @@
 package registry
 
-import (
-	"github.com/litl/galaxy/utils"
-)
-
 type RegistryBackend interface {
 	// Sets
 	AddMember(key, value string) (int, error)
@@ -23,12 +19,9 @@ type RegistryBackend interface {
 	Reconnect()
 
 	// Maps
-	Set(key, field string, value []byte) (string, error)
-	Get(key, field string) ([]byte, error)
-
-	// FIXME: jwilder - this interface is strange
-	// VMap
-	LoadVMap(key string, dest *utils.VersionedMap) error
-	SaveVMap(key string, vmap *utils.VersionedMap) error
-	GcVMap(key string, vmap *utils.VersionedMap) error
+	Set(key, field string, value string) (string, error)
+	Get(key, field string) (string, error)
+	GetAll(key string) (map[string]string, error)
+	SetMulti(key string, values map[string]string) (string, error)
+	DeleteMulti(key string, fields ...string) (int, error)
 }

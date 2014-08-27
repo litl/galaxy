@@ -140,7 +140,7 @@ func (r *RedisBackend) Notify(key, value string) (int, error) {
 	return redis.Int(conn.Do("PUBLISH", key, value))
 }
 
-func (r *RedisBackend) Set(key, field string, value []byte) (string, error) {
+func (r *RedisBackend) Set(key, field string, value string) (string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -153,15 +153,73 @@ func (r *RedisBackend) Set(key, field string, value []byte) (string, error) {
 	return redis.String(conn.Do("HMSET", key, field, value))
 }
 
-func (r *RedisBackend) Get(key, field string) ([]byte, error) {
+func (r *RedisBackend) Get(key, field string) (string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
 	if conn.Err() != nil {
 		conn.Close()
 		r.Reconnect()
-		return []byte{}, conn.Err()
+		return "", conn.Err()
 	}
 
-	return redis.Bytes(conn.Do("HGET", key, field))
+	return redis.String(conn.Do("HGET", key, field))
+}
+
+func (r *RedisBackend) GetAll(key string) (map[string]string, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	if conn.Err() != nil {
+		conn.Close()
+		r.Reconnect()
+		return nil, conn.Err()
+	}
+
+	matches, err := redis.Values(conn.Do("HGETALL", key))
+	if err != nil {
+		return nil, err
+	}
+
+	serialized := make(map[string]string)
+	for i := 0; i < len(matches); i += 2 {
+		key := string(matches[i].([]byte))
+		value := string(matches[i+1].([]byte))
+		serialized[key] = value
+	}
+	return serialized, nil
+
+}
+
+func (r *RedisBackend) SetMulti(key string, values map[string]string) (string, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	if conn.Err() != nil {
+		conn.Close()
+		r.Reconnect()
+		return "", conn.Err()
+	}
+
+	redisArgs := redis.Args{}.Add(key).AddFlat(values)
+	return redis.String(conn.Do("HMSET", redisArgs...))
+}
+
+func (r *RedisBackend) DeleteMulti(key string, fields ...string) (int, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	if conn.Err() != nil {
+		conn.Close()
+		r.Reconnect()
+		return 0, conn.Err()
+	}
+
+	args := []string{}
+	for _, field := range fields {
+		args = append(args, field)
+	}
+	redisArgs := redis.Args{}.Add(key).AddFlat(args)
+	return redis.Int(conn.Do("HDEL", redisArgs...))
+
 }

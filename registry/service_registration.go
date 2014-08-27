@@ -65,7 +65,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	}
 
 	// TODO: use a compare-and-swap SCRIPT
-	_, err = r.backend.Set(registrationPath, "location", jsonReg)
+	_, err = r.backend.Set(registrationPath, "location", string(jsonReg))
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +110,8 @@ func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, se
 		return nil, err
 	}
 
-	if location != nil {
-		err = json.Unmarshal(location, &existingRegistration)
+	if location != "" {
+		err = json.Unmarshal([]byte(location), &existingRegistration)
 		if err != nil {
 			return nil, err
 		}
@@ -153,7 +153,7 @@ func (r *ServiceRegistry) ListRegistrations() ([]ServiceRegistration, error) {
 		svcReg := ServiceRegistration{
 			Name: path.Base(key),
 		}
-		err = json.Unmarshal(val, &svcReg)
+		err = json.Unmarshal([]byte(val), &svcReg)
 		if err != nil {
 			return nil, err
 		}

@@ -140,16 +140,16 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 
 	svcCfg := NewServiceConfig(path.Base(app), "")
 
-	err = r.backend.LoadVMap(path.Join(r.Env, app, "environment"), svcCfg.environmentVMap)
+	err = r.LoadVMap(path.Join(r.Env, app, "environment"), svcCfg.environmentVMap)
 	if err != nil {
 		return nil, err
 	}
-	err = r.backend.LoadVMap(path.Join(r.Env, app, "version"), svcCfg.versionVMap)
+	err = r.LoadVMap(path.Join(r.Env, app, "version"), svcCfg.versionVMap)
 	if err != nil {
 		return nil, err
 	}
 
-	err = r.backend.LoadVMap(path.Join(r.Env, app, "ports"), svcCfg.portsVMap)
+	err = r.LoadVMap(path.Join(r.Env, app, "ports"), svcCfg.portsVMap)
 	if err != nil {
 		return nil, err
 	}
@@ -172,21 +172,21 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	}
 
 	//TODO: user MULTI/EXEC
-	err := r.backend.SaveVMap(path.Join(r.Env, svcCfg.Name, "environment"),
+	err := r.SaveVMap(path.Join(r.Env, svcCfg.Name, "environment"),
 		svcCfg.environmentVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.backend.SaveVMap(path.Join(r.Env, svcCfg.Name, "version"),
+	err = r.SaveVMap(path.Join(r.Env, svcCfg.Name, "version"),
 		svcCfg.versionVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.backend.SaveVMap(path.Join(r.Env, svcCfg.Name, "ports"),
+	err = r.SaveVMap(path.Join(r.Env, svcCfg.Name, "ports"),
 		svcCfg.portsVMap)
 
 	if err != nil {
