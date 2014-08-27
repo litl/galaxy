@@ -7,7 +7,7 @@ import (
 	"github.com/litl/galaxy/utils"
 )
 
-func (r *ServiceRegistry) loadVMap(key string, dest *utils.VersionedMap) error {
+func (r *RedisBackend) LoadVMap(key string, dest *utils.VersionedMap) error {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -27,7 +27,7 @@ func (r *ServiceRegistry) loadVMap(key string, dest *utils.VersionedMap) error {
 	return nil
 }
 
-func (r *ServiceRegistry) saveVMap(key string, vmap *utils.VersionedMap) error {
+func (r *RedisBackend) SaveVMap(key string, vmap *utils.VersionedMap) error {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
@@ -47,11 +47,11 @@ func (r *ServiceRegistry) saveVMap(key string, vmap *utils.VersionedMap) error {
 		return errors.New("not saved")
 	}
 
-	r.gcVMap(key, vmap)
+	r.GcVMap(key, vmap)
 	return nil
 }
 
-func (r *ServiceRegistry) gcVMap(key string, vmap *utils.VersionedMap) error {
+func (r *RedisBackend) GcVMap(key string, vmap *utils.VersionedMap) error {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 

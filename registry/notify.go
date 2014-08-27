@@ -97,10 +97,8 @@ func (r *ServiceRegistry) NotifyRestart(app string) error {
 }
 
 func (r *ServiceRegistry) notifyChanged() error {
-	conn := r.redisPool.Get()
-	defer conn.Close()
 	// TODO: received count ignored, use it somehow?
-	_, err := redis.Int(conn.Do("PUBLISH", "galaxy", "config"))
+	_, err := r.backend.Notify("galaxy", "config")
 	if err != nil {
 		return err
 	}
@@ -138,7 +136,7 @@ func (r *ServiceRegistry) subscribeChanges() {
 			conn.Close()
 			log.Printf("ERROR: %v\n", conn.Err())
 			time.Sleep(5 * time.Second)
-			r.reconnectRedis()
+			r.backend.Reconnect()
 			continue
 		}
 

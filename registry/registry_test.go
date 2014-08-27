@@ -3,6 +3,8 @@ package registry
 import (
 	"errors"
 	"testing"
+
+	"github.com/litl/galaxy/utils"
 )
 
 type fakeBackend struct {
@@ -11,6 +13,21 @@ type fakeBackend struct {
 	AddMemberFunc    func(key, value string) (int, error)
 	RemoveMemberFunc func(key, value string) (int, error)
 	NotifyFunc       func(key, value string) (int, error)
+}
+
+func (f *fakeBackend) Connect()   {}
+func (f *fakeBackend) Reconnect() {}
+
+func (f *fakeBackend) Delete(key string) (int, error) {
+	panic("not implemented")
+}
+
+func (f *fakeBackend) Expire(key string, ttl uint64) (int, error) {
+	panic("not implemented")
+}
+
+func (f *fakeBackend) Ttl(key string) (int, error) {
+	panic("not implemented")
 }
 
 func (f *fakeBackend) Members(key string) ([]string, error) {
@@ -31,6 +48,24 @@ func (f *fakeBackend) RemoveMember(key, value string) (int, error) {
 
 func (f *fakeBackend) Notify(key, value string) (int, error) {
 	return f.NotifyFunc(key, value)
+}
+
+func (f *fakeBackend) Set(key, field string, value []byte) (string, error) {
+	panic("not implemented")
+}
+
+func (f *fakeBackend) Get(key, field string) ([]byte, error) {
+	panic("not implemented")
+}
+
+func (f *fakeBackend) LoadVMap(key string, dest *utils.VersionedMap) error {
+	panic("not implemented")
+}
+func (f *fakeBackend) SaveVMap(key string, vmap *utils.VersionedMap) error {
+	panic("not implemented")
+}
+func (f *fakeBackend) GcVMap(key string, vmap *utils.VersionedMap) error {
+	panic("not implemented")
 }
 
 func TestListAssignmentKeyFormat(t *testing.T) {

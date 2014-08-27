@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
-	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/garyburd/redigo/redis"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 )
@@ -27,7 +25,6 @@ const (
 )
 
 type ServiceRegistry struct {
-	redisPool    redis.Pool
 	backend      RegistryBackend
 	Env          string
 	Pool         string
@@ -58,40 +55,14 @@ func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *S
 
 }
 
-func (r *ServiceRegistry) getConn() redis.Conn {
-	return r.redisPool.Get()
-}
-
 // Build the Redis Pool
 func (r *ServiceRegistry) Connect(redisHost string) {
+
 	r.redisHost = redisHost
-	rwTimeout := 5 * time.Second
-
-	redisPool := redis.Pool{
-		MaxIdle:     1,
-		IdleTimeout: 120 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			return redis.DialTimeout("tcp", redisHost, rwTimeout, rwTimeout, rwTimeout)
-		},
-		// test every connection for now
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			if err != nil {
-				defer c.Close()
-			}
-			return err
-		},
-	}
-
-	r.redisPool = redisPool
 	r.backend = &RedisBackend{
-		redisPool: redisPool,
+		RedisHost: redisHost,
 	}
-}
-
-func (r *ServiceRegistry) reconnectRedis() {
-	r.redisPool.Close()
-	r.Connect(r.redisHost)
+	r.backend.Connect()
 }
 
 func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *ServiceRegistration {
@@ -294,15 +265,6 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 }
 
 func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
-	if conn.Err() != nil {
-		conn.Close()
-		r.reconnectRedis()
-		return nil, conn.Err()
-	}
-
 	// TODO: convert to scan
 	apps, err := r.backend.Keys(path.Join(r.Env, "*", "environment"))
 	if err != nil {

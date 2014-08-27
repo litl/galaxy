@@ -8,7 +8,6 @@ import (
 	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/garyburd/redigo/redis"
 )
 
 type ServiceRegistration struct {
@@ -65,16 +64,13 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 		return nil, err
 	}
 
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	// TODO: use a compare-and-swap SCRIPT
-	_, err = conn.Do("HMSET", registrationPath, "location", jsonReg)
+	_, err = r.backend.Set(registrationPath, "location", jsonReg)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = conn.Do("EXPIRE", registrationPath, r.TTL)
+	_, err = r.backend.Expire(registrationPath, r.TTL)
 	if err != nil {
 		return nil, err
 	}
@@ -87,15 +83,12 @@ func (r *ServiceRegistry) UnRegisterService(container *docker.Container, service
 
 	registrationPath := path.Join(r.Env, r.Pool, "hosts", r.HostIP, serviceConfig.Name)
 
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
 	registration, err := r.GetServiceRegistration(container, serviceConfig)
 	if err != nil {
 		return registration, err
 	}
 
-	_, err = conn.Do("DEL", registrationPath)
+	_, err = r.backend.Delete(registrationPath)
 	if err != nil {
 		return registration, err
 	}
@@ -111,23 +104,19 @@ func (r *ServiceRegistry) GetServiceRegistration(container *docker.Container, se
 		Path: regPath,
 	}
 
-	conn := r.redisPool.Get()
-	defer conn.Close()
-
-	val, err := conn.Do("HGET", regPath, "location")
+	location, err := r.backend.Get(regPath, "location")
 
 	if err != nil {
 		return nil, err
 	}
 
-	if val != nil {
-		location, err := redis.Bytes(val, err)
+	if location != nil {
 		err = json.Unmarshal(location, &existingRegistration)
 		if err != nil {
 			return nil, err
 		}
 
-		expires, err := redis.Int(conn.Do("TTL", regPath))
+		expires, err := r.backend.Ttl(regPath)
 		if err != nil {
 			return nil, err
 		}
@@ -146,11 +135,9 @@ func (r *ServiceRegistry) IsRegistered(container *docker.Container, serviceConfi
 
 // TODO: get all ServiceRegistrations
 func (r *ServiceRegistry) ListRegistrations() ([]ServiceRegistration, error) {
-	conn := r.redisPool.Get()
-	defer conn.Close()
 
 	// TODO: convert to scan
-	keys, err := redis.Strings(conn.Do("KEYS", path.Join(r.Env, "*", "hosts", "*", "*")))
+	keys, err := r.backend.Keys(path.Join(r.Env, "*", "hosts", "*", "*"))
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +145,7 @@ func (r *ServiceRegistry) ListRegistrations() ([]ServiceRegistration, error) {
 	var regList []ServiceRegistration
 	for _, key := range keys {
 
-		val, err := redis.Bytes(conn.Do("HGET", key, "location"))
+		val, err := r.backend.Get(key, "location")
 		if err != nil {
 			return nil, err
 		}
