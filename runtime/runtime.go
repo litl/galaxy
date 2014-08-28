@@ -236,6 +236,50 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	})
 }
 
+func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *registry.ServiceConfig) error {
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, container := range containers {
+
+		// We name all galaxy managed containers
+		if len(container.Names) == 0 {
+			continue
+		}
+
+		// Container name does match one that would be started w/ this service config
+		if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
+			continue
+		}
+
+		image, err := s.InspectImage(container.Image)
+		if err != nil {
+			log.Errorf("ERROR: Unable to inspect image: %s", container.Image)
+			continue
+		}
+
+		if image == nil {
+			log.Errorf("ERROR: Image for container %s does not exist!: %s", container.ID[0:12])
+			continue
+
+		}
+
+		if image.ID != serviceConfig.VersionID() {
+			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
+			if err != nil {
+				log.Errorf("ERROR: Unable to stop container: %s", container.ID)
+				continue
+			}
+			s.stopContainer(dockerContainer)
+		}
+	}
+	return nil
+}
+
 func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.ServiceConfig, stopCutoff int64) error {
 	latestName := serviceConfig.ContainerName()
 

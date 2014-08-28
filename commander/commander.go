@@ -254,7 +254,7 @@ func restartContainers(app string, cmdChan chan string) {
 
 			log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
-			err = serviceRuntime.StopAllButLatestService(serviceConfig, stopCutoff)
+			err = serviceRuntime.StopAllButCurrentVersion(serviceConfig)
 			if err != nil {
 				log.Errorf("ERROR: Could not stop containers: %s", err)
 			}
