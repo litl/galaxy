@@ -11,6 +11,7 @@ import (
 
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/shuttle/client"
+	"github.com/litl/galaxy/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -36,6 +37,75 @@ func getService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write(marshal(serviceStats))
+}
+
+func updateVhosts(svcCfg client.ServiceConfig) {
+	// This creates map of vhosts we are expecting to be
+	// able to route across all the backends in the registry.  We
+	// create this because multiple services can support multiple
+	// vhost entries.  This creates our expected state.
+	vhosts := make(map[string][]string)
+	for _, svcCfg := range Registry.Config() {
+		for _, vhost := range svcCfg.VirtualHosts {
+			if vhost == "" {
+				continue
+			}
+			for _, backend := range svcCfg.Backends {
+				if backend.Addr == "" {
+					log.Warnf("No address specifed for %s for %s. Skipping.", backend.Name, svcCfg.Name)
+					continue
+				}
+				addr := "http://" + backend.Addr
+				vhosts[vhost] = append(vhosts[vhost], addr)
+			}
+		}
+	}
+
+	// Add all the new vhost backends while keeping our expected state
+	// in sync.  adding a backend to a router is idempotent so we
+	// can add these unconditionally
+	for _, vhost := range svcCfg.VirtualHosts {
+		if vhost == "" {
+			continue
+		}
+
+		for _, newBackend := range svcCfg.Backends {
+			if newBackend.Addr == "" {
+				log.Warnf("No address specifed for %s for %s. Skipping.", newBackend.Name, svcCfg.Name)
+				continue
+			}
+			addr := "http://" + newBackend.Addr
+			httpRouter.AddBackend(svcCfg.Name, vhost, addr)
+			if !utils.StringInSlice(addr, vhosts[vhost]) {
+				vhosts[vhost] = append(vhosts[vhost], addr)
+			}
+		}
+	}
+
+	// We need to remove any backends setup in the router
+	// that are not supposed to be there according to our expected
+	// state.  Removing all the backends from a router also
+	// removes the router.
+	for vhost, expectedBackends := range vhosts {
+		if vhost == "" {
+			continue
+		}
+		existingBackends := httpRouter.GetBackends(vhost)
+		for _, existing := range existingBackends {
+			if !utils.StringInSlice(existing, expectedBackends) {
+				httpRouter.RemoveBackend(vhost, existing)
+			}
+		}
+	}
+
+	// Last, if a vhost was completely removed then it would
+	// not be in our expected state so iterate over our actual
+	// state and remove any routers that should not be there
+	for _, vhost := range httpRouter.GetVhosts() {
+		if _, ok := vhosts[vhost]; !ok {
+			httpRouter.RemoveRouter(vhost)
+		}
+	}
 }
 
 // Update a service and/or backends.
@@ -81,29 +151,12 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	updateVhosts(svcCfg)
+
 	if e := Registry.UpdateService(svcCfg); e != nil {
 		log.Errorln("Unable to update service %s", svcCfg.Name)
 		http.Error(w, e.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	vhosts := make(map[string][]string)
-	for _, svcCfg := range Registry.Config() {
-		for _, vhost := range svcCfg.VirtualHosts {
-			for _, backend := range svcCfg.Backends {
-				if backend.Addr == "" {
-					log.Warnf("No address specifed for %s for %s. Skipping.", backend.Name, svcCfg.Name)
-					continue
-				}
-				addr := "http://" + backend.Addr
-				httpRouter.AddBackend(svcCfg.Name, vhost, addr)
-				vhosts[vhost] = append(vhosts[vhost], addr)
-			}
-
-		}
-	}
-	for vhost, addrs := range vhosts {
-		httpRouter.RemoveBackends(vhost, addrs)
 	}
 
 	go writeStateConfig()

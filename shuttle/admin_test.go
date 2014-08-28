@@ -19,6 +19,7 @@ var _ = Suite(&HTTPSuite{})
 func (s *HTTPSuite) SetUpSuite(c *C) {
 	addHandlers()
 	s.httpSvr = httptest.NewServer(nil)
+	httpRouter = NewHTTPRouter()
 }
 
 func (s *HTTPSuite) TearDownSuite(c *C) {
