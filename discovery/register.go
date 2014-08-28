@@ -9,7 +9,6 @@ import (
 
 	"github.com/codegangsta/cli"
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
@@ -25,7 +24,7 @@ func unregisterAll(c *cli.Context, signals chan os.Signal) {
 func register(c *cli.Context) {
 
 	initOrDie(c)
-	var lastLogged int64
+	loggedOnce := false
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM)
@@ -44,14 +43,13 @@ func register(c *cli.Context) {
 		}
 
 		for _, registration := range registrations {
-			if lastLogged == 0 || time.Now().UnixNano()-lastLogged > (registry.DefaultTTL*time.Second).Nanoseconds() {
+			if !loggedOnce || time.Now().Unix()%60 < 10 {
 				location := registration.ExternalAddr()
 				if location != "" {
 					location = " at " + location
 				}
 				log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(registration.ContainerName, "/"),
 					registration.ContainerID[0:12], registration.Name, location)
-				lastLogged = time.Now().UnixNano()
 			}
 
 			statusLine := strings.Join([]string{
@@ -71,8 +69,9 @@ func register(c *cli.Context) {
 		if !c.Bool("loop") {
 			break
 		}
-		time.Sleep(10 * time.Second)
 
+		time.Sleep(10 * time.Second)
+		loggedOnce = true
 	}
 
 	result, _ := columnize.SimpleFormat(outputBuffer.Output)
