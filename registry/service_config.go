@@ -68,6 +68,14 @@ func (s *ServiceConfig) SetVersion(version string) {
 	s.versionVMap.SetVersion("version", version, s.nextID())
 }
 
+func (s *ServiceConfig) VersionID() string {
+	return s.versionVMap.Get("versionID")
+}
+
+func (s *ServiceConfig) SetVersionID(versionID string) {
+	s.versionVMap.SetVersion("versionID", versionID, s.nextID())
+}
+
 func (s *ServiceConfig) Ports() map[string]string {
 	ports := map[string]string{}
 	for _, k := range s.portsVMap.Keys() {

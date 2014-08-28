@@ -214,7 +214,7 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	image, err := serviceRuntime.PullImage(version, c.Bool("force"))
+	image, err := serviceRuntime.PullImage(version, "", c.Bool("force"))
 	if image == nil || err != nil {
 		log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
 		return
@@ -232,6 +232,7 @@ func appDeploy(c *cli.Context) {
 	}
 
 	svcCfg.SetVersion(version)
+	svcCfg.SetVersionID(image.ID)
 
 	svcCfg.ClearPorts()
 	for k, _ := range image.Config.ExposedPorts {

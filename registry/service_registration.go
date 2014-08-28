@@ -19,6 +19,7 @@ type ServiceRegistration struct {
 	ContainerID   string    `json:"CONTAINER_ID"`
 	ContainerName string    `json:"CONTAINER_NAME"`
 	Image         string    `json:"IMAGE,omitempty"`
+	ImageId       string    `json:"IMAGE_ID,omitempty"`
 	StartedAt     time.Time `json:"STARTED_AT"`
 	Expires       time.Time `json:"-"`
 	Path          string    `json:"-"`
@@ -53,6 +54,7 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 
 	serviceRegistration := r.newServiceRegistration(container)
 	serviceRegistration.Name = serviceConfig.Name
+	serviceRegistration.ImageId = serviceConfig.VersionID()
 
 	vhosts := serviceConfig.Env()["VIRTUAL_HOST"]
 	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
