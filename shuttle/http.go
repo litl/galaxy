@@ -136,7 +136,7 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 		// Create a http location with the load balancer we've just added
 		opts := httploc.Options{}
 		opts.TrustForwardHeader = true
-		opts.Timeouts.Read = 60 * time.Second
+		opts.Timeouts.Read = 180 * time.Second
 		loc, err := httploc.NewLocationWithOptions(name, balancer, opts)
 		if err != nil {
 			return err
