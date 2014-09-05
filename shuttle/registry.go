@@ -104,6 +104,8 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		log.Debugf("Removing Backend %s/%s", service.Name, name)
 		service.remove(name)
 	}
+
+	service.VirtualHosts = newCfg.VirtualHosts
 	return nil
 }
 

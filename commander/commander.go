@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -74,41 +75,29 @@ func pullImageAsync(serviceConfig registry.ServiceConfig, errChan chan error) {
 	errChan <- nil
 }
 
-func pullAllImages() error {
-	serviceConfigs, err := serviceRegistry.ListApps()
-	if err != nil {
-		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
-		return err
-	}
-
-	if len(serviceConfigs) == 0 {
-		log.Printf("No services configured for /%s/%s\n", env, pool)
-		return err
-	}
-
-	errChan := make(chan error)
-	for _, serviceConfig := range serviceConfigs {
-		go pullImageAsync(serviceConfig, errChan)
-	}
-
-	for i := 0; i < len(serviceConfigs); i++ {
-		err := <-errChan
-		if err != nil {
-			// return the first error we got to signal that one of the pulls failed
-			return err
-		}
-	}
-	return nil
-}
-
 func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
+
+	image, err := serviceRuntime.InspectImage(serviceConfig.Version())
+	if image != nil && image.ID == serviceConfig.VersionID() {
+		return image, nil
+	}
+
 	log.Printf("Pulling %s version %s\n", serviceConfig.Name, serviceConfig.Version())
-	image, err := serviceRuntime.PullImage(serviceConfig.Version(), true)
+	image, err = serviceRuntime.PullImage(serviceConfig.Version(),
+		serviceConfig.VersionID(), true)
 	if image == nil || err != nil {
-		log.Errorf("ERROR: Could not pull image %s: %s\n",
+		log.Errorf("ERROR: Could not pull image %s: %s",
 			serviceConfig.Version(), err)
 		return nil, err
 	}
+
+	if image.ID != serviceConfig.VersionID() && len(serviceConfig.VersionID()) > 12 {
+		log.Errorf("ERROR: Pulled image for %s does not match expected ID. Expected: %s: Got: %s",
+			serviceConfig.Version(),
+			image.ID[0:12], serviceConfig.VersionID()[0:12])
+		return nil, errors.New(fmt.Sprintf("failed to pull image ID %s", serviceConfig.VersionID()[0:12]))
+	}
+
 	log.Printf("Pulled %s\n", serviceConfig.Version())
 	return image, nil
 }
@@ -116,7 +105,7 @@ func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
 func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
 	started, container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
 	if err != nil {
-		log.Errorf("ERROR: Could not start containers: %s\n", err)
+		log.Errorf("ERROR: Could not start container for %s: %s", serviceConfig.Version(), err)
 		return
 	}
 
@@ -132,7 +121,7 @@ func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
 
 	err = serviceRuntime.StopAllButLatestService(serviceConfig, stopCutoff)
 	if err != nil {
-		log.Errorf("ERROR: Could not stop containers: %s\n", err)
+		log.Errorf("ERROR: Could not stop containers: %s", err)
 	}
 }
 
@@ -162,7 +151,7 @@ func restartContainers(app string, cmdChan chan string) {
 
 			assigned, err := appAssigned(app)
 			if err != nil {
-				log.Errorf("ERROR: Error retrieving assignments for %s: %s\n", app, err)
+				log.Errorf("ERROR: Error retrieving assignments for %s: %s", app, err)
 				if !loop {
 					return
 				}
@@ -175,7 +164,7 @@ func restartContainers(app string, cmdChan chan string) {
 
 			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 			if err != nil {
-				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
 					return
 				}
@@ -195,38 +184,37 @@ func restartContainers(app string, cmdChan chan string) {
 					if !loop {
 						return
 					}
-					// if we can't pull the image, leave whatever is running alone
 					continue
 				}
-
+				startService(serviceConfig, logOnce)
 			}
 
 			if cmd == "restart" {
 				err := serviceRuntime.Stop(serviceConfig)
 				if err != nil {
-					log.Errorf("ERROR: Could not stop %s: %s\n",
+					log.Errorf("ERROR: Could not stop %s: %s",
 						serviceConfig.Version(), err)
 					if !loop {
 						return
 					}
 
+					startService(serviceConfig, logOnce)
 					continue
 				}
 			}
 
-			startService(serviceConfig, logOnce)
 			logOnce = false
 		case <-ticker.C:
 
 			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 			if err != nil {
-				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				continue
 			}
 
 			assigned, err := appAssigned(app)
 			if err != nil {
-				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", app, err)
+				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
 					return
 				}
@@ -245,9 +233,18 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
+			_, err = pullImage(serviceConfig)
+			if err != nil {
+				if !loop {
+					return
+				}
+				log.Errorf("ERROR: Could not pull images: %s", err)
+				continue
+			}
+
 			started, container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
 			if err != nil {
-				log.Errorf("ERROR: Could not start containers: %s\n", err)
+				log.Errorf("ERROR: Could not start containers: %s", err)
 				continue
 			}
 
@@ -257,9 +254,9 @@ func restartContainers(app string, cmdChan chan string) {
 
 			log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
-			err = serviceRuntime.StopAllButLatestService(serviceConfig, stopCutoff)
+			err = serviceRuntime.StopAllButCurrentVersion(serviceConfig)
 			if err != nil {
-				log.Errorf("ERROR: Could not stop containers: %s\n", err)
+				log.Errorf("ERROR: Could not stop containers: %s", err)
 			}
 		}
 
@@ -280,7 +277,7 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 		case changedConfig = <-changedConfigs:
 
 			if changedConfig.Error != nil {
-				log.Errorf("ERROR: Error watching changes: %s\n", changedConfig.Error)
+				log.Errorf("ERROR: Error watching changes: %s", changedConfig.Error)
 				continue
 			}
 
@@ -290,7 +287,7 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 
 			assigned, err := appAssigned(changedConfig.ServiceConfig.Name)
 			if err != nil {
-				log.Errorf("ERROR: Error retrieving service config for %s: %s\n", changedConfig.ServiceConfig.Name, err)
+				log.Errorf("ERROR: Error retrieving service config for %s: %s", changedConfig.ServiceConfig.Name, err)
 				if !loop {
 					return
 				}

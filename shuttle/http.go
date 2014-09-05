@@ -103,15 +103,27 @@ func NewHTTPRouter() *HTTPRouter {
 	}
 }
 
-func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
+func (s *HTTPRouter) GetVhosts() []string {
+	vhosts := []string{}
 	s.Lock()
 	defer s.Unlock()
+	for k, _ := range s.balancers {
+		vhosts = append(vhosts, k)
+	}
+	return vhosts
+}
+
+func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 
 	if vhost == "" || url == "" {
 		return nil
 	}
 
 	var err error
+
+	s.Lock()
+	defer s.Unlock()
+
 	balancer := s.balancers[vhost]
 
 	if balancer == nil {
@@ -124,7 +136,7 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 		// Create a http location with the load balancer we've just added
 		opts := httploc.Options{}
 		opts.TrustForwardHeader = true
-		opts.Timeouts.Read = 60 * time.Second
+		opts.Timeouts.Read = 180 * time.Second
 		loc, err := httploc.NewLocationWithOptions(name, balancer, opts)
 		if err != nil {
 			return err
@@ -151,14 +163,13 @@ func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
 }
 
 func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
-	s.Lock()
-	defer s.Unlock()
-
 	if vhost == "" || url == "" {
 		return nil
 	}
 
+	s.Lock()
 	balancer := s.balancers[vhost]
+	s.Unlock()
 	if balancer == nil {
 		return nil
 	}
@@ -171,6 +182,7 @@ func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
 	balancer.RemoveEndpoint(endpoint)
 
 	endpoints := balancer.GetEndpoints()
+	println(len(endpoints))
 	if len(endpoints) == 0 {
 		s.RemoveRouter(vhost)
 	}
@@ -197,6 +209,28 @@ func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
 			s.RemoveBackend(vhost, endpoint.GetUrl().String())
 		}
 	}
+}
+
+func (s *HTTPRouter) GetBackends(vhost string) []string {
+	backends := []string{}
+	if vhost == "" {
+		return backends
+	}
+
+	// Remove backends that are no longer registered
+	s.Lock()
+	balancer := s.balancers[vhost]
+	s.Unlock()
+	if balancer == nil {
+		return backends
+	}
+
+	endpoints := balancer.GetEndpoints()
+	for _, endpoint := range endpoints {
+		backends = append(backends, endpoint.GetUrl().String())
+	}
+
+	return backends
 }
 
 // Removes a virtual host router

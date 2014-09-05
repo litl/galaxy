@@ -236,6 +236,50 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	})
 }
 
+func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *registry.ServiceConfig) error {
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, container := range containers {
+
+		// We name all galaxy managed containers
+		if len(container.Names) == 0 {
+			continue
+		}
+
+		// Container name does match one that would be started w/ this service config
+		if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
+			continue
+		}
+
+		image, err := s.InspectImage(container.Image)
+		if err != nil {
+			log.Errorf("ERROR: Unable to inspect image: %s", container.Image)
+			continue
+		}
+
+		if image == nil {
+			log.Errorf("ERROR: Image for container %s does not exist!: %s", container.ID[0:12])
+			continue
+
+		}
+
+		if image.ID != serviceConfig.VersionID() {
+			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
+			if err != nil {
+				log.Errorf("ERROR: Unable to stop container: %s", container.ID)
+				continue
+			}
+			s.stopContainer(dockerContainer)
+		}
+	}
+	return nil
+}
+
 func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.ServiceConfig, stopCutoff int64) error {
 	latestName := serviceConfig.ContainerName()
 
@@ -312,7 +356,7 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
-	_, err := s.PullImage(serviceConfig.Version(), true)
+	_, err := s.PullImage(serviceConfig.Version(), serviceConfig.VersionID(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +442,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
-	_, err := s.PullImage(serviceConfig.Version(), true)
+	_, err := s.PullImage(serviceConfig.Version(), serviceConfig.VersionID(), true)
 	if err != nil {
 		return err
 	}
@@ -472,7 +516,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 	// see if we have the image locally
-	image, err := s.PullImage(img, false)
+	image, err := s.PullImage(img, serviceConfig.VersionID(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -598,7 +642,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 		return false, container, nil
 	}
 
-	image, err := s.ensureDockerClient().InspectImage(serviceConfig.Version())
+	image, err := s.InspectImage(serviceConfig.Version())
 	if err != nil {
 		return false, nil, err
 	}
@@ -616,14 +660,14 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 }
 
-func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, error) {
-	image, err := s.ensureDockerClient().InspectImage(version)
+func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Image, error) {
+	image, err := s.InspectImage(version)
 
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
 	}
 
-	if image != nil && !force {
+	if image != nil && image.ID == id && !force {
 		return image, nil
 	}
 
@@ -681,7 +725,7 @@ func (s *ServiceRuntime) PullImage(version string, force bool) (*docker.Image, e
 		break
 	}
 
-	return s.ensureDockerClient().InspectImage(version)
+	return s.InspectImage(version)
 
 }
 
