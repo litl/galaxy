@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -28,52 +27,6 @@ type HostRouter struct {
 
 func NewHostRouter() *HostRouter {
 	return &HostRouter{}
-}
-
-func (r *HostRouter) Service(vhost string) *Service {
-	return Registry.GetVHostService(vhost)
-}
-
-func (r *HostRouter) GetVhosts() []string {
-	return Registry.GetVHosts()
-}
-
-func (r *HostRouter) AddBackend(name, vhost, url string) error {
-	// backends handled through regular proxy mechanisms
-	return fmt.Errorf("NA")
-
-}
-
-func (r *HostRouter) RemoveBackend(vhost, url string) error {
-	// backends handled through regular proxy mechanisms
-	return fmt.Errorf("NA")
-}
-
-func (r *HostRouter) RemoveBackends(vhost string, addrs []string) {
-	// backends handled through regular proxy mechanisms
-}
-
-func (r *HostRouter) GetBackends(vhost string) []string {
-	// backends handled through regular proxy mechanisms
-	var backends []string
-
-	svc := Registry.GetVHostService(vhost)
-	if svc == nil {
-		return backends
-	}
-
-	svcCfg := svc.Config()
-	for _, b := range svcCfg.Backends {
-		backends = append(backends, b.Addr)
-	}
-
-	return backends
-}
-
-func (r *HostRouter) RemoveRouter(vhost string) {
-	r.Lock()
-	defer r.Unlock()
-	panic("NOT IMPLEMENTED")
 }
 
 func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {

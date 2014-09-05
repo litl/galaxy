@@ -11,7 +11,6 @@ import (
 
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/shuttle/client"
-	"github.com/litl/galaxy/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -39,6 +38,7 @@ func getService(w http.ResponseWriter, r *http.Request) {
 	w.Write(marshal(serviceStats))
 }
 
+/*
 func updateVhosts(svcCfg client.ServiceConfig) {
 	// This creates map of vhosts we are expecting to be
 	// able to route across all the backends in the registry.  We
@@ -101,13 +101,13 @@ func updateVhosts(svcCfg client.ServiceConfig) {
 	// Last, if a vhost was completely removed then it would
 	// not be in our expected state so iterate over our actual
 	// state and remove any routers that should not be there
-	for _, vhost := range httpRouter.GetVhosts() {
+	for _, vhost := range Registry.GetVhosts() {
 		if _, ok := vhosts[vhost]; !ok {
 			httpRouter.RemoveRouter(vhost)
 		}
 	}
 }
-
+*/
 // Update a service and/or backends.
 // Adding a `backends_only` query parameter will prevent the service from being
 // shutdown and replaced if the ServiceConfig is not identical..
@@ -151,8 +151,6 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	updateVhosts(svcCfg)
-
 	if e := Registry.UpdateService(svcCfg); e != nil {
 		log.Errorln("Unable to update service %s", svcCfg.Name)
 		http.Error(w, e.Error(), http.StatusInternalServerError)
@@ -165,13 +163,6 @@ func postService(w http.ResponseWriter, r *http.Request) {
 
 func deleteService(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-
-	service := Registry.GetService(vars["service"])
-	if service != nil {
-		for _, vhost := range service.VirtualHosts {
-			httpRouter.RemoveRouter(vhost)
-		}
-	}
 
 	err := Registry.RemoveService(vars["service"])
 	if err != nil {
@@ -223,13 +214,6 @@ func postBackend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := Registry.GetService(vars["service"])
-	if service != nil {
-		for _, vhost := range service.VirtualHosts {
-			httpRouter.AddBackend(backendCfg.Name, vhost, "http://"+backendCfg.Addr)
-		}
-	}
-
 	go writeStateConfig()
 	w.Write(marshal(Registry.Config()))
 }
@@ -239,14 +223,6 @@ func deleteBackend(w http.ResponseWriter, r *http.Request) {
 
 	serviceName := vars["service"]
 	backendName := vars["backend"]
-
-	service := Registry.GetService(vars["service"])
-	if service != nil {
-		for _, vhost := range service.VirtualHosts {
-			backend := service.get(backendName)
-			httpRouter.RemoveBackend(vhost, "http://"+backend.Addr)
-		}
-	}
 
 	if err := Registry.RemoveBackend(serviceName, backendName); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

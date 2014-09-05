@@ -341,7 +341,7 @@ func (s *Service) stop() {
 // Provide a ServeHTTP method for out ReverseProxy
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// TODO: insert custom error pages!
-	s.reverseProxy.ServeHTTP(w, r)
+	s.httpProxy.ServeHTTP(w, r)
 }
 
 // A net.Listener that provides a read/write timeout
