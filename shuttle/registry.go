@@ -29,13 +29,31 @@ func marshal(i interface{}) []byte {
 // ServiceRegistry is a global container for all configured services.
 type ServiceRegistry struct {
 	sync.Mutex
-	svcs map[string]*Service
+	svcs   map[string]*Service
+	vhosts map[string]*Service
 }
 
 func (s *ServiceRegistry) GetService(name string) *Service {
 	s.Lock()
 	defer s.Unlock()
 	return s.svcs[name]
+}
+
+func (s *ServiceRegistry) GetVHostService(name string) *Service {
+	s.Lock()
+	defer s.Unlock()
+
+	return s.vhosts[name]
+}
+
+func (s *ServiceRegistry) GetVHosts() []string {
+	s.Lock()
+	defer s.Unlock()
+	vhosts := []string{}
+	for h := range s.vhosts {
+		vhosts = append(vhosts, h)
+	}
+	return vhosts
 }
 
 // Add a new service to the Registry.
@@ -52,6 +70,10 @@ func (s *ServiceRegistry) AddService(cfg client.ServiceConfig) error {
 
 	service := NewService(cfg)
 	s.svcs[service.Name] = service
+
+	for _, host := range cfg.VirtualHosts {
+		s.vhosts[host] = service
+	}
 
 	return service.start()
 }
@@ -105,6 +127,14 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		service.remove(name)
 	}
 
+	// remove existing vhost entries for this service, and add new ones
+	for _, host := range service.VirtualHosts {
+		delete(s.vhosts, host)
+	}
+	for _, host := range newCfg.VirtualHosts {
+		s.vhosts[host] = service
+	}
+
 	service.VirtualHosts = newCfg.VirtualHosts
 	return nil
 }
@@ -118,6 +148,11 @@ func (s *ServiceRegistry) RemoveService(name string) error {
 		log.Debugf("Removing Service %s", svc.Name)
 		delete(s.svcs, name)
 		svc.stop()
+
+		for host := range s.vhosts {
+			delete(s.vhosts, host)
+		}
+
 		return nil
 	}
 	return ErrNoService

@@ -52,6 +52,7 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 				return
 			}
 
+			conn.SetDeadline(time.Now().Add(5 * time.Second))
 			s.wg.Add(1)
 			go func() {
 				defer s.wg.Done()

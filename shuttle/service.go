@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,7 +14,8 @@ import (
 
 var (
 	Registry = ServiceRegistry{
-		svcs: make(map[string]*Service, 0),
+		svcs:   make(map[string]*Service),
+		vhosts: make(map[string]*Service),
 	}
 )
 
@@ -42,6 +45,9 @@ type Service struct {
 
 	// Each Service owns it's own netowrk listener
 	listener net.Listener
+
+	// reverse proxy for vhost routing
+	httpProxy *ReverseProxy
 }
 
 // Stats returned about a service
@@ -76,6 +82,18 @@ func NewService(cfg client.ServiceConfig) *Service {
 		ClientTimeout: time.Duration(cfg.ClientTimeout) * time.Millisecond,
 		ServerTimeout: time.Duration(cfg.ServerTimeout) * time.Millisecond,
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
+	}
+
+	// create our reverse proxy, using our load-balancing Dial method
+	s.httpProxy = &ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = "http"
+			req.URL.Host = "127.0.0.1"
+		},
+		Transport: &http.Transport{
+			Dial:                s.Dial,
+			MaxIdleConnsPerHost: 10,
+		},
 	}
 
 	if s.CheckInterval == 0 {
@@ -255,6 +273,28 @@ func (s *Service) run() {
 	}()
 }
 
+// A service also from a net.Dialer interface
+// We ignore the parameters, and return a tcp connection the the proper backend
+// based on the load balancing algorithm selected.
+func (s *Service) Dial(nw, addr string) (net.Conn, error) {
+	backends := s.next()
+
+	// Try the first backend given, but if that fails, cycle through them all
+	// to make a best effort to connect the client.
+	for _, b := range backends {
+		srvConn, err := net.DialTimeout("tcp", b.Addr, b.dialTimeout)
+		if err != nil {
+			log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, b.Name, err)
+			atomic.AddInt64(&b.Errors, 1)
+			continue
+		}
+
+		return srvConn, nil
+	}
+
+	return nil, fmt.Errorf("no backend for %s", s.Name)
+}
+
 func (s *Service) connect(cliConn net.Conn) {
 	backends := s.next()
 
@@ -296,6 +336,12 @@ func (s *Service) stop() {
 	if err != nil {
 		log.Println(err)
 	}
+}
+
+// Provide a ServeHTTP method for out ReverseProxy
+func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// TODO: insert custom error pages!
+	s.reverseProxy.ServeHTTP(w, r)
 }
 
 // A net.Listener that provides a read/write timeout

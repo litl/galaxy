@@ -1,43 +1,167 @@
 package main
 
 import (
-	"bytes"
-	"crypto/rand"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/litl/galaxy/utils"
-
 	"github.com/litl/galaxy/log"
-	gotoolslog "github.com/mailgun/gotools-log"
-	"github.com/mailgun/vulcan"
-	"github.com/mailgun/vulcan/endpoint"
-	"github.com/mailgun/vulcan/loadbalance/roundrobin"
-	"github.com/mailgun/vulcan/location/httploc"
-	"github.com/mailgun/vulcan/request"
-	"github.com/mailgun/vulcan/route"
-	"github.com/mailgun/vulcan/route/hostroute"
 )
 
 var (
-	httpRouter *HTTPRouter
+	httpRouter *HostRouter
 )
 
 type RequestLogger struct{}
 
-type HTTPRouter struct {
+type HostRouter struct {
 	sync.Mutex
-	listener  net.Listener
-	router    *hostroute.HostRouter
-	balancers map[string]*roundrobin.RoundRobin
+	// the http frontend
+	server *http.Server
+
+	// track our listener so we can kill the server
+	listener net.Listener
 }
+
+func NewHostRouter() *HostRouter {
+	return &HostRouter{}
+}
+
+func (r *HostRouter) Service(vhost string) *Service {
+	return Registry.GetVHostService(vhost)
+}
+
+func (r *HostRouter) GetVhosts() []string {
+	return Registry.GetVHosts()
+}
+
+func (r *HostRouter) AddBackend(name, vhost, url string) error {
+	// backends handled through regular proxy mechanisms
+	return fmt.Errorf("NA")
+
+}
+
+func (r *HostRouter) RemoveBackend(vhost, url string) error {
+	// backends handled through regular proxy mechanisms
+	return fmt.Errorf("NA")
+}
+
+func (r *HostRouter) RemoveBackends(vhost string, addrs []string) {
+	// backends handled through regular proxy mechanisms
+}
+
+func (r *HostRouter) GetBackends(vhost string) []string {
+	// backends handled through regular proxy mechanisms
+	var backends []string
+
+	svc := Registry.GetVHostService(vhost)
+	if svc == nil {
+		return backends
+	}
+
+	svcCfg := svc.Config()
+	for _, b := range svcCfg.Backends {
+		backends = append(backends, b.Addr)
+	}
+
+	return backends
+}
+
+func (r *HostRouter) RemoveRouter(vhost string) {
+	r.Lock()
+	defer r.Unlock()
+	panic("NOT IMPLEMENTED")
+}
+
+func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var err error
+	host := req.Host
+	if strings.Contains(host, ":") {
+		host, _, err = net.SplitHostPort(req.Host)
+		if err != nil {
+			log.Warnf("%s", err)
+		}
+	}
+
+	svc := Registry.GetVHostService(host)
+
+	if svc != nil && svc.httpProxy != nil {
+		// The vhost has a service registered, give it to the proxy
+		svc.ServeHTTP(w, req)
+		return
+	}
+
+	r.adminHandler(w, req)
+}
+
+func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
+	r.Lock()
+	defer r.Unlock()
+
+	vhosts := Registry.GetVHosts()
+
+	if len(vhosts) == 0 {
+		http.Error(w, "no backends available", http.StatusServiceUnavailable)
+		return
+	}
+
+	http.Error(w, "ADMIN NOT IMPLEMENTED", http.StatusServiceUnavailable)
+	return
+}
+
+// Start the HTTP Router frontend.
+// Takes a channel to notify when the listener is started
+// to safely synchronize tests.
+func (r *HostRouter) Start(ready chan bool) {
+	//FIXME: poor locking strategy
+	r.Lock()
+
+	log.Printf("HTTP server listening at %s", listenAddr)
+
+	// Proxy acts as http handler:
+	r.server = &http.Server{
+		Addr:           listenAddr,
+		Handler:        r,
+		ReadTimeout:    60 * time.Second,
+		WriteTimeout:   60 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	var err error
+	r.listener, err = net.Listen("tcp", listenAddr)
+	if err != nil {
+		log.Errorf("%s", err)
+		r.Unlock()
+		return
+	}
+
+	r.Unlock()
+	if ready != nil {
+		close(ready)
+	}
+
+	// This will log a closed connection error every time we Stop
+	// but that's mostly a testing issue.
+	log.Errorf("%s", r.server.Serve(r.listener))
+}
+
+func (r *HostRouter) Stop() {
+	r.listener.Close()
+}
+
+func startHTTPServer() {
+	//FIXME: this global wg?
+	defer wg.Done()
+	httpRouter = NewHostRouter()
+	httpRouter.Start(nil)
+}
+
+/*
+
+TODO: implement more existing functionality
 
 func (r *RequestLogger) ObserveRequest(req request.Request) {}
 
@@ -96,265 +220,4 @@ func (s *SSLRedirect) ProcessRequest(r request.Request) (*http.Response, error) 
 
 func (s *SSLRedirect) ProcessResponse(r request.Request, a request.Attempt) {
 }
-
-func NewHTTPRouter() *HTTPRouter {
-	return &HTTPRouter{
-		balancers: make(map[string]*roundrobin.RoundRobin),
-	}
-}
-
-func (s *HTTPRouter) GetVhosts() []string {
-	vhosts := []string{}
-	s.Lock()
-	defer s.Unlock()
-	for k, _ := range s.balancers {
-		vhosts = append(vhosts, k)
-	}
-	return vhosts
-}
-
-func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
-
-	if vhost == "" || url == "" {
-		return nil
-	}
-
-	var err error
-
-	s.Lock()
-	defer s.Unlock()
-
-	balancer := s.balancers[vhost]
-
-	if balancer == nil {
-		// Create a round robin load balancer with some endpoints
-		balancer, err = roundrobin.NewRoundRobin()
-		if err != nil {
-			return err
-		}
-
-		// Create a http location with the load balancer we've just added
-		opts := httploc.Options{}
-		opts.TrustForwardHeader = true
-		opts.Timeouts.Read = 180 * time.Second
-		loc, err := httploc.NewLocationWithOptions(name, balancer, opts)
-		if err != nil {
-			return err
-		}
-		loc.GetObserverChain().Add("logger", &RequestLogger{})
-		loc.GetMiddlewareChain().Add("ssl", 0, &SSLRedirect{})
-
-		s.router.SetRouter(vhost, &route.ConstRouter{Location: loc})
-		log.Printf("Starting HTTP listener for %s", vhost)
-		s.balancers[vhost] = balancer
-	}
-
-	// Already registered?
-	if balancer.FindEndpointByUrl(url) != nil {
-		return nil
-	}
-	endpoint := endpoint.MustParseUrl(url)
-	log.Printf("Adding HTTP endpoint %s to %s", endpoint.GetUrl(), vhost)
-	err = balancer.AddEndpoint(endpoint)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
-	if vhost == "" || url == "" {
-		return nil
-	}
-
-	s.Lock()
-	balancer := s.balancers[vhost]
-	s.Unlock()
-	if balancer == nil {
-		return nil
-	}
-
-	endpoint := balancer.FindEndpointByUrl(url)
-	if endpoint == nil {
-		return nil
-	}
-	log.Printf("Removing HTTP endpoint %s from %s ", endpoint.GetUrl(), vhost)
-	balancer.RemoveEndpoint(endpoint)
-
-	endpoints := balancer.GetEndpoints()
-	println(len(endpoints))
-	if len(endpoints) == 0 {
-		s.RemoveRouter(vhost)
-	}
-	return nil
-}
-
-// Remove all backends for vhost that are not listed in addrs
-func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
-	if vhost == "" {
-		return
-	}
-
-	// Remove backends that are no longer registered
-	s.Lock()
-	balancer := s.balancers[vhost]
-	s.Unlock()
-	if balancer == nil {
-		return
-	}
-
-	endpoints := balancer.GetEndpoints()
-	for _, endpoint := range endpoints {
-		if !utils.StringInSlice(endpoint.GetUrl().String(), addrs) {
-			s.RemoveBackend(vhost, endpoint.GetUrl().String())
-		}
-	}
-}
-
-func (s *HTTPRouter) GetBackends(vhost string) []string {
-	backends := []string{}
-	if vhost == "" {
-		return backends
-	}
-
-	// Remove backends that are no longer registered
-	s.Lock()
-	balancer := s.balancers[vhost]
-	s.Unlock()
-	if balancer == nil {
-		return backends
-	}
-
-	endpoints := balancer.GetEndpoints()
-	for _, endpoint := range endpoints {
-		backends = append(backends, endpoint.GetUrl().String())
-	}
-
-	return backends
-}
-
-// Removes a virtual host router
-func (s *HTTPRouter) RemoveRouter(vhost string) {
-	s.Lock()
-	defer s.Unlock()
-
-	if vhost == "" {
-		return
-	}
-
-	log.Printf("Removing balancer for %s", vhost)
-	delete(s.balancers, vhost)
-	s.router.RemoveRouter(vhost)
-}
-
-func (s *HTTPRouter) adminHandler(w http.ResponseWriter, r *http.Request) {
-	s.Lock()
-	defer s.Unlock()
-
-	if len(s.balancers) == 0 {
-		w.WriteHeader(503)
-		return
-	}
-
-	keys := make([]string, 0, len(s.balancers))
-	for key := range s.balancers {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		balancer := s.balancers[k]
-		endpoints := balancer.GetEndpoints()
-		fmt.Fprintf(w, "%s\n", k)
-		for _, endpoint := range endpoints {
-			fmt.Fprintf(w, "  %s\t%d\t%d\t%0.2f\n", endpoint.GetUrl(), endpoint.GetOriginalWeight(), endpoint.GetEffectiveWeight(), endpoint.GetMeter().GetRate())
-		}
-	}
-}
-
-func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var err error
-		host := r.Host
-		if strings.Contains(host, ":") {
-			host, _, err = net.SplitHostPort(r.Host)
-			if err != nil {
-				log.Warnf("%s", err)
-				h.ServeHTTP(w, r)
-				return
-			}
-		}
-
-		s.Lock()
-		_, exists := s.balancers[host]
-		s.Unlock()
-
-		if !exists {
-			s.adminHandler(w, r)
-			return
-		}
-		h.ServeHTTP(w, r)
-	})
-}
-
-// Start the HTTP Router frontend.
-// Takes a channel to notify when the listener is started
-// to safely synchronize tests.
-func (s *HTTPRouter) Start(ready chan bool) {
-	//FIXME: poor locking strategy
-	s.Lock()
-
-	if debug {
-		// init the vulcan logging
-		gotoolslog.Init([]*gotoolslog.LogConfig{
-			&gotoolslog.LogConfig{Name: "console"},
-		})
-	}
-
-	log.Printf("HTTP server listening at %s", listenAddr)
-
-	s.router = hostroute.NewHostRouter()
-
-	proxy, err := vulcan.NewProxy(s.router)
-	if err != nil {
-		log.Fatalf("ERROR: %s", err)
-	}
-
-	// Proxy acts as http handler:
-	server := &http.Server{
-		Addr:           listenAddr,
-		Handler:        s.statusHandler(proxy),
-		ReadTimeout:    60 * time.Second,
-		WriteTimeout:   60 * time.Second,
-		MaxHeaderBytes: 1 << 20,
-	}
-
-	// make a separate listener so we can kill it with Stop()
-	s.listener, err = net.Listen("tcp", listenAddr)
-	if err != nil {
-		log.Errorf("%s", err)
-		s.Unlock()
-		return
-	}
-
-	s.Unlock()
-	if ready != nil {
-		close(ready)
-	}
-
-	// This will log a closed connection error every time we Stop
-	// but that's mostly a testing issue.
-	log.Errorf("%s", server.Serve(s.listener))
-}
-
-func (s *HTTPRouter) Stop() {
-	s.listener.Close()
-}
-
-func startHTTPServer() {
-	//FIXME: this global wg?
-	defer wg.Done()
-	httpRouter = NewHTTPRouter()
-	httpRouter.Start(nil)
-}
+*/

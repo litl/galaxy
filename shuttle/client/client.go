@@ -1,6 +1,9 @@
 package client
 
-import "reflect"
+import (
+	"encoding/json"
+	"reflect"
+)
 
 // The subset of fields we load and serialize for config.
 type BackendConfig struct {
@@ -10,26 +13,35 @@ type BackendConfig struct {
 	Weight    int    `json:"weight"`
 }
 
+func (b BackendConfig) Equal(other BackendConfig) bool {
+	if other.Weight == 0 {
+		other.Weight = 1
+	}
+	return b == other
+}
+
+func (b *BackendConfig) Marshal() []byte {
+	js, _ := json.Marshal(&b)
+	return js
+}
+
+func (b *BackendConfig) String() string {
+	return string(b.Marshal())
+}
+
 // Subset of service fields needed for configuration.
 type ServiceConfig struct {
 	Name          string          `json:"name"`
 	Addr          string          `json:"address"`
-	VirtualHosts  []string        `json:"virtual_hosts"`
-	Backends      []BackendConfig `json:"backends"`
-	Balance       string          `json:"balance"`
+	VirtualHosts  []string        `json:"virtual_hosts,omitempty"`
+	Backends      []BackendConfig `json:"backends,omitempty"`
+	Balance       string          `json:"balance,omitempty"`
 	CheckInterval int             `json:"check_interval"`
 	Fall          int             `json:"fall"`
 	Rise          int             `json:"rise"`
 	ClientTimeout int             `json:"client_timeout"`
 	ServerTimeout int             `json:"server_timeout"`
 	DialTimeout   int             `json:"connect_timeout"`
-}
-
-func (b BackendConfig) Equal(other BackendConfig) bool {
-	if other.Weight == 0 {
-		other.Weight = 1
-	}
-	return b == other
 }
 
 // Compare a service's settings, ignoring individual backends.
@@ -63,4 +75,13 @@ func (s ServiceConfig) Equal(other ServiceConfig) bool {
 	other.Backends = nil
 
 	return reflect.DeepEqual(s, other)
+}
+
+func (b *ServiceConfig) Marshal() []byte {
+	js, _ := json.Marshal(&b)
+	return js
+}
+
+func (b *ServiceConfig) String() string {
+	return string(b.Marshal())
 }

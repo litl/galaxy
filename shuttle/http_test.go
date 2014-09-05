@@ -3,12 +3,14 @@ package main
 import (
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 
 	. "gopkg.in/check.v1"
 )
 
 type HTTPBackendSuite struct {
 	servers []*testHTTPServer
+	httpSvr *httptest.Server
 }
 
 var _ = Suite(&HTTPBackendSuite{})
@@ -41,7 +43,9 @@ func checkHTTP(url, host, expected string, status int, c Tester) {
 }
 
 func (s *HTTPBackendSuite) SetUpTest(c *C) {
-	httpRouter = NewHTTPRouter()
+	s.httpSvr = httptest.NewServer(nil)
+
+	httpRouter = NewHostRouter()
 
 	ready := make(chan bool)
 	go httpRouter.Start(ready)
@@ -71,11 +75,5 @@ func (s *HTTPBackendSuite) TearDownTest(c *C) {
 func (s *HTTPBackendSuite) TestHTTPBackendTest(c *C) {
 	for _, s := range s.servers {
 		checkHTTP("http://"+s.addr+"/addr", s.addr, s.addr, 200, c)
-	}
-}
-
-func (s *HTTPBackendSuite) TestDefaultRouter(c *C) {
-	for _, s := range s.servers {
-		checkHTTP("http://127.0.0.1:8080/addr", s.name, s.addr, 200, c)
 	}
 }
