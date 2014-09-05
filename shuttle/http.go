@@ -1,6 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -16,6 +20,12 @@ var (
 
 type RequestLogger struct{}
 
+// This works along with the ServiceRegistry, and the individual Services to
+// route http requests based on the Host header. The Resgistry hold the mapping
+// of VHost names to individual services, and each service has it's own
+// ReeverseProxy to fulfill the request.
+// HostRouter contains the ReverseProxy http Listener, and has an http.Handler
+// to service the requets.
 type HostRouter struct {
 	sync.Mutex
 	// the http frontend
@@ -61,7 +71,16 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	http.Error(w, "ADMIN NOT IMPLEMENTED", http.StatusServiceUnavailable)
+	// TODO: better status lines
+	stats := Registry.Stats()
+	for _, svc := range stats {
+		fmt.Fprintf(w, "%v\n", svc.VirtualHosts)
+		for _, b := range svc.Backends {
+			js, _ := json.Marshal(b)
+			fmt.Fprintf(w, "  %s", string(js))
+		}
+	}
+
 	return
 }
 
@@ -112,35 +131,7 @@ func startHTTPServer() {
 	httpRouter.Start(nil)
 }
 
-/*
-
-TODO: implement more existing functionality
-
-func (r *RequestLogger) ObserveRequest(req request.Request) {}
-
-func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) {
-	err := ""
-	statusCode := ""
-	if a.GetError() != nil {
-		err = " err=" + a.GetError().Error()
-	}
-
-	if a.GetResponse() != nil {
-		statusCode = " status=" + strconv.FormatInt(int64(a.GetResponse().StatusCode), 10)
-	}
-
-	log.Printf("cnt=%d id=%s method=%s clientIp=%s url=%s backend=%s%s duration=%s agent=%s%s",
-		req.GetId(),
-		req.GetHttpRequest().Header.Get("X-Request-Id"),
-		req.GetHttpRequest().Method,
-		req.GetHttpRequest().RemoteAddr,
-		req.GetHttpRequest().Host+req.GetHttpRequest().RequestURI,
-		a.GetEndpoint(),
-		statusCode, a.GetDuration(),
-		req.GetHttpRequest().UserAgent(), err)
-}
-
-type SSLRedirect struct{}
+// TODO: request logging
 
 func genId() string {
 	b := make([]byte, 8)
@@ -148,29 +139,121 @@ func genId() string {
 	return fmt.Sprintf("%x", b)
 }
 
-func (s *SSLRedirect) ProcessRequest(r request.Request) (*http.Response, error) {
-	r.GetHttpRequest().Header.Set("X-Request-Id", genId())
+func sslRedirect(rw http.ResponseWriter, req *http.Request) bool {
+	req.Header.Set("X-Request-Id", genId())
 
-	if sslOnly && r.GetHttpRequest().Header.Get("X-Forwarded-Proto") != "https" {
-
-		resp := &http.Response{
-			Status:        "301 Moved Permanently",
-			StatusCode:    301,
-			Proto:         r.GetHttpRequest().Proto,
-			ProtoMajor:    r.GetHttpRequest().ProtoMajor,
-			ProtoMinor:    r.GetHttpRequest().ProtoMinor,
-			Body:          ioutil.NopCloser(bytes.NewBufferString("")),
-			ContentLength: 0,
-			Request:       r.GetHttpRequest(),
-			Header:        http.Header{},
-		}
-		resp.Header.Set("Location", "https://"+r.GetHttpRequest().Host+r.GetHttpRequest().RequestURI)
-		return resp, nil
+	if sslOnly && req.Header.Get("X-Forwarded-Proto") != "https" {
+		//TODO: verify RequestURI
+		http.Redirect(rw, req, "https://"+req.Host+req.RequestURI, http.StatusMovedPermanently)
+		return false
 	}
 
-	return nil, nil
+	return true
 }
 
-func (s *SSLRedirect) ProcessResponse(r request.Request, a request.Attempt) {
+type ErrorPage struct {
+	Location    string
+	StatusCodes []int
+	Body        []byte
 }
-*/
+
+// ErrorResponse provides vulcan middleware to process a response and insert
+// custom error pages for a virtual host.
+type ErrorResponse struct {
+	sync.Mutex
+
+	// map them by status for responses
+	pages map[int]*ErrorPage
+
+	// keep this handy to refresh the pages
+	client *http.Client
+}
+
+func NewErrorResponse() *ErrorResponse {
+	errors := &ErrorResponse{
+		pages: make(map[int]*ErrorPage),
+	}
+
+	// aggressively timeout connections
+	errors.client = &http.Client{
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout: 2 * time.Second,
+			}).Dial,
+			TLSHandshakeTimeout: 2 * time.Second,
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	return errors
+}
+
+// Get the error page body
+// We permanently cache error pages once we've seen them
+func (e *ErrorResponse) Get(code int) []byte {
+	e.Lock()
+	defer e.Unlock()
+
+	page, ok := e.pages[code]
+	if !ok {
+		// this is a code we don't handle
+		return nil
+	}
+
+	if page.Body != nil {
+		return page.Body
+	}
+
+	// we've never fetched this error
+	var err error
+	page.Body, err = e.fetch(page.Location)
+	if err != nil {
+		// TODO: log error?
+		return nil
+	}
+
+	return page.Body
+}
+
+func (e *ErrorResponse) fetch(location string) ([]byte, error) {
+	fmt.Println("FETCHING ERROR", location)
+	resp, err := e.client.Get(location)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+func (e *ErrorResponse) Add(codes []int, location string) {
+	e.Lock()
+	defer e.Unlock()
+
+	page := &ErrorPage{
+		StatusCodes: codes,
+		Location:    location,
+	}
+
+	for _, code := range codes {
+		e.pages[code] = page
+	}
+}
+
+func (e *ErrorResponse) CheckResponse(rw http.ResponseWriter, res *http.Response, resErr error) bool {
+	log.Println("DEBUG: StatusCode:", res.StatusCode)
+
+	errPage := e.Get(res.StatusCode)
+	if errPage != nil {
+		rw.WriteHeader(res.StatusCode)
+		rw.Write(errPage)
+		return false
+	}
+
+	return true
+}

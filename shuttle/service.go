@@ -48,8 +48,12 @@ type Service struct {
 
 	// reverse proxy for vhost routing
 	httpProxy *ReverseProxy
+
+	// Custom Pages to backend error responses
+	errorPages *ErrorResponse
 }
 
+// TODO: http stats
 // Stats returned about a service
 type ServiceStat struct {
 	Name          string        `json:"name"`
@@ -82,19 +86,20 @@ func NewService(cfg client.ServiceConfig) *Service {
 		ClientTimeout: time.Duration(cfg.ClientTimeout) * time.Millisecond,
 		ServerTimeout: time.Duration(cfg.ServerTimeout) * time.Millisecond,
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
+		errorPages:    NewErrorResponse(),
 	}
 
 	// create our reverse proxy, using our load-balancing Dial method
-	s.httpProxy = &ReverseProxy{
-		Director: func(req *http.Request) {
-			req.URL.Scheme = "http"
-			req.URL.Host = "127.0.0.1"
-		},
-		Transport: &http.Transport{
-			Dial:                s.Dial,
-			MaxIdleConnsPerHost: 10,
-		},
+	s.httpProxy = NewReverseProxy()
+	s.httpProxy.Director = func(req *http.Request) {
+		req.URL.Scheme = "http"
 	}
+	s.httpProxy.Transport = &http.Transport{
+		Dial:                s.Dial,
+		MaxIdleConnsPerHost: 10,
+	}
+
+	s.httpProxy.OnRequest = []RequestCallback{sslRedirect}
 
 	if s.CheckInterval == 0 {
 		s.CheckInterval = 2000
@@ -109,6 +114,12 @@ func NewService(cfg client.ServiceConfig) *Service {
 	for _, b := range cfg.Backends {
 		s.add(NewBackend(b))
 	}
+
+	for loc, codes := range cfg.ErrorPages {
+		s.errorPages.Add(codes, loc)
+	}
+
+	s.httpProxy.OnResponse = []ResponseCallback{s.errorPages.CheckResponse}
 
 	switch cfg.Balance {
 	case "RR", "":

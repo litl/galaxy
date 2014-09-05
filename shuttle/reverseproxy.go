@@ -1,13 +1,12 @@
 // Copyright 2011 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-
-// HTTP reverse proxy handler
-
 package main
 
 import (
+	"bytes"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -20,10 +19,19 @@ import (
 // flushLoop() goroutine.
 var onExitFlushLoop func()
 
+type RequestCallback func(http.ResponseWriter, *http.Request) bool
+type ResponseCallback func(http.ResponseWriter, *http.Response, error) bool
+
+// TODO: Create a ProxyRequest type that contains the http.Response, error,
+// http.ResponseWriter, and any statistics we may want to track.
+
 // ReverseProxy is an HTTP Handler that takes an incoming request and
 // sends it to another server, proxying the response back to the
 // client.
 type ReverseProxy struct {
+	// we need to protect our ErrorPage cache
+	sync.Mutex
+
 	// Director must be a function which modifies
 	// the request into a new request to be sent
 	// using Transport. Its response is then copied
@@ -39,6 +47,24 @@ type ReverseProxy struct {
 	// response body.
 	// If zero, no periodic flushing is done.
 	FlushInterval time.Duration
+
+	// These are called in order on before any request is made to the backend server.
+	// Each Callback must return true to continue processing.
+	OnRequest []RequestCallback
+
+	// These are called in order after the response is obtained from the remote
+	// server. The http.Response will be valid even on error. Callbacks may
+	// write directly to the client, or modify the response which will be
+	// written to the client if all callbacks complete with True. If any
+	// callback returns false to stop the chain, the response is discarded.
+	OnResponse []ResponseCallback
+}
+
+// Create a new ReverseProxy
+// This will still need to have a Director and Transport assigned.
+func NewReverseProxy() *ReverseProxy {
+	p := &ReverseProxy{}
+	return p
 }
 
 func singleJoiningSlash(a, b string) string {
@@ -75,6 +101,58 @@ var hopHeaders = []string{
 }
 
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+
+	for _, f := range p.OnRequest {
+		cont := f(rw, req)
+		if !cont {
+			return
+		}
+	}
+
+	res, err := p.doRequest(req)
+
+	if err != nil {
+		log.Printf("http: proxy error: %v", err)
+
+		// TODO: create a more-filled out response
+
+		// We want to ensure that we have a non-nil response even on error for
+		// the OnResponse callbacks.
+		res = &http.Response{
+			Header:     make(map[string][]string),
+			StatusCode: http.StatusBadGateway,
+			Status:     http.StatusText(http.StatusBadGateway),
+			Body:       ioutil.NopCloser(bytes.NewReader(nil)),
+		}
+	}
+
+	// make sure this is set correctly
+	res.Request = req
+
+	for _, f := range p.OnResponse {
+		cont := f(rw, res, err)
+		if !cont {
+			return
+		}
+	}
+
+	if err != nil {
+		return
+	}
+
+	defer res.Body.Close()
+
+	for _, h := range hopHeaders {
+		res.Header.Del(h)
+	}
+
+	copyHeader(rw.Header(), res.Header)
+
+	rw.WriteHeader(res.StatusCode)
+	p.copyResponse(rw, res.Body)
+}
+
+func (p *ReverseProxy) doRequest(req *http.Request) (*http.Response, error) {
 	transport := p.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -82,6 +160,9 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	outreq := new(http.Request)
 	*outreq = *req // includes shallow copies of maps, but okay
+
+	// Our Dialer will find the correct host, but we need a host for the URL
+	outreq.URL.Host = outreq.Host
 
 	p.Director(outreq)
 	outreq.Proto = "HTTP/1.1"
@@ -116,22 +197,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		outreq.Header.Set("X-Forwarded-For", clientIP)
 	}
 
-	res, err := transport.RoundTrip(outreq)
-	if err != nil {
-		log.Printf("http: proxy error: %v", err)
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer res.Body.Close()
-
-	for _, h := range hopHeaders {
-		res.Header.Del(h)
-	}
-
-	copyHeader(rw.Header(), res.Header)
-
-	rw.WriteHeader(res.StatusCode)
-	p.copyResponse(rw, res.Body)
+	return transport.RoundTrip(outreq)
 }
 
 func (p *ReverseProxy) copyResponse(dst io.Writer, src io.Reader) {

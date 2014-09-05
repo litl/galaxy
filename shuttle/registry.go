@@ -26,6 +26,7 @@ func marshal(i interface{}) []byte {
 	return append(jsonBytes, '\n')
 }
 
+//TODO: notify or prevent vhost name conflicts between services.
 // ServiceRegistry is a global container for all configured services.
 type ServiceRegistry struct {
 	sync.Mutex
@@ -33,12 +34,14 @@ type ServiceRegistry struct {
 	vhosts map[string]*Service
 }
 
+// Return a service by name.
 func (s *ServiceRegistry) GetService(name string) *Service {
 	s.Lock()
 	defer s.Unlock()
 	return s.svcs[name]
 }
 
+// Return a service that handles a particular vhost by name.
 func (s *ServiceRegistry) GetVHostService(name string) *Service {
 	s.Lock()
 	defer s.Unlock()

@@ -31,17 +31,18 @@ func (b *BackendConfig) String() string {
 
 // Subset of service fields needed for configuration.
 type ServiceConfig struct {
-	Name          string          `json:"name"`
-	Addr          string          `json:"address"`
-	VirtualHosts  []string        `json:"virtual_hosts,omitempty"`
-	Backends      []BackendConfig `json:"backends,omitempty"`
-	Balance       string          `json:"balance,omitempty"`
-	CheckInterval int             `json:"check_interval"`
-	Fall          int             `json:"fall"`
-	Rise          int             `json:"rise"`
-	ClientTimeout int             `json:"client_timeout"`
-	ServerTimeout int             `json:"server_timeout"`
-	DialTimeout   int             `json:"connect_timeout"`
+	Name          string           `json:"name"`
+	Addr          string           `json:"address"`
+	VirtualHosts  []string         `json:"virtual_hosts,omitempty"`
+	Backends      []BackendConfig  `json:"backends,omitempty"`
+	Balance       string           `json:"balance,omitempty"`
+	CheckInterval int              `json:"check_interval"`
+	Fall          int              `json:"fall"`
+	Rise          int              `json:"rise"`
+	ClientTimeout int              `json:"client_timeout"`
+	ServerTimeout int              `json:"server_timeout"`
+	DialTimeout   int              `json:"connect_timeout"`
+	ErrorPages    map[string][]int `json:"error_pages"`
 }
 
 // Compare a service's settings, ignoring individual backends.

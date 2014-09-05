@@ -38,6 +38,8 @@ func getService(w http.ResponseWriter, r *http.Request) {
 	w.Write(marshal(serviceStats))
 }
 
+// TODO: This is no longer called
+//       Verify we didn't miss any logic
 /*
 func updateVhosts(svcCfg client.ServiceConfig) {
 	// This creates map of vhosts we are expecting to be
@@ -108,6 +110,7 @@ func updateVhosts(svcCfg client.ServiceConfig) {
 	}
 }
 */
+
 // Update a service and/or backends.
 // Adding a `backends_only` query parameter will prevent the service from being
 // shutdown and replaced if the ServiceConfig is not identical..
