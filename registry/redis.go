@@ -237,7 +237,12 @@ func (r *RedisBackend) Get(key, field string) (string, error) {
 		return "", conn.Err()
 	}
 
-	return redis.String(conn.Do("HGET", key, field))
+	ret, err := redis.String(conn.Do("HGET", key, field))
+	if err != nil && err == redis.ErrNil {
+		return "", nil
+	}
+
+	return ret, err
 }
 
 func (r *RedisBackend) GetAll(key string) (map[string]string, error) {
