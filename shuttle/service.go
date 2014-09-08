@@ -35,6 +35,8 @@ type Service struct {
 	Sent          int64
 	Rcvd          int64
 	Errors        int64
+	HTTPConns     int64
+	HTTPErrors    int64
 
 	// Next returns the backends in priority order.
 	next func() []*Backend
@@ -51,9 +53,11 @@ type Service struct {
 
 	// Custom Pages to backend error responses
 	errorPages *ErrorResponse
+
+	// the original map of errors as loaded in by a config
+	errPagesCfg map[string][]int
 }
 
-// TODO: http stats
 // Stats returned about a service
 type ServiceStat struct {
 	Name          string        `json:"name"`
@@ -72,6 +76,8 @@ type ServiceStat struct {
 	Errors        int64         `json:"errors"`
 	Conns         int64         `json:"connections"`
 	Active        int64         `json:"active"`
+	HTTPConns     int64         `json:"http_connections"`
+	HTTPErrors    int64         `json:"http_errors"`
 }
 
 // Create a Service from a config struct
@@ -86,7 +92,8 @@ func NewService(cfg client.ServiceConfig) *Service {
 		ClientTimeout: time.Duration(cfg.ClientTimeout) * time.Millisecond,
 		ServerTimeout: time.Duration(cfg.ServerTimeout) * time.Millisecond,
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
-		errorPages:    NewErrorResponse(),
+		errorPages:    NewErrorResponse(cfg.ErrorPages),
+		errPagesCfg:   cfg.ErrorPages,
 	}
 
 	// create our reverse proxy, using our load-balancing Dial method
@@ -99,7 +106,8 @@ func NewService(cfg client.ServiceConfig) *Service {
 		MaxIdleConnsPerHost: 10,
 	}
 
-	s.httpProxy.OnRequest = []RequestCallback{sslRedirect}
+	s.httpProxy.OnRequest = []ProxyCallback{sslRedirect}
+	s.httpProxy.OnResponse = []ProxyCallback{s.errStats, s.errorPages.CheckResponse}
 
 	if s.CheckInterval == 0 {
 		s.CheckInterval = 2000
@@ -114,12 +122,6 @@ func NewService(cfg client.ServiceConfig) *Service {
 	for _, b := range cfg.Backends {
 		s.add(NewBackend(b))
 	}
-
-	for loc, codes := range cfg.ErrorPages {
-		s.errorPages.Add(codes, loc)
-	}
-
-	s.httpProxy.OnResponse = []ResponseCallback{s.errorPages.CheckResponse}
 
 	switch cfg.Balance {
 	case "RR", "":
@@ -148,6 +150,8 @@ func (s *Service) Stats() ServiceStat {
 		ClientTimeout: int(s.ClientTimeout / time.Millisecond),
 		ServerTimeout: int(s.ServerTimeout / time.Millisecond),
 		DialTimeout:   int(s.DialTimeout / time.Millisecond),
+		HTTPConns:     s.HTTPConns,
+		HTTPErrors:    s.HTTPErrors,
 	}
 
 	for _, b := range s.Backends {
@@ -177,6 +181,7 @@ func (s *Service) Config() client.ServiceConfig {
 		ClientTimeout: int(s.ClientTimeout / time.Millisecond),
 		ServerTimeout: int(s.ServerTimeout / time.Millisecond),
 		DialTimeout:   int(s.DialTimeout / time.Millisecond),
+		ErrorPages:    s.errPagesCfg,
 	}
 	for _, b := range s.Backends {
 		config.Backends = append(config.Backends, b.Config())
@@ -300,7 +305,14 @@ func (s *Service) Dial(nw, addr string) (net.Conn, error) {
 			continue
 		}
 
-		return srvConn, nil
+		conn := &shuttleConn{
+			TCPConn:   srvConn.(*net.TCPConn),
+			rwTimeout: s.ServerTimeout,
+			written:   &b.Sent,
+			read:      &b.Rcvd,
+		}
+
+		return conn, nil
 	}
 
 	return nil, fmt.Errorf("no backend for %s", s.Name)
@@ -351,14 +363,26 @@ func (s *Service) stop() {
 
 // Provide a ServeHTTP method for out ReverseProxy
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// TODO: insert custom error pages!
+	atomic.AddInt64(&s.HTTPConns, 1)
 	s.httpProxy.ServeHTTP(w, r)
+}
+
+func (s *Service) errStats(pr *ProxyRequest) bool {
+	if pr.ProxyError != nil {
+		atomic.AddInt64(&s.HTTPErrors, 1)
+	}
+	return true
 }
 
 // A net.Listener that provides a read/write timeout
 type timeoutListener struct {
 	net.Listener
 	rwTimeout time.Duration
+
+	// these aren't reported yet, but our new counting connections need to
+	// update something
+	read    int64
+	written int64
 }
 
 func newTimeoutListener(addr string, timeout time.Duration) (net.Listener, error) {
@@ -381,9 +405,11 @@ func (l *timeoutListener) Accept() (net.Conn, error) {
 
 	c, ok := conn.(*net.TCPConn)
 	if ok {
-		tc := &timeoutConn{
+		tc := &shuttleConn{
 			TCPConn:   c,
 			rwTimeout: l.rwTimeout,
+			read:      &l.read,
+			written:   &l.written,
 		}
 		return tc, nil
 	}

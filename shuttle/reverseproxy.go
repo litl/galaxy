@@ -19,11 +19,7 @@ import (
 // flushLoop() goroutine.
 var onExitFlushLoop func()
 
-type RequestCallback func(http.ResponseWriter, *http.Request) bool
-type ResponseCallback func(http.ResponseWriter, *http.Response, error) bool
-
-// TODO: Create a ProxyRequest type that contains the http.Response, error,
-// http.ResponseWriter, and any statistics we may want to track.
+type ProxyCallback func(*ProxyRequest) bool
 
 // ReverseProxy is an HTTP Handler that takes an incoming request and
 // sends it to another server, proxying the response back to the
@@ -50,14 +46,14 @@ type ReverseProxy struct {
 
 	// These are called in order on before any request is made to the backend server.
 	// Each Callback must return true to continue processing.
-	OnRequest []RequestCallback
+	OnRequest []ProxyCallback
 
 	// These are called in order after the response is obtained from the remote
 	// server. The http.Response will be valid even on error. Callbacks may
 	// write directly to the client, or modify the response which will be
 	// written to the client if all callbacks complete with True. If any
 	// callback returns false to stop the chain, the response is discarded.
-	OnResponse []ResponseCallback
+	OnResponse []ProxyCallback
 }
 
 // Create a new ReverseProxy
@@ -102,45 +98,40 @@ var hopHeaders = []string{
 
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
+	pr := &ProxyRequest{
+		ResponseWriter: rw,
+		Request:        req,
+	}
+
 	for _, f := range p.OnRequest {
-		cont := f(rw, req)
+		cont := f(pr)
 		if !cont {
 			return
 		}
 	}
 
+	pr.StartTime = time.Now()
 	res, err := p.doRequest(req)
+
+	pr.Response = res
+	pr.ProxyError = err
+	pr.FinishTime = time.Now()
 
 	if err != nil {
 		log.Printf("http: proxy error: %v", err)
 
-		// TODO: create a more-filled out response
-
 		// We want to ensure that we have a non-nil response even on error for
-		// the OnResponse callbacks.
+		// the OnResponse callbacks. If the Callback chain completes, this will
+		// be written to the client.
 		res = &http.Response{
 			Header:     make(map[string][]string),
 			StatusCode: http.StatusBadGateway,
 			Status:     http.StatusText(http.StatusBadGateway),
-			Body:       ioutil.NopCloser(bytes.NewReader(nil)),
+			// this ensures Body isn't nil
+			Body: ioutil.NopCloser(bytes.NewReader(nil)),
 		}
+		pr.Response = res
 	}
-
-	// make sure this is set correctly
-	res.Request = req
-
-	for _, f := range p.OnResponse {
-		cont := f(rw, res, err)
-		if !cont {
-			return
-		}
-	}
-
-	if err != nil {
-		return
-	}
-
-	defer res.Body.Close()
 
 	for _, h := range hopHeaders {
 		res.Header.Del(h)
@@ -148,6 +139,15 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	copyHeader(rw.Header(), res.Header)
 
+	for _, f := range p.OnResponse {
+		cont := f(pr)
+		if !cont {
+			return
+		}
+	}
+
+	// calls all completed with true, write the Response back to the client.
+	defer res.Body.Close()
 	rw.WriteHeader(res.StatusCode)
 	p.copyResponse(rw, res.Body)
 }
@@ -255,3 +255,23 @@ func (m *maxLatencyWriter) flushLoop() {
 }
 
 func (m *maxLatencyWriter) stop() { m.done <- true }
+
+// Proxy Request stores a client request, backend response, error, and any
+// stats needed to complete a round trip.
+type ProxyRequest struct {
+	// The incoming request from the client
+	Request *http.Request
+
+	// The Client's ResponseWriter
+	ResponseWriter http.ResponseWriter
+
+	// The response, if any,  from the backend server
+	Response *http.Response
+
+	// The error, if any, from the http request to the backend server
+	ProxyError error
+
+	// Duration of the backend request
+	StartTime  time.Time
+	FinishTime time.Time
+}

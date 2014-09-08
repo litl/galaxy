@@ -204,9 +204,11 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 	// but all updates will be done atomically.
 
 	// TODO: might not be TCP? (this would panic)
-	bConn := &timeoutConn{
+	bConn := &shuttleConn{
 		TCPConn:   srvConn.(*net.TCPConn),
 		rwTimeout: b.rwTimeout,
+		read:      &b.Rcvd,
+		written:   &b.Sent,
 	}
 
 	// TODO: No way to force shutdown. Do we need it, or should we always just
@@ -241,40 +243,10 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 	<-waitFor
 }
 
-// An io.Copy that updates the count during transfers.
-func countingCopy(dst io.Writer, src io.Reader, written *int64) (err error) {
-	buf := make([]byte, 32*1024)
-	for {
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				atomic.AddInt64(written, int64(nw))
-			}
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if er == io.EOF {
-			break
-		}
-		if er != nil {
-			err = er
-			break
-		}
-	}
-	return err
-}
-
 // This does the actual data transfer.
 // The broker only closes the Read side on error.
 func broker(dst, src net.Conn, srcClosed chan bool, written, errors *int64) {
-	err := countingCopy(dst, src, written)
+	_, err := io.Copy(dst, src)
 	if err != nil {
 		atomic.AddInt64(errors, 1)
 		log.Printf("Copy error: %s", err)
@@ -289,27 +261,36 @@ func broker(dst, src net.Conn, srcClosed chan bool, written, errors *int64) {
 // A net.Conn that sets a deadline for every read or write operation.
 // This will allow the server to close connections that are broken at the
 // network level.
-type timeoutConn struct {
+type shuttleConn struct {
 	*net.TCPConn
 	rwTimeout time.Duration
+
+	// count bytes read and written through this connection
+	written *int64
+	read    *int64
 }
 
-func (c *timeoutConn) Read(b []byte) (int, error) {
+func (c *shuttleConn) Read(b []byte) (int, error) {
 	if c.rwTimeout > 0 {
 		err := c.TCPConn.SetReadDeadline(time.Now().Add(c.rwTimeout))
 		if err != nil {
 			return 0, err
 		}
 	}
-	return c.TCPConn.Read(b)
+	n, err := c.TCPConn.Read(b)
+	atomic.AddInt64(c.read, int64(n))
+	return n, err
 }
 
-func (c *timeoutConn) Write(b []byte) (int, error) {
+func (c *shuttleConn) Write(b []byte) (int, error) {
 	if c.rwTimeout > 0 {
 		err := c.TCPConn.SetWriteDeadline(time.Now().Add(c.rwTimeout))
 		if err != nil {
 			return 0, err
 		}
 	}
-	return c.TCPConn.Write(b)
+
+	n, err := c.TCPConn.Write(b)
+	atomic.AddInt64(c.written, int64(n))
+	return n, err
 }

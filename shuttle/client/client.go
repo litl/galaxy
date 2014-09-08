@@ -5,6 +5,12 @@ import (
 	"reflect"
 )
 
+var (
+	// slice these up to get ranges of codes for error pages
+	Status400s = []int{400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418}
+	Status500s = []int{500, 501, 502, 503, 504, 505}
+)
+
 // The subset of fields we load and serialize for config.
 type BackendConfig struct {
 	Name      string `json:"name"`
@@ -64,11 +70,20 @@ func (s ServiceConfig) Equal(other ServiceConfig) bool {
 	if s.CheckInterval == 0 {
 		s.CheckInterval = 2000
 	}
+	if other.CheckInterval == 0 {
+		other.CheckInterval = 2000
+	}
 	if s.Rise == 0 {
 		s.Rise = 2
 	}
+	if other.Rise == 0 {
+		other.Rise = 2
+	}
 	if s.Fall == 0 {
 		s.Fall = 2
+	}
+	if other.Fall == 0 {
+		other.Fall = 2
 	}
 
 	// We handle backends separately

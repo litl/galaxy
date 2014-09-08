@@ -45,6 +45,22 @@ func registerShuttle(c *cli.Context) {
 			Addr: r.ExternalAddr(),
 		}
 		service.Backends = append(service.Backends, b)
+
+		// lookup the VIRTUAL_HOST_%d environment variables and load them into the ServiceConfig
+		errorPages := make(map[string][]int)
+		for vhostCode, url := range r.ErrorPages {
+			code := 0
+			n, err := fmt.Sscanf(vhostCode, "VIRTUAL_HOST_%d", &code)
+			if err != nil || n == 0 {
+				continue
+			}
+
+			errorPages[url] = append(errorPages[url], code)
+		}
+
+		if len(errorPages) > 0 {
+			service.ErrorPages = errorPages
+		}
 	}
 
 	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}

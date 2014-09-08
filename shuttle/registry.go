@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/litl/galaxy/log"
@@ -130,12 +131,24 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		service.remove(name)
 	}
 
+	if currentCfg.Equal(newCfg) {
+		log.Debugf("Service Unchanged %s", service.Name)
+		return nil
+	}
+
 	// remove existing vhost entries for this service, and add new ones
 	for _, host := range service.VirtualHosts {
 		delete(s.vhosts, host)
 	}
 	for _, host := range newCfg.VirtualHosts {
 		s.vhosts[host] = service
+	}
+
+	// replace error pages if there's any change
+	if !reflect.DeepEqual(service.errPagesCfg, newCfg.ErrorPages) {
+		log.Debugf("Updating ErrorPages")
+		service.errPagesCfg = newCfg.ErrorPages
+		service.errorPages.Update(newCfg.ErrorPages)
 	}
 
 	service.VirtualHosts = newCfg.VirtualHosts

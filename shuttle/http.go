@@ -74,6 +74,9 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 	// TODO: better status lines
 	stats := Registry.Stats()
 	for _, svc := range stats {
+		if len(svc.VirtualHosts) == 0 {
+			continue
+		}
 		fmt.Fprintf(w, "%v\n", svc.VirtualHosts)
 		for _, b := range svc.Backends {
 			js, _ := json.Marshal(b)
@@ -81,8 +84,11 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	fmt.Fprintf(w, "\n")
 	return
 }
+
+// TODO: collect more stats?
 
 // Start the HTTP Router frontend.
 // Takes a channel to notify when the listener is started
@@ -139,12 +145,13 @@ func genId() string {
 	return fmt.Sprintf("%x", b)
 }
 
-func sslRedirect(rw http.ResponseWriter, req *http.Request) bool {
-	req.Header.Set("X-Request-Id", genId())
+func sslRedirect(pr *ProxyRequest) bool {
+	pr.Request.Header.Set("X-Request-Id", genId())
 
-	if sslOnly && req.Header.Get("X-Forwarded-Proto") != "https" {
+	if sslOnly && pr.Request.Header.Get("X-Forwarded-Proto") != "https" {
 		//TODO: verify RequestURI
-		http.Redirect(rw, req, "https://"+req.Host+req.RequestURI, http.StatusMovedPermanently)
+		redirLoc := "https://" + pr.Request.Host + pr.Request.RequestURI
+		http.Redirect(pr.ResponseWriter, pr.Request, redirLoc, http.StatusMovedPermanently)
 		return false
 	}
 
@@ -169,9 +176,13 @@ type ErrorResponse struct {
 	client *http.Client
 }
 
-func NewErrorResponse() *ErrorResponse {
+func NewErrorResponse(pages map[string][]int) *ErrorResponse {
 	errors := &ErrorResponse{
 		pages: make(map[int]*ErrorPage),
+	}
+
+	if pages != nil {
+		errors.Update(pages)
 	}
 
 	// aggressively timeout connections
@@ -208,7 +219,7 @@ func (e *ErrorResponse) Get(code int) []byte {
 	var err error
 	page.Body, err = e.fetch(page.Location)
 	if err != nil {
-		// TODO: log error?
+		log.Warnf("Could not fetch %s: %s", page.Location, err)
 		return nil
 	}
 
@@ -216,7 +227,7 @@ func (e *ErrorResponse) Get(code int) []byte {
 }
 
 func (e *ErrorResponse) fetch(location string) ([]byte, error) {
-	fmt.Println("FETCHING ERROR", location)
+	log.Debugf("Fetching error page from %s", location)
 	resp, err := e.client.Get(location)
 	if err != nil {
 		return nil, err
@@ -231,27 +242,30 @@ func (e *ErrorResponse) fetch(location string) ([]byte, error) {
 	return body, nil
 }
 
-func (e *ErrorResponse) Add(codes []int, location string) {
+func (e *ErrorResponse) Update(pages map[string][]int) {
 	e.Lock()
 	defer e.Unlock()
 
-	page := &ErrorPage{
-		StatusCodes: codes,
-		Location:    location,
-	}
+	e.pages = make(map[int]*ErrorPage)
 
-	for _, code := range codes {
-		e.pages[code] = page
+	for loc, codes := range pages {
+		page := &ErrorPage{
+			StatusCodes: codes,
+			Location:    loc,
+		}
+
+		for _, code := range codes {
+			e.pages[code] = page
+		}
 	}
 }
 
-func (e *ErrorResponse) CheckResponse(rw http.ResponseWriter, res *http.Response, resErr error) bool {
-	log.Println("DEBUG: StatusCode:", res.StatusCode)
+func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
 
-	errPage := e.Get(res.StatusCode)
+	errPage := e.Get(pr.Response.StatusCode)
 	if errPage != nil {
-		rw.WriteHeader(res.StatusCode)
-		rw.Write(errPage)
+		pr.ResponseWriter.WriteHeader(pr.Response.StatusCode)
+		pr.ResponseWriter.Write(errPage)
 		return false
 	}
 
