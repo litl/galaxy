@@ -56,6 +56,9 @@ type Service struct {
 
 	// the original map of errors as loaded in by a config
 	errPagesCfg map[string][]int
+
+	// net.Dialer so we don't need to allocate one every time
+	dialer *net.Dialer
 }
 
 // Stats returned about a service
@@ -94,6 +97,12 @@ func NewService(cfg client.ServiceConfig) *Service {
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
 		errorPages:    NewErrorResponse(cfg.ErrorPages),
 		errPagesCfg:   cfg.ErrorPages,
+	}
+
+	// TODO: insert this into the backends too
+	s.dialer = &net.Dialer{
+		Timeout:   s.DialTimeout,
+		KeepAlive: 30 * time.Second,
 	}
 
 	// create our reverse proxy, using our load-balancing Dial method
@@ -289,33 +298,53 @@ func (s *Service) run() {
 	}()
 }
 
-// A service also from a net.Dialer interface
-// We ignore the parameters, and return a tcp connection the the proper backend
-// based on the load balancing algorithm selected.
-func (s *Service) Dial(nw, addr string) (net.Conn, error) {
+// Return the addresses of the current backends in the order they would be balanced
+func (s *Service) NextAddrs() []string {
 	backends := s.next()
+	addrs := make([]string, len(backends))
+	for i, b := range backends {
+		addrs[i] = b.Addr
+	}
+	return addrs
+}
 
-	// Try the first backend given, but if that fails, cycle through them all
-	// to make a best effort to connect the client.
-	for _, b := range backends {
-		srvConn, err := net.DialTimeout("tcp", b.Addr, b.dialTimeout)
-		if err != nil {
-			log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, b.Name, err)
-			atomic.AddInt64(&b.Errors, 1)
-			continue
+// Dial a backend by address.
+// This way we can wrap the connection to provide our timeout settings, as well
+// as hook it into the backend stats.
+// We return an error if we don't have a backend which matches.
+// If Dial returns an error, we wrap it in DialError, so that a ReverseProxy
+// can determine if it's safe to call RoundTrip again on a new host.
+func (s *Service) Dial(nw, addr string) (net.Conn, error) {
+	s.Lock()
+
+	var backend *Backend
+	for _, b := range s.Backends {
+		if b.Addr == addr {
+			backend = b
+			break
 		}
+	}
+	s.Unlock()
 
-		conn := &shuttleConn{
-			TCPConn:   srvConn.(*net.TCPConn),
-			rwTimeout: s.ServerTimeout,
-			written:   &b.Sent,
-			read:      &b.Rcvd,
-		}
-
-		return conn, nil
+	if backend == nil {
+		return nil, DialError{fmt.Errorf("no backend matching %s", addr)}
 	}
 
-	return nil, fmt.Errorf("no backend for %s", s.Name)
+	srvConn, err := s.dialer.Dial("tcp", backend.Addr)
+	if err != nil {
+		log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, backend.Name, err)
+		atomic.AddInt64(&backend.Errors, 1)
+		return nil, DialError{err}
+	}
+
+	conn := &shuttleConn{
+		TCPConn:   srvConn.(*net.TCPConn),
+		rwTimeout: s.ServerTimeout,
+		written:   &backend.Sent,
+		read:      &backend.Rcvd,
+	}
+
+	return conn, nil
 }
 
 func (s *Service) connect(cliConn net.Conn) {
@@ -364,7 +393,7 @@ func (s *Service) stop() {
 // Provide a ServeHTTP method for out ReverseProxy
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt64(&s.HTTPConns, 1)
-	s.httpProxy.ServeHTTP(w, r)
+	s.httpProxy.ServeHTTP(w, r, s.NextAddrs())
 }
 
 func (s *Service) errStats(pr *ProxyRequest) bool {

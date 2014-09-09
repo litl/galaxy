@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,6 +21,13 @@ import (
 var onExitFlushLoop func()
 
 type ProxyCallback func(*ProxyRequest) bool
+
+// A Dialer can return an error wrapped in DialError to notify the ReverseProxy
+// that an error occured during the initial TCP connection, and it's safe to
+// try again.
+type DialError struct {
+	error
+}
 
 // ReverseProxy is an HTTP Handler that takes an incoming request and
 // sends it to another server, proxying the response back to the
@@ -96,11 +104,13 @@ var hopHeaders = []string{
 	"Upgrade",
 }
 
-func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+// This probably shouldn't be called ServeHTTP anymore
+func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request, addrs []string) {
 
 	pr := &ProxyRequest{
 		ResponseWriter: rw,
 		Request:        req,
+		Backends:       addrs,
 	}
 
 	for _, f := range p.OnRequest {
@@ -111,7 +121,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	pr.StartTime = time.Now()
-	res, err := p.doRequest(req)
+	res, err := p.doRequest(pr)
 
 	pr.Response = res
 	pr.ProxyError = err
@@ -152,17 +162,14 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	p.copyResponse(rw, res.Body)
 }
 
-func (p *ReverseProxy) doRequest(req *http.Request) (*http.Response, error) {
+func (p *ReverseProxy) doRequest(pr *ProxyRequest) (*http.Response, error) {
 	transport := p.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
 
 	outreq := new(http.Request)
-	*outreq = *req // includes shallow copies of maps, but okay
-
-	// Our Dialer will find the correct host, but we need a host for the URL
-	outreq.URL.Host = outreq.Host
+	*outreq = *pr.Request // includes shallow copies of maps, but okay
 
 	p.Director(outreq)
 	outreq.Proto = "HTTP/1.1"
@@ -180,14 +187,14 @@ func (p *ReverseProxy) doRequest(req *http.Request) (*http.Response, error) {
 		if outreq.Header.Get(h) != "" {
 			if !copiedHeaders {
 				outreq.Header = make(http.Header)
-				copyHeader(outreq.Header, req.Header)
+				copyHeader(outreq.Header, pr.Request.Header)
 				copiedHeaders = true
 			}
 			outreq.Header.Del(h)
 		}
 	}
 
-	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+	if clientIP, _, err := net.SplitHostPort(pr.Request.RemoteAddr); err == nil {
 		// If we aren't the first proxy retain prior
 		// X-Forwarded-For information as a comma+space
 		// separated list and fold multiple headers into one.
@@ -197,7 +204,31 @@ func (p *ReverseProxy) doRequest(req *http.Request) (*http.Response, error) {
 		outreq.Header.Set("X-Forwarded-For", clientIP)
 	}
 
-	return transport.RoundTrip(outreq)
+	var err error
+	var resp *http.Response
+	for _, addr := range pr.Backends {
+		outreq.URL.Host = addr
+		resp, err = transport.RoundTrip(outreq)
+		if err == nil {
+			return resp, nil
+		}
+
+		if _, ok := err.(DialError); ok {
+			// only Dial failed, so we can try again
+			continue
+		}
+
+		// not a DialError, so make this terminal.
+		return nil, err
+	}
+
+	// In this case, our last backend returned a DialError
+	if err != nil {
+		return nil, err
+	}
+
+	// probably shouldn't get here
+	return nil, fmt.Errorf("no http backends available")
 }
 
 func (p *ReverseProxy) copyResponse(dst io.Writer, src io.Reader) {
@@ -270,6 +301,9 @@ type ProxyRequest struct {
 
 	// The error, if any, from the http request to the backend server
 	ProxyError error
+
+	// backend hosts we can use
+	Backends []string
 
 	// Duration of the backend request
 	StartTime  time.Time

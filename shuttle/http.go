@@ -137,8 +137,6 @@ func startHTTPServer() {
 	httpRouter.Start(nil)
 }
 
-// TODO: request logging
-
 func genId() string {
 	b := make([]byte, 8)
 	rand.Read(b)
@@ -274,17 +272,30 @@ func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
 
 func logProxyRequest(pr *ProxyRequest) bool {
 	// TODO: we may to be able to switch this off
-	log.Printf("id=%s method=%s clientIp=%s url=%s%s backend=%s%s duration=%s agent=%s, err=%v",
-		pr.Request.Header.Get("X-Request-Id"),
-		pr.Request.Method,
-		pr.Request.RemoteAddr,
-		pr.Request.Host,
-		pr.Request.RequestURI,
-		pr.Response.Request.Host,
-		pr.Response.Request.RequestURI,
-		pr.FinishTime.Sub(pr.StartTime),
-		pr.Request.UserAgent(),
-		pr.ProxyError)
+	if pr == nil {
+		return true
+	}
 
+	var id, method, clientIP, url, backend, agent string
+
+	duration := pr.FinishTime.Sub(pr.StartTime)
+
+	if pr.Request != nil {
+		id = pr.Request.Header.Get("X-Request-Id")
+		method = pr.Request.Method
+		clientIP = pr.Request.RemoteAddr
+		url = pr.Request.Host + pr.Request.RequestURI
+		agent = pr.Request.UserAgent()
+	}
+
+	if pr.Response != nil && pr.Response.Request != nil && pr.Response.Request.URL != nil {
+		backend = pr.Response.Request.URL.Host
+	}
+
+	err := fmt.Sprintf("%v", pr.ProxyError)
+
+	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s duration=%s agent=%s, err=%s"
+
+	log.Printf(fmtStr, id, method, clientIP, url, backend, duration, agent, err)
 	return true
 }
