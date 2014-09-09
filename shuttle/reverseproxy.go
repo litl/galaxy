@@ -265,7 +265,7 @@ type ProxyRequest struct {
 	// The Client's ResponseWriter
 	ResponseWriter http.ResponseWriter
 
-	// The response, if any,  from the backend server
+	// The response, if any, from the backend server
 	Response *http.Response
 
 	// The error, if any, from the http request to the backend server

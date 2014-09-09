@@ -107,7 +107,7 @@ func NewService(cfg client.ServiceConfig) *Service {
 	}
 
 	s.httpProxy.OnRequest = []ProxyCallback{sslRedirect}
-	s.httpProxy.OnResponse = []ProxyCallback{s.errStats, s.errorPages.CheckResponse}
+	s.httpProxy.OnResponse = []ProxyCallback{logProxyRequest, s.errStats, s.errorPages.CheckResponse}
 
 	if s.CheckInterval == 0 {
 		s.CheckInterval = 2000

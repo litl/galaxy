@@ -271,3 +271,20 @@ func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
 
 	return true
 }
+
+func logProxyRequest(pr *ProxyRequest) bool {
+	// TODO: we may to be able to switch this off
+	log.Printf("id=%s method=%s clientIp=%s url=%s%s backend=%s%s duration=%s agent=%s, err=%v",
+		pr.Request.Header.Get("X-Request-Id"),
+		pr.Request.Method,
+		pr.Request.RemoteAddr,
+		pr.Request.Host,
+		pr.Request.RequestURI,
+		pr.Response.Request.Host,
+		pr.Response.Request.RequestURI,
+		pr.FinishTime.Sub(pr.StartTime),
+		pr.Request.UserAgent(),
+		pr.ProxyError)
+
+	return true
+}

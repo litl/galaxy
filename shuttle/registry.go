@@ -121,8 +121,11 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 			continue
 		}
 
-		log.Debugf("Adding Backend %s/%s", service.Name, newBackend.Name)
+		// we need to remove and re-add this backend
+		log.Debugf("Updating Backend %s/%s", service.Name, newBackend.Name)
+		service.remove(newBackend.Name)
 		service.add(NewBackend(newBackend))
+		delete(currentBackends, newBackend.Name)
 	}
 
 	// remove any left over backends
