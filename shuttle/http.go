@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -78,7 +77,7 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "%v\n", svc.VirtualHosts)
 		for _, b := range svc.Backends {
 			js, _ := json.Marshal(b)
-			fmt.Fprintf(w, "  %s", string(js))
+			fmt.Fprintf(w, "\t%s\n", string(js))
 		}
 	}
 
@@ -133,12 +132,6 @@ func startHTTPServer() {
 	defer wg.Done()
 	httpRouter = NewHostRouter()
 	httpRouter.Start(nil)
-}
-
-func genId() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)
 }
 
 func sslRedirect(pr *ProxyRequest) bool {

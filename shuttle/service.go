@@ -15,7 +15,7 @@ import (
 var (
 	Registry = ServiceRegistry{
 		svcs:   make(map[string]*Service),
-		vhosts: make(map[string]*Service),
+		vhosts: make(map[string]*VirtualHost),
 	}
 )
 

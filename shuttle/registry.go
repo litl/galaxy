@@ -1,9 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"sync"
 
 	"github.com/litl/galaxy/log"
@@ -17,22 +17,94 @@ var (
 	ErrDuplicateBackend = fmt.Errorf("backend already exists")
 )
 
-// marshal whatever we've got with out default indentation
-// swallowing errors.
-func marshal(i interface{}) []byte {
-	jsonBytes, err := json.MarshalIndent(i, "", "  ")
-	if err != nil {
-		log.Println("error encoding json:", err)
+type VirtualHost struct {
+	sync.Mutex
+	Name string
+	// All services registered under this vhost name.
+	services []*Service
+	// The last one we returned so we can RoundRobin them.
+	last int
+}
+
+func (v *VirtualHost) Len() int {
+	v.Lock()
+	defer v.Unlock()
+	return len(v.services)
+}
+
+// Insert a service
+// do nothing if the service already is registered
+func (v *VirtualHost) Add(svc *Service) {
+	v.Lock()
+	defer v.Unlock()
+	for _, s := range v.services {
+		if s.Name == svc.Name {
+			log.Debugf("Service %s already registered in VirtualHost %s", svc.Name, v.Name)
+			return
+		}
 	}
-	return append(jsonBytes, '\n')
+
+	// TODO: is this the best place to log these?
+	svcCfg := svc.Config()
+	for _, backend := range svcCfg.Backends {
+		log.Printf("Adding HTTP endpoint http://%s to %s", backend.Addr, v.Name)
+	}
+	v.services = append(v.services, svc)
+}
+
+func (v *VirtualHost) Remove(svc *Service) {
+	v.Lock()
+	defer v.Unlock()
+
+	found := -1
+	for i, s := range v.services {
+		if s.Name == svc.Name {
+			found = i
+			break
+		}
+	}
+
+	if found < 0 {
+		log.Debugf("Service %s not found under VirtualHost %s", svc.Name, v.Name)
+		return
+	}
+
+	// safe way to get the backends info for logging
+	svcCfg := svc.Config()
+
+	// Now removing this Service
+	for _, backend := range svcCfg.Backends {
+		log.Printf("Removing HTTP endpoint http://%s from %s", backend.Addr, v.Name)
+	}
+
+	v.services = append(v.services[:found], v.services[found+1:]...)
+}
+
+// Return a *Service for this VirtualHost
+func (v *VirtualHost) Service() *Service {
+	v.Lock()
+	defer v.Unlock()
+
+	if len(v.services) == 0 {
+		log.Warnf("No Services registered for VirtualHost %s", v.Name)
+		return nil
+	}
+
+	v.last++
+	if v.last >= len(v.services) {
+		v.last = 0
+	}
+
+	return v.services[v.last]
 }
 
 //TODO: notify or prevent vhost name conflicts between services.
 // ServiceRegistry is a global container for all configured services.
 type ServiceRegistry struct {
 	sync.Mutex
-	svcs   map[string]*Service
-	vhosts map[string]*Service
+	svcs map[string]*Service
+	// Multiple services may respond from a single vhost
+	vhosts map[string]*VirtualHost
 }
 
 // Return a service by name.
@@ -47,7 +119,10 @@ func (s *ServiceRegistry) GetVHostService(name string) *Service {
 	s.Lock()
 	defer s.Unlock()
 
-	return s.vhosts[name]
+	if vhost := s.vhosts[name]; vhost != nil {
+		return vhost.Service()
+	}
+	return nil
 }
 
 func (s *ServiceRegistry) VHostsLen() int {
@@ -71,8 +146,13 @@ func (s *ServiceRegistry) AddService(cfg client.ServiceConfig) error {
 	service := NewService(cfg)
 	s.svcs[service.Name] = service
 
-	for _, host := range cfg.VirtualHosts {
-		s.vhosts[host] = service
+	for _, name := range cfg.VirtualHosts {
+		vhost := s.vhosts[name]
+		if vhost == nil {
+			vhost = &VirtualHost{Name: name}
+			s.vhosts[name] = vhost
+		}
+		vhost.Add(service)
 	}
 
 	return service.start()
@@ -121,6 +201,7 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		log.Debugf("Updating Backend %s/%s", service.Name, newBackend.Name)
 		service.remove(newBackend.Name)
 		service.add(NewBackend(newBackend))
+
 		delete(currentBackends, newBackend.Name)
 	}
 
@@ -135,14 +216,6 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		return nil
 	}
 
-	// remove existing vhost entries for this service, and add new ones
-	for _, host := range service.VirtualHosts {
-		delete(s.vhosts, host)
-	}
-	for _, host := range newCfg.VirtualHosts {
-		s.vhosts[host] = service
-	}
-
 	// replace error pages if there's any change
 	if !reflect.DeepEqual(service.errPagesCfg, newCfg.ErrorPages) {
 		log.Debugf("Updating ErrorPages")
@@ -150,8 +223,68 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		service.errorPages.Update(newCfg.ErrorPages)
 	}
 
-	service.VirtualHosts = newCfg.VirtualHosts
+	s.updateVHosts(service, newCfg.VirtualHosts)
 	return nil
+}
+
+// update the VirtualHost entries for this service
+// only to be called from UpdateService.
+func (s *ServiceRegistry) updateVHosts(service *Service, newHosts []string) {
+	// We could just clear the vhosts and the new list since we're doing
+	// this all while the registry is locked, but because we want sane log
+	// messages about adding remove endpoints, we have to diff the slices
+	// anyway.
+
+	oldHosts := service.VirtualHosts
+	sort.Strings(oldHosts)
+	sort.Strings(newHosts)
+
+	// find the relative compliments of each set of hostnames
+	var remove, add []string
+	i, j := 0, 0
+	for i < len(oldHosts) && j < len(newHosts) {
+		if oldHosts[i] != newHosts[j] {
+			if oldHosts[i] < newHosts[j] {
+				// oldHosts[i] can't be in newHosts
+				remove = append(remove, oldHosts[i])
+				i++
+				continue
+			} else {
+				// newHosts[j] can't be in oldHosts
+				add = append(add, newHosts[j])
+				j++
+				continue
+			}
+		}
+		i++
+		j++
+	}
+	if i < len(oldHosts) {
+		// there's more!
+		remove = append(remove, oldHosts[i:]...)
+	}
+	if j < len(newHosts) {
+		add = append(add, newHosts[j:]...)
+	}
+
+	// remove existing vhost entries for this service, and add new ones
+	for _, name := range remove {
+		vhost := s.vhosts[name]
+		if vhost != nil {
+			vhost.Remove(service)
+		}
+	}
+	for _, name := range add {
+		vhost := s.vhosts[name]
+		if vhost == nil {
+			vhost = &VirtualHost{Name: name}
+			s.vhosts[name] = vhost
+		}
+		vhost.Add(service)
+	}
+
+	// and replace the list
+	service.VirtualHosts = newHosts
 }
 
 func (s *ServiceRegistry) RemoveService(name string) error {
