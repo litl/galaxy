@@ -296,3 +296,19 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 
 	return appList, nil
 }
+
+func (r *ServiceRegistry) ListEnvs() ([]string, error) {
+	envs := []string{}
+	apps, err := r.backend.Keys(path.Join("*", "*", "environment"))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, app := range apps {
+		parts := strings.Split(app, "/")
+		if !utils.StringInSlice(parts[0], envs) {
+			envs = append(envs, parts[0])
+		}
+	}
+	return envs, nil
+}

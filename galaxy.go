@@ -116,28 +116,44 @@ func appExists(app string) (bool, error) {
 }
 
 func appList(c *cli.Context) {
-	ensureEnvArg(c)
+
 	initRegistry(c)
 
-	appList, err := serviceRegistry.ListApps()
-	if err != nil {
-		log.Printf("ERROR: %s\n", err)
-		return
+	envs := []string{utils.GalaxyEnv(c)}
+
+	if utils.GalaxyEnv(c) == "" {
+		var err error
+		envs, err = serviceRegistry.ListEnvs()
+		if err != nil {
+			log.Printf("ERROR: %s\n", err)
+		}
 	}
 
-	columns := []string{"NAME | VERSION | PORT | REGISTERED | ENV"}
-	for _, app := range appList {
-		name := app.Name
-		port := app.EnvGet("GALAXY_PORT")
-		versionDeployed := app.Version()
-		registered := serviceRegistry.CountInstances(name)
+	columns := []string{"ENV | NAME | VERSION | PORT | REGISTERED"}
 
-		columns = append(columns, strings.Join([]string{
-			name,
-			versionDeployed,
-			port,
-			strconv.Itoa(registered),
-			utils.GalaxyEnv(c)}, " | "))
+	for _, env := range envs {
+
+		serviceRegistry.Env = env
+		appList, err := serviceRegistry.ListApps()
+		if err != nil {
+			log.Printf("ERROR: %s\n", err)
+			return
+		}
+
+		for _, app := range appList {
+			name := app.Name
+			port := app.EnvGet("GALAXY_PORT")
+			versionDeployed := app.Version()
+			registered := serviceRegistry.CountInstances(name)
+
+			columns = append(columns, strings.Join([]string{
+				env,
+				name,
+				versionDeployed,
+				port,
+				strconv.Itoa(registered),
+			}, " | "))
+		}
 	}
 	output, _ := columnize.SimpleFormat(columns)
 	log.Println(output)
