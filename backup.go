@@ -44,7 +44,7 @@ func appBackup(c *cli.Context) {
 	if len(toBackup) == 0 {
 		appList, err := serviceRegistry.ListApps()
 		if err != nil {
-			log.Fatal("ERROR: %s\n", err)
+			log.Fatalf("ERROR: %s\n", err)
 		}
 
 		for _, app := range appList {

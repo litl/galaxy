@@ -68,20 +68,17 @@ func initRuntime(c *cli.Context) {
 func ensureAppParam(c *cli.Context, command string) string {
 	app := c.Args().First()
 	if app == "" {
-		log.Println("ERROR: app name missing")
 		cli.ShowCommandHelp(c, command)
-		os.Exit(1)
+		log.Fatal("ERROR: app name missing")
 	}
 
 	exists, err := appExists(app)
 	if err != nil {
-		log.Printf("ERROR: can't deteremine if %s exists: %s\n", app, err)
-		os.Exit(1)
+		log.Fatalf("ERROR: can't deteremine if %s exists: %s\n", app, err)
 	}
 
 	if !exists {
-		log.Printf("ERROR: %s does not exist. Create it first.\n", app)
-		os.Exit(1)
+		log.Fatalf("ERROR: %s does not exist. Create it first.\n", app)
 	}
 
 	return app
@@ -89,13 +86,13 @@ func ensureAppParam(c *cli.Context, command string) string {
 
 func ensureEnvArg(c *cli.Context) {
 	if utils.GalaxyEnv(c) == "" {
-		log.Fatalln("ERROR: env is required.  Pass --env or set GALAXY_ENV")
+		log.Fatal("ERROR: env is required.  Pass --env or set GALAXY_ENV")
 	}
 }
 
 func ensurePoolArg(c *cli.Context) {
 	if utils.GalaxyPool(c) == "" {
-		log.Fatalln("ERROR: pool is required.  Pass --pool or set GALAXY_POOL")
+		log.Fatal("ERROR: pool is required.  Pass --pool or set GALAXY_POOL")
 	}
 }
 
@@ -125,7 +122,8 @@ func appList(c *cli.Context) {
 		var err error
 		envs, err = serviceRegistry.ListEnvs()
 		if err != nil {
-			log.Printf("ERROR: %s\n", err)
+			log.Fatalf("ERROR: %s", err)
+			return
 		}
 	}
 
@@ -136,7 +134,7 @@ func appList(c *cli.Context) {
 		serviceRegistry.Env = env
 		appList, err := serviceRegistry.ListApps()
 		if err != nil {
-			log.Printf("ERROR: %s\n", err)
+			log.Fatalf("ERROR: %s", err)
 			return
 		}
 
@@ -165,9 +163,8 @@ func appCreate(c *cli.Context) {
 
 	app := c.Args().First()
 	if app == "" {
-		log.Println("ERROR: app name missing")
 		cli.ShowCommandHelp(c, "app:create")
-		os.Exit(1)
+		log.Fatal("ERROR: app name missing")
 	}
 
 	// Don't allow deleting runtime hosts entries
@@ -178,7 +175,7 @@ func appCreate(c *cli.Context) {
 	created, err := serviceRegistry.CreateApp(app)
 
 	if err != nil {
-		log.Printf("ERROR: Could not create app: %s\n", err)
+		log.Fatalf("ERROR: Could not create app: %s\n", err)
 		return
 	}
 	if created {
@@ -201,7 +198,7 @@ func appDelete(c *cli.Context) {
 
 	deleted, err := serviceRegistry.DeleteApp(app)
 	if err != nil {
-		log.Printf("ERROR: Could not delete app: %s\n", err)
+		log.Fatalf("ERROR: Could not delete app: %s\n", err)
 		return
 	}
 	if deleted {
@@ -232,18 +229,18 @@ func appDeploy(c *cli.Context) {
 
 	image, err := serviceRuntime.PullImage(version, "", c.Bool("force"))
 	if image == nil || err != nil {
-		log.Printf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
+		log.Fatalf("ERROR: Unable to pull %s. Has it been released yet?\n", version)
 		return
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to deploy app: %s.\n", err)
+		log.Fatalf("ERROR: Unable to deploy app: %s.\n", err)
 		return
 	}
 
 	if svcCfg == nil {
-		log.Printf("ERROR: App %s does not exist. Create it first.\n", app)
+		log.Fatalf("ERROR: App %s does not exist. Create it first.\n", app)
 		return
 	}
 
@@ -257,11 +254,11 @@ func appDeploy(c *cli.Context) {
 
 	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		log.Printf("ERROR: Could not store version: %s\n", err)
+		log.Fatalf("ERROR: Could not store version: %s\n", err)
 		return
 	}
 	if !updated {
-		log.Printf("%s NOT deployed.", version)
+		log.Fatalf("%s NOT deployed.", version)
 		return
 	}
 	log.Printf("Deployed %s.\n", version)
@@ -274,7 +271,7 @@ func appRestart(c *cli.Context) {
 
 	err := serviceRegistry.NotifyRestart(app)
 	if err != nil {
-		log.Printf("ERROR: Could not restart %s: %s\n", app, err)
+		log.Fatalf("ERROR: Could not restart %s: %s", app, err)
 		return
 	}
 }
@@ -287,19 +284,19 @@ func appRun(c *cli.Context) {
 	app := ensureAppParam(c, "app:run")
 
 	if len(c.Args()) < 2 {
-		log.Printf("ERROR: Missing command to run.\n")
+		log.Fatalf("ERROR: Missing command to run.\n")
 		return
 	}
 
 	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to run command: %s.\n", err)
+		log.Fatalf("ERROR: Unable to run command: %s.\n", err)
 		return
 	}
 
 	_, err = serviceRuntime.RunCommand(serviceConfig, c.Args()[1:])
 	if err != nil {
-		log.Printf("ERROR: Could not start container: %s\n", err)
+		log.Fatalf("ERROR: Could not start container: %s\n", err)
 		return
 	}
 }
@@ -313,13 +310,13 @@ func appShell(c *cli.Context) {
 
 	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to run command: %s.\n", err)
+		log.Fatalf("ERROR: Unable to run command: %s.\n", err)
 		return
 	}
 
 	err = serviceRuntime.StartInteractive(serviceConfig)
 	if err != nil {
-		log.Printf("ERROR: Could not start container: %s\n", err)
+		log.Fatalf("ERROR: Could not start container: %s\n", err)
 		return
 	}
 }
@@ -331,12 +328,12 @@ func configList(c *cli.Context) {
 
 	cfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to list config: %s.\n", err)
+		log.Fatalf("ERROR: Unable to list config: %s.\n", err)
 		return
 	}
 
 	if cfg == nil {
-		log.Printf("ERROR: Unable to list config for %s.\n", app)
+		log.Fatalf("ERROR: Unable to list config for %s.\n", app)
 		return
 	}
 
@@ -362,7 +359,7 @@ func configSet(c *cli.Context) {
 	if len(args) == 0 {
 		bytes, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
-			log.Printf("ERROR: Unable to read stdin: %s.\n", err)
+			log.Fatalf("ERROR: Unable to read stdin: %s.\n", err)
 			return
 
 		}
@@ -370,13 +367,13 @@ func configSet(c *cli.Context) {
 	}
 
 	if len(args) == 0 {
-		log.Printf("ERROR: No config values specified.\n")
+		log.Fatalf("ERROR: No config values specified.\n")
 		return
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to set config: %s.\n", err)
+		log.Fatalf("ERROR: Unable to set config: %s.\n", err)
 		return
 	}
 
@@ -392,7 +389,7 @@ func configSet(c *cli.Context) {
 		}
 
 		if !strings.Contains(arg, "=") {
-			log.Printf("ERROR: bad config variable format: %s\n", arg)
+			log.Fatalf("ERROR: bad config variable format: %s\n", arg)
 			cli.ShowCommandHelp(c, "config")
 			return
 
@@ -418,7 +415,7 @@ func configSet(c *cli.Context) {
 
 	updated, err = serviceRegistry.SetServiceConfig(svcCfg)
 	if err != nil {
-		log.Printf("ERROR: Unable to set config: %s.\n", err)
+		log.Fatalf("ERROR: Unable to set config: %s.\n", err)
 		return
 	}
 
@@ -435,13 +432,13 @@ func configUnset(c *cli.Context) {
 	app := ensureAppParam(c, "config:unset")
 
 	if len(c.Args().Tail()) == 0 {
-		log.Printf("ERROR: No config values specified.\n")
+		log.Fatalf("ERROR: No config values specified.\n")
 		return
 	}
 
 	svcCfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to unset config: %s.\n", err)
+		log.Fatalf("ERROR: Unable to unset config: %s.\n", err)
 		return
 	}
 
@@ -484,7 +481,7 @@ func configGet(c *cli.Context) {
 
 	cfg, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to get config: %s.\n", err)
+		log.Fatalf("ERROR: Unable to get config: %s.\n", err)
 		return
 	}
 
@@ -525,19 +522,19 @@ func poolAssign(c *cli.Context) {
 
 	exists, err := serviceRegistry.PoolExists()
 	if err != nil {
-		log.Printf("ERROR: Could not assign app: %s\n", err)
+		log.Fatalf("ERROR: Could not assign app: %s\n", err)
 		return
 	}
 
 	if !exists {
-		log.Printf("ERROR: Pool %s does not exist.  Create it first.\n", utils.GalaxyPool(c))
+		log.Fatalf("ERROR: Pool %s does not exist.  Create it first.\n", utils.GalaxyPool(c))
 		return
 	}
 
 	created, err := serviceRegistry.AssignApp(app)
 
 	if err != nil {
-		log.Printf("ERROR: Could not assign app: %s\n", err)
+		log.Fatalf("ERROR: Could not assign app: %s\n", err)
 		return
 	}
 	if created {
@@ -554,9 +551,8 @@ func poolUnassign(c *cli.Context) {
 
 	app := c.Args().First()
 	if app == "" {
-		log.Println("ERROR: app name missing")
 		cli.ShowCommandHelp(c, "pool:assign")
-		os.Exit(1)
+		log.Fatal("ERROR: app name missing")
 	}
 
 	// Don't allow deleting runtime hosts entries
@@ -566,7 +562,7 @@ func poolUnassign(c *cli.Context) {
 
 	deleted, err := serviceRegistry.UnassignApp(app)
 	if err != nil {
-		log.Printf("ERROR: Could not unassign app: %s\n", err)
+		log.Fatalf("ERROR: Could not unassign app: %s\n", err)
 		return
 	}
 
@@ -583,7 +579,7 @@ func poolCreate(c *cli.Context) {
 	initRegistry(c)
 	created, err := serviceRegistry.CreatePool(utils.GalaxyPool(c))
 	if err != nil {
-		log.Printf("ERROR: Could not create pool: %s\n", err)
+		log.Fatalf("ERROR: Could not create pool: %s\n", err)
 		return
 	}
 
@@ -619,7 +615,7 @@ func poolList(c *cli.Context) {
 		var err error
 		envs, err = serviceRegistry.ListEnvs()
 		if err != nil {
-			log.Printf("ERROR: %s\n", err)
+			log.Fatalf("ERROR: %s\n", err)
 		}
 	}
 
@@ -629,7 +625,7 @@ func poolList(c *cli.Context) {
 		serviceRegistry.Env = env
 		pools, err := serviceRegistry.ListPools()
 		if err != nil {
-			log.Printf("ERROR: cannot list pools: %s\n", err)
+			log.Fatalf("ERROR: cannot list pools: %s\n", err)
 			return
 		}
 
@@ -659,7 +655,7 @@ func poolDelete(c *cli.Context) {
 	initRegistry(c)
 	created, err := serviceRegistry.DeletePool(utils.GalaxyPool(c))
 	if err != nil {
-		log.Printf("ERROR: Could not delete pool: %s\n", err)
+		log.Fatalf("ERROR: Could not delete pool: %s\n", err)
 		return
 	}
 
@@ -679,7 +675,7 @@ func loadConfig() {
 	_, err := os.Stat(configFile)
 	if err == nil {
 		if _, err := toml.DecodeFile(configFile, &config); err != nil {
-			log.Printf("ERROR: Unable to logout: %s\n", err)
+			log.Fatalf("ERROR: Unable to logout: %s\n", err)
 			return
 		}
 	}
@@ -693,7 +689,7 @@ func pgPsql(c *cli.Context) {
 
 	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
 	if err != nil {
-		log.Printf("ERROR: Unable to run command: %s.\n", err)
+		log.Fatalf("ERROR: Unable to run command: %s.\n", err)
 		return
 	}
 

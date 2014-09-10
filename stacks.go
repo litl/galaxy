@@ -161,12 +161,12 @@ func jsonFromArg(arg string) ([]byte, error) {
 func stackInit(c *cli.Context) {
 	stackName := c.Args().First()
 	if stackName == "" {
-		log.Fatal("stack name required")
+		log.Fatal("ERROR: stack name required")
 	}
 
 	exists, err := stack.Exists(stackName)
 	if exists {
-		log.Fatalf("stack %s already exists", stackName)
+		log.Fatalf("ERROR: stack %s already exists", stackName)
 	} else if err != nil {
 		log.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func stackInit(c *cli.Context) {
 
 	_, err = stack.Create(stackName, stackTmpl, opts)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("ERROR: %s", err)
 	}
 	log.Println("Initializing stack", stackName)
 }
@@ -189,14 +189,14 @@ func stackUpdate(c *cli.Context) {
 
 	stackName := c.Args().First()
 	if stackName == "" {
-		log.Fatal("stack name required")
+		log.Fatal("ERROR: stack name required")
 	}
 
 	params := make(map[string]string)
 	if p := c.String("parameters"); p != "" {
 		paramJSON, err := jsonFromArg(p)
 		if err != nil {
-			log.Fatal("Error decoding parameters:", err)
+			log.Fatal("ERROR: decoding parameters:", err)
 		}
 
 		err = json.Unmarshal(paramJSON, &params)
@@ -209,7 +209,7 @@ func stackUpdate(c *cli.Context) {
 	if template != "" {
 		stackTmpl, err = jsonFromArg(template)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("ERROR: %s", err)
 		}
 	}
 
@@ -233,7 +233,7 @@ func stackUpdate(c *cli.Context) {
 	// this reads the Parameters supplied for our current stack for us
 	shared, err := stack.GetSharedResources(stackName)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("ERROR: %s", err)
 	}
 
 	// add any missing parameters to our
@@ -272,7 +272,7 @@ func stackTemplate(c *cli.Context) {
 	if err != nil {
 		if err, ok := err.(*aws.Error); ok {
 			if err.Code == "ValidationError" && strings.Contains(err.Message, "does not exist") {
-				log.Fatalf("Stack '%s' does not exist", stackName)
+				log.Fatalf("ERROR: Stack '%s' does not exist", stackName)
 			}
 		}
 		log.Fatal(err)
@@ -330,18 +330,12 @@ func setCPUAutoScale(c *cli.Context, pool *stack.Pool) {
 
 func stackCreatePool(c *cli.Context) {
 	var err error
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 
 	poolName := utils.GalaxyPool(c)
-	if poolName == "" {
-		log.Fatal("pool name required")
-	}
-
 	baseStack := getBase(c)
-
 	poolEnv := utils.GalaxyEnv(c)
-	if poolEnv == "" {
-		log.Fatal("env required")
-	}
 
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
 
@@ -494,9 +488,9 @@ func waitAndDelete(name string) {
 	// we need to get the StackID in order to lookup DELETE events
 	desc, err := stack.DescribeStacks(name)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("ERROR: %s", err)
 	} else if len(desc.Stacks) == 0 {
-		log.Fatal("could not describe stack:", name)
+		log.Fatal("ERROR: could not describe stack:", name)
 	}
 
 	stackId := desc.Stacks[0].Id
@@ -521,17 +515,12 @@ func waitAndDelete(name string) {
 
 // Update an existing Pool Stack
 func stackUpdatePool(c *cli.Context) {
+	ensureEnvArg(c)
+	ensurePoolArg(c)
+
 	poolName := utils.GalaxyPool(c)
-	if poolName == "" {
-		log.Fatal("pool name required")
-	}
-
 	baseStack := getBase(c)
-
 	poolEnv := utils.GalaxyEnv(c)
-	if poolEnv == "" {
-		log.Fatal("env required")
-	}
 
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
 
@@ -588,7 +577,7 @@ func stackUpdatePool(c *cli.Context) {
 	httpPort := c.Int("http-port")
 
 	if (sslCert != "" || httpPort > 0) && elb == nil {
-		log.Fatal("Pool does not have an ELB")
+		log.Fatal("ERROR: Pool does not have an ELB")
 	}
 
 	if elb != nil {
@@ -643,19 +632,14 @@ func stackUpdatePool(c *cli.Context) {
 }
 
 func stackDeletePool(c *cli.Context) {
-	poolName := utils.GalaxyPool(c)
-	if poolName == "" {
-		log.Fatal("pool name required")
-	}
+	ensureEnvArg(c)
+	ensurePoolArg(c)
 
 	baseStack := getBase(c)
 
-	poolEnv := utils.GalaxyEnv(c)
-	if poolEnv == "" {
-		log.Fatal("env required")
-	}
-
-	stackName := fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName)
+	stackName := fmt.Sprintf("%s-%s-%s", baseStack,
+		utils.GalaxyEnv(c),
+		utils.GalaxyPool(c))
 
 	waitAndDelete(stackName)
 }
@@ -664,7 +648,7 @@ func stackDeletePool(c *cli.Context) {
 func stackDelete(c *cli.Context) {
 	stackName := c.Args().First()
 	if stackName == "" {
-		log.Fatal("stack name required")
+		log.Fatal("ERROR: stack name required")
 	}
 
 	ok := c.Bool("y")
@@ -684,7 +668,7 @@ func stackList(c *cli.Context) {
 		log.Fatal(err)
 	}
 
-	stacks := []string{"stack | status | "}
+	stacks := []string{"STACK | STATUS | "}
 
 	for _, stack := range descResp.Stacks {
 		s := fmt.Sprintf("%s | %s | %s", stack.Name, stack.Status, stack.StatusReason)
@@ -700,7 +684,7 @@ func stackList(c *cli.Context) {
 func stackListEvents(c *cli.Context) {
 	stackName := c.Args().First()
 	if stackName == "" {
-		log.Fatal("stack name required")
+		log.Fatal("ERROR: stack name required")
 	}
 
 	resp, err := stack.DescribeStackEvents(stackName)
@@ -714,7 +698,7 @@ func stackListEvents(c *cli.Context) {
 	}
 
 	firstTS := resp.Events[0].Timestamp.Add(-24 * time.Hour)
-	lines := []string{"timestamp | logicalID | status | reason"}
+	lines := []string{"TIMESTAMP | Logical ID | STATUS | REASON"}
 	format := "%s | %s | %s | %s"
 
 	for i, e := range resp.Events {
