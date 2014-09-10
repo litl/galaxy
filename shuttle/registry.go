@@ -224,6 +224,7 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 	}
 
 	s.updateVHosts(service, newCfg.VirtualHosts)
+
 	return nil
 }
 

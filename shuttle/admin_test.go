@@ -308,5 +308,112 @@ func (s *HTTPSuite) TestMultiServiceVHost(c *C) {
 		checkHTTP("http://"+listenAddr+"/addr", "test-vhost", srv.addr, 200, c)
 		checkHTTP("http://"+listenAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
 	}
+}
 
+func (s *HTTPSuite) TestAddRemoveBackends(c *C) {
+	svcCfg := client.ServiceConfig{
+		Name: "VHostTest",
+		Addr: "127.0.0.1:9000",
+	}
+
+	err := Registry.AddService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	for _, srv := range s.backendServers {
+		cfg := client.BackendConfig{
+			Addr: srv.addr,
+			Name: srv.addr,
+		}
+		svcCfg.Backends = append(svcCfg.Backends, cfg)
+	}
+
+	err = Registry.UpdateService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	cfg := Registry.Config()
+	if len(cfg) != 1 || len(cfg[0].Backends) != 4 {
+		c.Errorf("we should have 1 service, we have %d", len(cfg))
+		c.Errorf("we should have 4 backends, we have %d", len(cfg[0].Backends))
+	}
+
+	svcCfg.Backends = svcCfg.Backends[:3]
+	err = Registry.UpdateService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	cfg = Registry.Config()
+	if len(cfg) != 1 || len(cfg[0].Backends) != 3 {
+		c.Errorf("we should have 1 service, we have %d", len(cfg))
+		c.Errorf("we should have 3 backends, we have %d", len(cfg[0].Backends))
+	}
+
+}
+
+func (s *HTTPSuite) TestHTTPAddRemoveBackends(c *C) {
+	svcCfg := client.ServiceConfig{
+		Name: "VHostTest",
+		Addr: "127.0.0.1:9000",
+	}
+
+	err := Registry.AddService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	for _, srv := range s.backendServers {
+		cfg := client.BackendConfig{
+			Addr: srv.addr,
+			Name: srv.addr,
+		}
+		svcCfg.Backends = append(svcCfg.Backends, cfg)
+	}
+
+	req, _ := http.NewRequest("PUT", s.httpSvr.URL+"/VHostTest", bytes.NewReader(svcCfg.Marshal()))
+	_, err = http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	cfg := Registry.Config()
+	if len(cfg) != 1 || len(cfg[0].Backends) != 4 {
+		c.Errorf("we should have 1 service, we have %d", len(cfg))
+		c.Errorf("we should have 4 backends, we have %d", len(cfg[0].Backends))
+	}
+
+	// remove a backend from the config and submit it again
+	svcCfg.Backends = svcCfg.Backends[:3]
+	err = Registry.UpdateService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	req, _ = http.NewRequest("PUT", s.httpSvr.URL+"/VHostTest", bytes.NewReader(svcCfg.Marshal()))
+	_, err = http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// now check the config via what's returned from the http server
+	resp, err := http.Get(s.httpSvr.URL + "/_config")
+	if err != nil {
+		c.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	cfg = []client.ServiceConfig{}
+	body, _ := ioutil.ReadAll(resp.Body)
+	err = json.Unmarshal(body, &cfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	if len(cfg) != 1 || len(cfg[0].Backends) != 3 {
+		c.Errorf("we should have 1 service, we have %d", len(cfg))
+		c.Errorf("we should have 3 backends, we have %d", len(cfg[0].Backends))
+	}
 }
