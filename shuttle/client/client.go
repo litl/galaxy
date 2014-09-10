@@ -48,7 +48,7 @@ type ServiceConfig struct {
 	ClientTimeout int              `json:"client_timeout"`
 	ServerTimeout int              `json:"server_timeout"`
 	DialTimeout   int              `json:"connect_timeout"`
-	ErrorPages    map[string][]int `json:"error_pages"`
+	ErrorPages    map[string][]int `json:"error_pages,omitempty"`
 }
 
 // Compare a service's settings, ignoring individual backends.

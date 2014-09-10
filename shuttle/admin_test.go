@@ -6,18 +6,16 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/litl/galaxy/shuttle/client"
 	. "gopkg.in/check.v1"
 )
 
 type HTTPSuite struct {
-	servers     []*testServer
-	httpServers []*testHTTPServer
-	httpSvr     *httptest.Server
+	servers        []*testServer
+	backendServers []*testHTTPServer
+	httpSvr        *httptest.Server
 }
 
 var _ = Suite(&HTTPSuite{})
@@ -25,7 +23,7 @@ var _ = Suite(&HTTPSuite{})
 func (s *HTTPSuite) SetUpSuite(c *C) {
 	Registry = ServiceRegistry{
 		svcs:   make(map[string]*Service),
-		vhosts: make(map[string]*Service),
+		vhosts: make(map[string]*VirtualHost),
 	}
 
 	addHandlers()
@@ -58,7 +56,7 @@ func (s *HTTPSuite) SetUpTest(c *C) {
 			c.Fatal(err)
 		}
 
-		s.httpServers = append(s.httpServers, server)
+		s.backendServers = append(s.backendServers, server)
 	}
 }
 
@@ -70,11 +68,11 @@ func (s *HTTPSuite) TearDownTest(c *C) {
 
 	s.servers = s.servers[:0]
 
-	for _, s := range s.httpServers {
+	for _, s := range s.backendServers {
 		s.Close()
 	}
 
-	s.httpServers = s.httpServers[:0]
+	s.backendServers = s.backendServers[:0]
 
 	for _, svc := range Registry.svcs {
 		Registry.RemoveService(svc.Name)
@@ -203,7 +201,7 @@ func (s *HTTPSuite) TestRouter(c *C) {
 		VirtualHosts: []string{"test-vhost"},
 	}
 
-	for _, srv := range s.httpServers {
+	for _, srv := range s.backendServers {
 		cfg := client.BackendConfig{
 			Addr: srv.addr,
 			Name: srv.addr,
@@ -216,35 +214,99 @@ func (s *HTTPSuite) TestRouter(c *C) {
 		c.Fatal(err)
 	}
 
-	svc := Registry.GetVHostService("test-vhost")
-	// force a new backend connection for each client
-	svc.httpProxy.Transport.(*http.Transport).DisableKeepAlives = true
-
-	for _, srv := range s.httpServers {
-		//		checkHTTP("http://"+listenAddr+"/addr", "test-vhost", srv.addr, 200, c)
-		req, err := http.NewRequest("GET", "http://"+listenAddr+"/addr", nil)
-		if err != nil {
-			c.Fatal(err)
-		}
-
-		req.Host = "test-vhost"
-		req.Header.Add("Connection", "close")
-
-		// new client and transport to prevent any keepalive
-		client := http.Client{
-			Transport: &http.Transport{},
-			Timeout:   time.Second,
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			c.Fatal(err)
-		}
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			c.Fatal(err)
-		}
-		c.Assert(strings.TrimSpace(string(body)), DeepEquals, srv.addr)
+	for _, srv := range s.backendServers {
+		checkHTTP("http://"+listenAddr+"/addr", "test-vhost", srv.addr, 200, c)
 	}
+}
+
+func (s *HTTPSuite) TestAddRemoveVHosts(c *C) {
+	svcCfg := client.ServiceConfig{
+		Name:         "VHostTest",
+		Addr:         "127.0.0.1:9000",
+		VirtualHosts: []string{"test-vhost"},
+	}
+
+	for _, srv := range s.backendServers {
+		cfg := client.BackendConfig{
+			Addr: srv.addr,
+			Name: srv.addr,
+		}
+		svcCfg.Backends = append(svcCfg.Backends, cfg)
+	}
+
+	err := Registry.AddService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// now update the service with another vhost
+	svcCfg.VirtualHosts = append(svcCfg.VirtualHosts, "test-vhost-2")
+	err = Registry.UpdateService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	if Registry.VHostsLen() != 2 {
+		c.Fatal("missing new vhost")
+	}
+
+	// remove the first vhost
+	svcCfg.VirtualHosts = []string{"test-vhost-2"}
+	err = Registry.UpdateService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	if Registry.VHostsLen() != 1 {
+		c.Fatal("extra vhost:", Registry.VHostsLen())
+	}
+
+	// check responses from this new vhost
+	for _, srv := range s.backendServers {
+		checkHTTP("http://"+listenAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+	}
+}
+
+// Add multiple services under the same VirtualHost
+// Each proxy request should round-robin through the two of them
+func (s *HTTPSuite) TestMultiServiceVHost(c *C) {
+	svcCfgOne := client.ServiceConfig{
+		Name:         "VHostTest",
+		Addr:         "127.0.0.1:9000",
+		VirtualHosts: []string{"test-vhost"},
+	}
+
+	svcCfgTwo := client.ServiceConfig{
+		Name:         "VHostTest2",
+		Addr:         "127.0.0.1:9001",
+		VirtualHosts: []string{"test-vhost-2"},
+	}
+
+	var backends []client.BackendConfig
+	for _, srv := range s.backendServers {
+		cfg := client.BackendConfig{
+			Addr: srv.addr,
+			Name: srv.addr,
+		}
+		backends = append(backends, cfg)
+	}
+
+	svcCfgOne.Backends = backends
+	svcCfgTwo.Backends = backends
+
+	err := Registry.AddService(svcCfgOne)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	err = Registry.AddService(svcCfgTwo)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	for _, srv := range s.backendServers {
+		checkHTTP("http://"+listenAddr+"/addr", "test-vhost", srv.addr, 200, c)
+		checkHTTP("http://"+listenAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+	}
+
 }

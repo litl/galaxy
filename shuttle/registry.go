@@ -273,7 +273,12 @@ func (s *ServiceRegistry) updateVHosts(service *Service, newHosts []string) {
 		if vhost != nil {
 			vhost.Remove(service)
 		}
+		if vhost.Len() == 0 {
+			log.Println("Removing empty VirtualHost", name)
+			delete(s.vhosts, name)
+		}
 	}
+
 	for _, name := range add {
 		vhost := s.vhosts[name]
 		if vhost == nil {
