@@ -98,7 +98,7 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 func (r *ServiceRegistry) CountInstances(app string) int {
 	// TODO: convert to SCAN
 	// TODO: Should this just sum hosts? (this counts all services on all hosts)
-	matches, err := r.backend.Keys(path.Join(r.Env, r.Pool, "hosts", "*", app))
+	matches, err := r.backend.Keys(path.Join(r.Env, "*", "hosts", "*", app))
 	if err != nil {
 		log.Printf("ERROR: could not count instances - %s\n", err)
 	}
