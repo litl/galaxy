@@ -612,19 +612,42 @@ func poolUpdate(c *cli.Context) {
 }
 
 func poolList(c *cli.Context) {
-	ensureEnvArg(c)
 	initRegistry(c)
-	pools, err := serviceRegistry.ListPools()
-	if err != nil {
-		log.Printf("ERROR: cannot list pools: %s\n", err)
-		return
+
+	envs := []string{utils.GalaxyEnv(c)}
+	if utils.GalaxyEnv(c) == "" {
+		var err error
+		envs, err = serviceRegistry.ListEnvs()
+		if err != nil {
+			log.Printf("ERROR: %s\n", err)
+		}
 	}
 
-	columns := []string{"POOL | APPS "}
-	for name, assigments := range pools {
-		columns = append(columns, strings.Join([]string{
-			name,
-			strings.Join(assigments, ",")}, " | "))
+	columns := []string{"ENV | POOL | APPS "}
+
+	for _, env := range envs {
+		serviceRegistry.Env = env
+		pools, err := serviceRegistry.ListPools()
+		if err != nil {
+			log.Printf("ERROR: cannot list pools: %s\n", err)
+			return
+		}
+
+		if len(pools) == 0 {
+			columns = append(columns, strings.Join([]string{
+				env,
+				"",
+				""}, " | "))
+			continue
+		}
+
+		for name, assigments := range pools {
+			columns = append(columns, strings.Join([]string{
+				env,
+				name,
+				strings.Join(assigments, ",")}, " | "))
+		}
+
 	}
 	output, _ := columnize.SimpleFormat(columns)
 	log.Println(output)
