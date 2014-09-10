@@ -192,7 +192,42 @@ func NewErrorResponse(pages map[string][]int) *ErrorResponse {
 		Timeout: 5 * time.Second,
 	}
 
+	go errors.update()
 	return errors
+}
+
+// attempt to fetch and cache all error pages
+func (e *ErrorResponse) update() {
+	e.Lock()
+	// Locking is done around critical sections so we don't block cached error
+	// calls while we're fetching other pages. The ErrorResponse lock protects
+	// all the ErrorPage.Body's as well.
+
+	// find the set of error pages
+	pages := make(map[*ErrorPage]bool)
+	for _, page := range e.pages {
+		pages[page] = true
+	}
+	e.Unlock()
+
+	for page := range pages {
+		e.Lock()
+		cont := page.Body != nil
+		e.Unlock()
+
+		if cont {
+			continue
+		}
+
+		// this is the call where we want to be unlocked
+		body := e.fetch(page.Location)
+
+		if body != nil {
+			e.Lock()
+			page.Body = body
+			e.Unlock()
+		}
+	}
 }
 
 // Get the error page body
@@ -211,33 +246,35 @@ func (e *ErrorResponse) Get(code int) []byte {
 		return page.Body
 	}
 
-	// we've never fetched this error
-	var err error
-	page.Body, err = e.fetch(page.Location)
-	if err != nil {
-		log.Warnf("Could not fetch %s: %s", page.Location, err)
-		return nil
-	}
-
+	// we haven't successfully fetched this error
+	page.Body = e.fetch(page.Location)
 	return page.Body
 }
 
-func (e *ErrorResponse) fetch(location string) ([]byte, error) {
+func (e *ErrorResponse) fetch(location string) []byte {
 	log.Debugf("Fetching error page from %s", location)
 	resp, err := e.client.Get(location)
 	if err != nil {
-		return nil, err
+		log.Warnf("Could not fetch %s: %s", location, err.Error())
+		return nil
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if resp.StatusCode != http.StatusOK {
+		log.Warnf("Server returned %d when fetching %s", resp.StatusCode, location)
+		return nil
 	}
 
-	return body, nil
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Warnf("Error reading response from %s: %s", location, err.Error())
+		return nil
+	}
+
+	return body
 }
 
+// This replaces all existing ErrorPages
 func (e *ErrorResponse) Update(pages map[string][]int) {
 	e.Lock()
 	defer e.Unlock()
@@ -254,6 +291,7 @@ func (e *ErrorResponse) Update(pages map[string][]int) {
 			e.pages[code] = page
 		}
 	}
+	go e.update()
 }
 
 func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
