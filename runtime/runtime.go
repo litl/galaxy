@@ -666,7 +666,18 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 	configDiffers := containerName != serviceConfig.ContainerName()
 	notRunning := !container.State.Running
 
+	// If their is a stopped container, remove it so we start a new one instead.
+	if notRunning {
+		err := s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+			ID: container.ID,
+		})
+		if err != nil {
+			return false, nil, err
+		}
+	}
+
 	if imageDiffers || configDiffers || notRunning {
+
 		container, err := s.Start(serviceConfig)
 		return true, container, err
 	}
