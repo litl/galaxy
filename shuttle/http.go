@@ -64,9 +64,7 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 	r.Lock()
 	defer r.Unlock()
 
-	vhosts := Registry.GetVHosts()
-
-	if len(vhosts) == 0 {
+	if Registry.VHostsLen() == 0 {
 		http.Error(w, "no backends available", http.StatusServiceUnavailable)
 		return
 	}

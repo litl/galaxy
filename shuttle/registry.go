@@ -50,14 +50,10 @@ func (s *ServiceRegistry) GetVHostService(name string) *Service {
 	return s.vhosts[name]
 }
 
-func (s *ServiceRegistry) GetVHosts() []string {
+func (s *ServiceRegistry) VHostsLen() int {
 	s.Lock()
 	defer s.Unlock()
-	vhosts := []string{}
-	for h := range s.vhosts {
-		vhosts = append(vhosts, h)
-	}
-	return vhosts
+	return len(s.vhosts)
 }
 
 // Add a new service to the Registry.
