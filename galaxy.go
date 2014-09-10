@@ -265,7 +265,6 @@ func appRestart(c *cli.Context) {
 
 func appRun(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 	initRuntime(c)
 
@@ -291,7 +290,6 @@ func appRun(c *cli.Context) {
 
 func appShell(c *cli.Context) {
 	ensureEnvArg(c)
-	ensurePoolArg(c)
 	initRegistry(c)
 	initRuntime(c)
 
