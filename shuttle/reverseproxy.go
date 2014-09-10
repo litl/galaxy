@@ -206,6 +206,7 @@ func (p *ReverseProxy) doRequest(pr *ProxyRequest) (*http.Response, error) {
 
 	var err error
 	var resp *http.Response
+
 	for _, addr := range pr.Backends {
 		outreq.URL.Host = addr
 		resp, err = transport.RoundTrip(outreq)

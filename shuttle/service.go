@@ -301,11 +301,26 @@ func (s *Service) run() {
 // Return the addresses of the current backends in the order they would be balanced
 func (s *Service) NextAddrs() []string {
 	backends := s.next()
+
 	addrs := make([]string, len(backends))
 	for i, b := range backends {
 		addrs[i] = b.Addr
 	}
 	return addrs
+}
+
+// Available returns the number of backends marked as Up
+func (s *Service) Available() int {
+	s.Lock()
+	defer s.Unlock()
+
+	available := 0
+	for _, b := range s.Backends {
+		if b.Up() {
+			available++
+		}
+	}
+	return available
 }
 
 // Dial a backend by address.

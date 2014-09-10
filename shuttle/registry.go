@@ -90,12 +90,16 @@ func (v *VirtualHost) Service() *Service {
 		return nil
 	}
 
-	v.last++
-	if v.last >= len(v.services) {
-		v.last = 0
+	// start cycling through the services in case one has no backends available
+	for i := 1; i <= len(v.services); i++ {
+		idx := (v.last + i) % len(v.services)
+		if v.services[idx].Available() > 0 {
+			v.last = idx
+			return v.services[idx]
+		}
 	}
-
-	return v.services[v.last]
+	log.Warnf("No Available backends for VirtualHost %s", v.Name)
+	return nil
 }
 
 //TODO: notify or prevent vhost name conflicts between services.
