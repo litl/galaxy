@@ -1,360 +1,330 @@
 package main
 
 import (
-	"bytes"
-	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/litl/galaxy/utils"
-
 	"github.com/litl/galaxy/log"
-	gotoolslog "github.com/mailgun/gotools-log"
-	"github.com/mailgun/vulcan"
-	"github.com/mailgun/vulcan/endpoint"
-	"github.com/mailgun/vulcan/loadbalance/roundrobin"
-	"github.com/mailgun/vulcan/location/httploc"
-	"github.com/mailgun/vulcan/request"
-	"github.com/mailgun/vulcan/route"
-	"github.com/mailgun/vulcan/route/hostroute"
 )
 
 var (
-	httpRouter *HTTPRouter
+	httpRouter *HostRouter
 )
 
 type RequestLogger struct{}
 
-type HTTPRouter struct {
+// This works along with the ServiceRegistry, and the individual Services to
+// route http requests based on the Host header. The Resgistry hold the mapping
+// of VHost names to individual services, and each service has it's own
+// ReeverseProxy to fulfill the request.
+// HostRouter contains the ReverseProxy http Listener, and has an http.Handler
+// to service the requets.
+type HostRouter struct {
 	sync.Mutex
-	listener  net.Listener
-	router    *hostroute.HostRouter
-	balancers map[string]*roundrobin.RoundRobin
+	// the http frontend
+	server *http.Server
+
+	// track our listener so we can kill the server
+	listener net.Listener
 }
 
-func (r *RequestLogger) ObserveRequest(req request.Request) {}
-
-func (r *RequestLogger) ObserveResponse(req request.Request, a request.Attempt) {
-	err := ""
-	statusCode := ""
-	if a.GetError() != nil {
-		err = " err=" + a.GetError().Error()
-	}
-
-	if a.GetResponse() != nil {
-		statusCode = " status=" + strconv.FormatInt(int64(a.GetResponse().StatusCode), 10)
-	}
-
-	log.Printf("cnt=%d id=%s method=%s clientIp=%s url=%s backend=%s%s duration=%s agent=%s%s",
-		req.GetId(),
-		req.GetHttpRequest().Header.Get("X-Request-Id"),
-		req.GetHttpRequest().Method,
-		req.GetHttpRequest().RemoteAddr,
-		req.GetHttpRequest().Host+req.GetHttpRequest().RequestURI,
-		a.GetEndpoint(),
-		statusCode, a.GetDuration(),
-		req.GetHttpRequest().UserAgent(), err)
+func NewHostRouter() *HostRouter {
+	return &HostRouter{}
 }
 
-type SSLRedirect struct{}
-
-func genId() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)
-}
-
-func (s *SSLRedirect) ProcessRequest(r request.Request) (*http.Response, error) {
-	r.GetHttpRequest().Header.Set("X-Request-Id", genId())
-
-	if sslOnly && r.GetHttpRequest().Header.Get("X-Forwarded-Proto") != "https" {
-
-		resp := &http.Response{
-			Status:        "301 Moved Permanently",
-			StatusCode:    301,
-			Proto:         r.GetHttpRequest().Proto,
-			ProtoMajor:    r.GetHttpRequest().ProtoMajor,
-			ProtoMinor:    r.GetHttpRequest().ProtoMinor,
-			Body:          ioutil.NopCloser(bytes.NewBufferString("")),
-			ContentLength: 0,
-			Request:       r.GetHttpRequest(),
-			Header:        http.Header{},
-		}
-		resp.Header.Set("Location", "https://"+r.GetHttpRequest().Host+r.GetHttpRequest().RequestURI)
-		return resp, nil
-	}
-
-	return nil, nil
-}
-
-func (s *SSLRedirect) ProcessResponse(r request.Request, a request.Attempt) {
-}
-
-func NewHTTPRouter() *HTTPRouter {
-	return &HTTPRouter{
-		balancers: make(map[string]*roundrobin.RoundRobin),
-	}
-}
-
-func (s *HTTPRouter) GetVhosts() []string {
-	vhosts := []string{}
-	s.Lock()
-	defer s.Unlock()
-	for k, _ := range s.balancers {
-		vhosts = append(vhosts, k)
-	}
-	return vhosts
-}
-
-func (s *HTTPRouter) AddBackend(name, vhost, url string) error {
-
-	if vhost == "" || url == "" {
-		return nil
-	}
-
+func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var err error
-
-	s.Lock()
-	defer s.Unlock()
-
-	balancer := s.balancers[vhost]
-
-	if balancer == nil {
-		// Create a round robin load balancer with some endpoints
-		balancer, err = roundrobin.NewRoundRobin()
+	host := req.Host
+	if strings.Contains(host, ":") {
+		host, _, err = net.SplitHostPort(req.Host)
 		if err != nil {
-			return err
+			log.Warnf("%s", err)
 		}
-
-		// Create a http location with the load balancer we've just added
-		opts := httploc.Options{}
-		opts.TrustForwardHeader = true
-		opts.Timeouts.Read = 180 * time.Second
-		loc, err := httploc.NewLocationWithOptions(name, balancer, opts)
-		if err != nil {
-			return err
-		}
-		loc.GetObserverChain().Add("logger", &RequestLogger{})
-		loc.GetMiddlewareChain().Add("ssl", 0, &SSLRedirect{})
-
-		s.router.SetRouter(vhost, &route.ConstRouter{Location: loc})
-		log.Printf("Starting HTTP listener for %s", vhost)
-		s.balancers[vhost] = balancer
 	}
 
-	// Already registered?
-	if balancer.FindEndpointByUrl(url) != nil {
-		return nil
-	}
-	endpoint := endpoint.MustParseUrl(url)
-	log.Printf("Adding HTTP endpoint %s to %s", endpoint.GetUrl(), vhost)
-	err = balancer.AddEndpoint(endpoint)
-	if err != nil {
-		return err
-	}
-	return nil
-}
+	svc := Registry.GetVHostService(host)
 
-func (s *HTTPRouter) RemoveBackend(vhost, url string) error {
-	if vhost == "" || url == "" {
-		return nil
-	}
-
-	s.Lock()
-	balancer := s.balancers[vhost]
-	s.Unlock()
-	if balancer == nil {
-		return nil
-	}
-
-	endpoint := balancer.FindEndpointByUrl(url)
-	if endpoint == nil {
-		return nil
-	}
-	log.Printf("Removing HTTP endpoint %s from %s ", endpoint.GetUrl(), vhost)
-	balancer.RemoveEndpoint(endpoint)
-
-	endpoints := balancer.GetEndpoints()
-	println(len(endpoints))
-	if len(endpoints) == 0 {
-		s.RemoveRouter(vhost)
-	}
-	return nil
-}
-
-// Remove all backends for vhost that are not listed in addrs
-func (s *HTTPRouter) RemoveBackends(vhost string, addrs []string) {
-	if vhost == "" {
+	if svc != nil && svc.httpProxy != nil {
+		// The vhost has a service registered, give it to the proxy
+		svc.ServeHTTP(w, req)
 		return
 	}
 
-	// Remove backends that are no longer registered
-	s.Lock()
-	balancer := s.balancers[vhost]
-	s.Unlock()
-	if balancer == nil {
+	r.adminHandler(w, req)
+}
+
+func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
+	r.Lock()
+	defer r.Unlock()
+
+	if Registry.VHostsLen() == 0 {
+		http.Error(w, "no backends available", http.StatusServiceUnavailable)
 		return
 	}
 
-	endpoints := balancer.GetEndpoints()
-	for _, endpoint := range endpoints {
-		if !utils.StringInSlice(endpoint.GetUrl().String(), addrs) {
-			s.RemoveBackend(vhost, endpoint.GetUrl().String())
+	// TODO: better status lines
+	stats := Registry.Stats()
+	for _, svc := range stats {
+		if len(svc.VirtualHosts) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "%v\n", svc.VirtualHosts)
+		for _, b := range svc.Backends {
+			js, _ := json.Marshal(b)
+			fmt.Fprintf(w, "\t%s\n", string(js))
 		}
 	}
+
+	fmt.Fprintf(w, "\n")
+	return
 }
 
-func (s *HTTPRouter) GetBackends(vhost string) []string {
-	backends := []string{}
-	if vhost == "" {
-		return backends
-	}
-
-	// Remove backends that are no longer registered
-	s.Lock()
-	balancer := s.balancers[vhost]
-	s.Unlock()
-	if balancer == nil {
-		return backends
-	}
-
-	endpoints := balancer.GetEndpoints()
-	for _, endpoint := range endpoints {
-		backends = append(backends, endpoint.GetUrl().String())
-	}
-
-	return backends
-}
-
-// Removes a virtual host router
-func (s *HTTPRouter) RemoveRouter(vhost string) {
-	s.Lock()
-	defer s.Unlock()
-
-	if vhost == "" {
-		return
-	}
-
-	log.Printf("Removing balancer for %s", vhost)
-	delete(s.balancers, vhost)
-	s.router.RemoveRouter(vhost)
-}
-
-func (s *HTTPRouter) adminHandler(w http.ResponseWriter, r *http.Request) {
-	s.Lock()
-	defer s.Unlock()
-
-	if len(s.balancers) == 0 {
-		w.WriteHeader(503)
-		return
-	}
-
-	keys := make([]string, 0, len(s.balancers))
-	for key := range s.balancers {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		balancer := s.balancers[k]
-		endpoints := balancer.GetEndpoints()
-		fmt.Fprintf(w, "%s\n", k)
-		for _, endpoint := range endpoints {
-			fmt.Fprintf(w, "  %s\t%d\t%d\t%0.2f\n", endpoint.GetUrl(), endpoint.GetOriginalWeight(), endpoint.GetEffectiveWeight(), endpoint.GetMeter().GetRate())
-		}
-	}
-}
-
-func (s *HTTPRouter) statusHandler(h http.Handler) http.Handler {
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var err error
-		host := r.Host
-		if strings.Contains(host, ":") {
-			host, _, err = net.SplitHostPort(r.Host)
-			if err != nil {
-				log.Warnf("%s", err)
-				h.ServeHTTP(w, r)
-				return
-			}
-		}
-
-		s.Lock()
-		_, exists := s.balancers[host]
-		s.Unlock()
-
-		if !exists {
-			s.adminHandler(w, r)
-			return
-		}
-		h.ServeHTTP(w, r)
-	})
-}
+// TODO: collect more stats?
 
 // Start the HTTP Router frontend.
 // Takes a channel to notify when the listener is started
 // to safely synchronize tests.
-func (s *HTTPRouter) Start(ready chan bool) {
+func (r *HostRouter) Start(ready chan bool) {
 	//FIXME: poor locking strategy
-	s.Lock()
-
-	if debug {
-		// init the vulcan logging
-		gotoolslog.Init([]*gotoolslog.LogConfig{
-			&gotoolslog.LogConfig{Name: "console"},
-		})
-	}
+	r.Lock()
 
 	log.Printf("HTTP server listening at %s", listenAddr)
 
-	s.router = hostroute.NewHostRouter()
-
-	proxy, err := vulcan.NewProxy(s.router)
-	if err != nil {
-		log.Fatalf("ERROR: %s", err)
-	}
-
 	// Proxy acts as http handler:
-	server := &http.Server{
+	r.server = &http.Server{
 		Addr:           listenAddr,
-		Handler:        s.statusHandler(proxy),
+		Handler:        r,
 		ReadTimeout:    60 * time.Second,
 		WriteTimeout:   60 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	// make a separate listener so we can kill it with Stop()
-	s.listener, err = net.Listen("tcp", listenAddr)
+	var err error
+	r.listener, err = net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Errorf("%s", err)
-		s.Unlock()
+		r.Unlock()
 		return
 	}
 
-	s.Unlock()
+	r.Unlock()
 	if ready != nil {
 		close(ready)
 	}
 
 	// This will log a closed connection error every time we Stop
 	// but that's mostly a testing issue.
-	log.Errorf("%s", server.Serve(s.listener))
+	log.Errorf("%s", r.server.Serve(r.listener))
 }
 
-func (s *HTTPRouter) Stop() {
-	s.listener.Close()
+func (r *HostRouter) Stop() {
+	r.listener.Close()
 }
 
 func startHTTPServer() {
 	//FIXME: this global wg?
 	defer wg.Done()
-	httpRouter = NewHTTPRouter()
+	httpRouter = NewHostRouter()
 	httpRouter.Start(nil)
+}
+
+func sslRedirect(pr *ProxyRequest) bool {
+	pr.Request.Header.Set("X-Request-Id", genId())
+
+	if sslOnly && pr.Request.Header.Get("X-Forwarded-Proto") != "https" {
+		//TODO: verify RequestURI
+		redirLoc := "https://" + pr.Request.Host + pr.Request.RequestURI
+		http.Redirect(pr.ResponseWriter, pr.Request, redirLoc, http.StatusMovedPermanently)
+		return false
+	}
+
+	return true
+}
+
+type ErrorPage struct {
+	Location    string
+	StatusCodes []int
+	Body        []byte
+}
+
+// ErrorResponse provides vulcan middleware to process a response and insert
+// custom error pages for a virtual host.
+type ErrorResponse struct {
+	sync.Mutex
+
+	// map them by status for responses
+	pages map[int]*ErrorPage
+
+	// keep this handy to refresh the pages
+	client *http.Client
+}
+
+func NewErrorResponse(pages map[string][]int) *ErrorResponse {
+	errors := &ErrorResponse{
+		pages: make(map[int]*ErrorPage),
+	}
+
+	if pages != nil {
+		errors.Update(pages)
+	}
+
+	// aggressively timeout connections
+	errors.client = &http.Client{
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout: 2 * time.Second,
+			}).Dial,
+			TLSHandshakeTimeout: 2 * time.Second,
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	go errors.update()
+	return errors
+}
+
+// attempt to fetch and cache all error pages
+func (e *ErrorResponse) update() {
+	e.Lock()
+	// Locking is done around critical sections so we don't block cached error
+	// calls while we're fetching other pages. The ErrorResponse lock protects
+	// all the ErrorPage.Body's as well.
+
+	// find the set of error pages
+	pages := make(map[*ErrorPage]bool)
+	for _, page := range e.pages {
+		pages[page] = true
+	}
+	e.Unlock()
+
+	for page := range pages {
+		e.Lock()
+		cont := page.Body != nil
+		e.Unlock()
+
+		if cont {
+			continue
+		}
+
+		// this is the call where we want to be unlocked
+		body := e.fetch(page.Location)
+
+		if body != nil {
+			e.Lock()
+			page.Body = body
+			e.Unlock()
+		}
+	}
+}
+
+// Get the error page body
+// We permanently cache error pages once we've seen them
+func (e *ErrorResponse) Get(code int) []byte {
+	e.Lock()
+	defer e.Unlock()
+
+	page, ok := e.pages[code]
+	if !ok {
+		// this is a code we don't handle
+		return nil
+	}
+
+	if page.Body != nil {
+		return page.Body
+	}
+
+	// we haven't successfully fetched this error
+	page.Body = e.fetch(page.Location)
+	return page.Body
+}
+
+func (e *ErrorResponse) fetch(location string) []byte {
+	log.Debugf("Fetching error page from %s", location)
+	resp, err := e.client.Get(location)
+	if err != nil {
+		log.Warnf("Could not fetch %s: %s", location, err.Error())
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Warnf("Server returned %d when fetching %s", resp.StatusCode, location)
+		return nil
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Warnf("Error reading response from %s: %s", location, err.Error())
+		return nil
+	}
+
+	return body
+}
+
+// This replaces all existing ErrorPages
+func (e *ErrorResponse) Update(pages map[string][]int) {
+	e.Lock()
+	defer e.Unlock()
+
+	e.pages = make(map[int]*ErrorPage)
+
+	for loc, codes := range pages {
+		page := &ErrorPage{
+			StatusCodes: codes,
+			Location:    loc,
+		}
+
+		for _, code := range codes {
+			e.pages[code] = page
+		}
+	}
+	go e.update()
+}
+
+func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
+
+	errPage := e.Get(pr.Response.StatusCode)
+	if errPage != nil {
+		pr.ResponseWriter.WriteHeader(pr.Response.StatusCode)
+		pr.ResponseWriter.Write(errPage)
+		return false
+	}
+
+	return true
+}
+
+func logProxyRequest(pr *ProxyRequest) bool {
+	// TODO: we may to be able to switch this off
+	if pr == nil {
+		return true
+	}
+
+	var id, method, clientIP, url, backend, agent string
+
+	duration := pr.FinishTime.Sub(pr.StartTime)
+
+	if pr.Request != nil {
+		id = pr.Request.Header.Get("X-Request-Id")
+		method = pr.Request.Method
+		clientIP = pr.Request.RemoteAddr
+		url = pr.Request.Host + pr.Request.RequestURI
+		agent = pr.Request.UserAgent()
+	}
+
+	if pr.Response != nil && pr.Response.Request != nil && pr.Response.Request.URL != nil {
+		backend = pr.Response.Request.URL.Host
+	}
+
+	err := fmt.Sprintf("%v", pr.ProxyError)
+
+	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s duration=%s agent=%s, err=%s"
+
+	log.Printf(fmtStr, id, method, clientIP, url, backend, duration, agent, err)
+	return true
 }

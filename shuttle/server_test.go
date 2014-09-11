@@ -3,12 +3,15 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"time"
+
+	. "gopkg.in/check.v1"
 )
 
 type testServer struct {
@@ -52,6 +55,7 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 				return
 			}
 
+			conn.SetDeadline(time.Now().Add(5 * time.Second))
 			s.wg.Add(1)
 			go func() {
 				defer s.wg.Done()
@@ -116,4 +120,31 @@ func NewHTTPTestServer(addr string, c Tester) (*testHTTPServer, error) {
 	s.Start()
 
 	return s, nil
+}
+
+// Connect to http server, and check response for value
+func checkHTTP(url, host, expected string, status int, c Tester) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	req.Host = host
+
+	c.Log("GET ", req.Host, req.URL.Path)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	c.Assert(resp.StatusCode, Equals, status)
+
+	c.Assert(string(body), Equals, expected)
 }

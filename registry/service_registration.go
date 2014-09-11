@@ -11,20 +11,21 @@ import (
 )
 
 type ServiceRegistration struct {
-	Name          string    `json:"NAME,omitempty"`
-	ExternalIP    string    `json:"EXTERNAL_IP,omitempty"`
-	ExternalPort  string    `json:"EXTERNAL_PORT,omitempty"`
-	InternalIP    string    `json:"INTERNAL_IP,omitempty"`
-	InternalPort  string    `json:"INTERNAL_PORT,omitempty"`
-	ContainerID   string    `json:"CONTAINER_ID"`
-	ContainerName string    `json:"CONTAINER_NAME"`
-	Image         string    `json:"IMAGE,omitempty"`
-	ImageId       string    `json:"IMAGE_ID,omitempty"`
-	StartedAt     time.Time `json:"STARTED_AT"`
-	Expires       time.Time `json:"-"`
-	Path          string    `json:"-"`
-	VirtualHosts  []string  `json:"VIRTUAL_HOSTS"`
-	Port          string    `json:"PORT"`
+	Name          string            `json:"NAME,omitempty"`
+	ExternalIP    string            `json:"EXTERNAL_IP,omitempty"`
+	ExternalPort  string            `json:"EXTERNAL_PORT,omitempty"`
+	InternalIP    string            `json:"INTERNAL_IP,omitempty"`
+	InternalPort  string            `json:"INTERNAL_PORT,omitempty"`
+	ContainerID   string            `json:"CONTAINER_ID"`
+	ContainerName string            `json:"CONTAINER_NAME"`
+	Image         string            `json:"IMAGE,omitempty"`
+	ImageId       string            `json:"IMAGE_ID,omitempty"`
+	StartedAt     time.Time         `json:"STARTED_AT"`
+	Expires       time.Time         `json:"-"`
+	Path          string            `json:"-"`
+	VirtualHosts  []string          `json:"VIRTUAL_HOSTS"`
+	Port          string            `json:"PORT"`
+	ErrorPages    map[string]string `json:"ERROR_PAGES,omitempty"`
 }
 
 func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
@@ -56,7 +57,29 @@ func (r *ServiceRegistry) RegisterService(container *docker.Container, serviceCo
 	serviceRegistration.Name = serviceConfig.Name
 	serviceRegistration.ImageId = serviceConfig.VersionID()
 
-	vhosts := serviceConfig.Env()["VIRTUAL_HOST"]
+	environment := serviceConfig.Env()
+
+	vhosts := environment["VIRTUAL_HOST"]
+	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
+
+	errorPages := make(map[string]string)
+
+	// scan environment variables for the VIRTUAL_HOST_%d pattern
+	// but save the original variable and url.
+	for vhostCode, url := range environment {
+		code := 0
+		n, err := fmt.Sscanf(vhostCode, "VIRTUAL_HOST_%d", &code)
+		if err != nil || n == 0 {
+			continue
+		}
+
+		errorPages[vhostCode] = url
+	}
+
+	if len(errorPages) > 0 {
+		serviceRegistration.ErrorPages = errorPages
+	}
+
 	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
 
 	serviceRegistration.Port = serviceConfig.Env()["GALAXY_PORT"]

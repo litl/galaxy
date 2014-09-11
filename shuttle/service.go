@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,7 +14,8 @@ import (
 
 var (
 	Registry = ServiceRegistry{
-		svcs: make(map[string]*Service, 0),
+		svcs:   make(map[string]*Service),
+		vhosts: make(map[string]*VirtualHost),
 	}
 )
 
@@ -32,6 +35,8 @@ type Service struct {
 	Sent          int64
 	Rcvd          int64
 	Errors        int64
+	HTTPConns     int64
+	HTTPErrors    int64
 
 	// Next returns the backends in priority order.
 	next func() []*Backend
@@ -42,6 +47,18 @@ type Service struct {
 
 	// Each Service owns it's own netowrk listener
 	listener net.Listener
+
+	// reverse proxy for vhost routing
+	httpProxy *ReverseProxy
+
+	// Custom Pages to backend error responses
+	errorPages *ErrorResponse
+
+	// the original map of errors as loaded in by a config
+	errPagesCfg map[string][]int
+
+	// net.Dialer so we don't need to allocate one every time
+	dialer *net.Dialer
 }
 
 // Stats returned about a service
@@ -62,6 +79,8 @@ type ServiceStat struct {
 	Errors        int64         `json:"errors"`
 	Conns         int64         `json:"connections"`
 	Active        int64         `json:"active"`
+	HTTPConns     int64         `json:"http_connections"`
+	HTTPErrors    int64         `json:"http_errors"`
 }
 
 // Create a Service from a config struct
@@ -76,7 +95,28 @@ func NewService(cfg client.ServiceConfig) *Service {
 		ClientTimeout: time.Duration(cfg.ClientTimeout) * time.Millisecond,
 		ServerTimeout: time.Duration(cfg.ServerTimeout) * time.Millisecond,
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
+		errorPages:    NewErrorResponse(cfg.ErrorPages),
+		errPagesCfg:   cfg.ErrorPages,
 	}
+
+	// TODO: insert this into the backends too
+	s.dialer = &net.Dialer{
+		Timeout:   s.DialTimeout,
+		KeepAlive: 30 * time.Second,
+	}
+
+	// create our reverse proxy, using our load-balancing Dial method
+	s.httpProxy = NewReverseProxy()
+	s.httpProxy.Director = func(req *http.Request) {
+		req.URL.Scheme = "http"
+	}
+	s.httpProxy.Transport = &http.Transport{
+		Dial:                s.Dial,
+		MaxIdleConnsPerHost: 10,
+	}
+
+	s.httpProxy.OnRequest = []ProxyCallback{sslRedirect}
+	s.httpProxy.OnResponse = []ProxyCallback{logProxyRequest, s.errStats, s.errorPages.CheckResponse}
 
 	if s.CheckInterval == 0 {
 		s.CheckInterval = 2000
@@ -119,6 +159,8 @@ func (s *Service) Stats() ServiceStat {
 		ClientTimeout: int(s.ClientTimeout / time.Millisecond),
 		ServerTimeout: int(s.ServerTimeout / time.Millisecond),
 		DialTimeout:   int(s.DialTimeout / time.Millisecond),
+		HTTPConns:     s.HTTPConns,
+		HTTPErrors:    s.HTTPErrors,
 	}
 
 	for _, b := range s.Backends {
@@ -148,6 +190,7 @@ func (s *Service) Config() client.ServiceConfig {
 		ClientTimeout: int(s.ClientTimeout / time.Millisecond),
 		ServerTimeout: int(s.ServerTimeout / time.Millisecond),
 		DialTimeout:   int(s.DialTimeout / time.Millisecond),
+		ErrorPages:    s.errPagesCfg,
 	}
 	for _, b := range s.Backends {
 		config.Backends = append(config.Backends, b.Config())
@@ -255,6 +298,70 @@ func (s *Service) run() {
 	}()
 }
 
+// Return the addresses of the current backends in the order they would be balanced
+func (s *Service) NextAddrs() []string {
+	backends := s.next()
+
+	addrs := make([]string, len(backends))
+	for i, b := range backends {
+		addrs[i] = b.Addr
+	}
+	return addrs
+}
+
+// Available returns the number of backends marked as Up
+func (s *Service) Available() int {
+	s.Lock()
+	defer s.Unlock()
+
+	available := 0
+	for _, b := range s.Backends {
+		if b.Up() {
+			available++
+		}
+	}
+	return available
+}
+
+// Dial a backend by address.
+// This way we can wrap the connection to provide our timeout settings, as well
+// as hook it into the backend stats.
+// We return an error if we don't have a backend which matches.
+// If Dial returns an error, we wrap it in DialError, so that a ReverseProxy
+// can determine if it's safe to call RoundTrip again on a new host.
+func (s *Service) Dial(nw, addr string) (net.Conn, error) {
+	s.Lock()
+
+	var backend *Backend
+	for _, b := range s.Backends {
+		if b.Addr == addr {
+			backend = b
+			break
+		}
+	}
+	s.Unlock()
+
+	if backend == nil {
+		return nil, DialError{fmt.Errorf("no backend matching %s", addr)}
+	}
+
+	srvConn, err := s.dialer.Dial("tcp", backend.Addr)
+	if err != nil {
+		log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, backend.Name, err)
+		atomic.AddInt64(&backend.Errors, 1)
+		return nil, DialError{err}
+	}
+
+	conn := &shuttleConn{
+		TCPConn:   srvConn.(*net.TCPConn),
+		rwTimeout: s.ServerTimeout,
+		written:   &backend.Sent,
+		read:      &backend.Rcvd,
+	}
+
+	return conn, nil
+}
+
 func (s *Service) connect(cliConn net.Conn) {
 	backends := s.next()
 
@@ -298,10 +405,28 @@ func (s *Service) stop() {
 	}
 }
 
+// Provide a ServeHTTP method for out ReverseProxy
+func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	atomic.AddInt64(&s.HTTPConns, 1)
+	s.httpProxy.ServeHTTP(w, r, s.NextAddrs())
+}
+
+func (s *Service) errStats(pr *ProxyRequest) bool {
+	if pr.ProxyError != nil {
+		atomic.AddInt64(&s.HTTPErrors, 1)
+	}
+	return true
+}
+
 // A net.Listener that provides a read/write timeout
 type timeoutListener struct {
 	net.Listener
 	rwTimeout time.Duration
+
+	// these aren't reported yet, but our new counting connections need to
+	// update something
+	read    int64
+	written int64
 }
 
 func newTimeoutListener(addr string, timeout time.Duration) (net.Listener, error) {
@@ -324,9 +449,11 @@ func (l *timeoutListener) Accept() (net.Conn, error) {
 
 	c, ok := conn.(*net.TCPConn)
 	if ok {
-		tc := &timeoutConn{
+		tc := &shuttleConn{
 			TCPConn:   c,
 			rwTimeout: l.rwTimeout,
+			read:      &l.read,
+			written:   &l.written,
 		}
 		return tc, nil
 	}

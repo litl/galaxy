@@ -31,11 +31,23 @@ func (s *Service) roundRobin() []*Backend {
 		s.lastCount = 0
 	}
 
+	// if our backend was over-weight, but we con't find another, use this
+	var reuse *Backend
+
 	var balanced []*Backend
 	// Find the next Up backend to call
 	for i := 0; i < count; i++ {
 		backend := s.Backends[s.lastBackend]
-		if backend.Up() && s.lastCount < int(backend.Weight) {
+
+		if backend.Up() {
+			if s.lastCount >= int(backend.Weight) {
+				// used too many times, but save it just in case
+				reuse = backend
+				s.lastBackend = (s.lastBackend + 1) % count
+				s.lastCount = 0
+				continue
+			}
+
 			s.lastCount++
 			balanced = append(balanced, backend)
 
@@ -43,11 +55,14 @@ func (s *Service) roundRobin() []*Backend {
 		}
 
 		s.lastBackend = (s.lastBackend + 1) % count
-		s.lastCount = 0
 	}
 
 	if len(balanced) == 0 {
-		return nil
+		if reuse != nil {
+			balanced = append(balanced, reuse)
+		} else {
+			return nil
+		}
 	}
 
 	// Now add the rest of the available backends in order, in case the first
