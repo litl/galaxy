@@ -148,9 +148,27 @@ func sslRedirect(pr *ProxyRequest) bool {
 }
 
 type ErrorPage struct {
+	// The Mutex protects access to the body slice.
+	// Everything else should be static once the ErrorPage is created.
+	sync.Mutex
+
 	Location    string
 	StatusCodes []int
-	Body        []byte
+
+	// body contains the cached error page
+	body []byte
+}
+
+func (e *ErrorPage) Body() []byte {
+	e.Lock()
+	defer e.Unlock()
+	return e.body
+}
+
+func (e *ErrorPage) SetBody(b []byte) {
+	e.Lock()
+	defer e.Unlock()
+	e.body = b
 }
 
 // ErrorResponse provides vulcan middleware to process a response and insert
@@ -192,34 +210,21 @@ func NewErrorResponse(pages map[string][]int) *ErrorResponse {
 // attempt to fetch and cache all error pages
 func (e *ErrorResponse) update() {
 	e.Lock()
-	// Locking is done around critical sections so we don't block cached error
-	// calls while we're fetching other pages. The ErrorResponse lock protects
-	// all the ErrorPage.Body's as well.
-
 	// find the set of error pages
 	pages := make(map[*ErrorPage]bool)
 	for _, page := range e.pages {
 		pages[page] = true
 	}
+
+	// Unlock while fetching the pages so we don't block any incoming errors
 	e.Unlock()
 
 	for page := range pages {
-		e.Lock()
-		cont := page.Body != nil
-		e.Unlock()
-
-		if cont {
+		if page.Body() != nil {
 			continue
 		}
 
-		// this is the call where we want to be unlocked
-		body := e.fetch(page.Location)
-
-		if body != nil {
-			e.Lock()
-			page.Body = body
-			e.Unlock()
-		}
+		e.fetch(page)
 	}
 }
 
@@ -227,44 +232,56 @@ func (e *ErrorResponse) update() {
 // We permanently cache error pages once we've seen them
 func (e *ErrorResponse) Get(code int) []byte {
 	e.Lock()
-	defer e.Unlock()
-
 	page, ok := e.pages[code]
+	e.Unlock()
+
 	if !ok {
 		// this is a code we don't handle
 		return nil
 	}
 
-	if page.Body != nil {
-		return page.Body
+	body := page.Body()
+	if body != nil {
+		return body
 	}
 
 	// we haven't successfully fetched this error
-	page.Body = e.fetch(page.Location)
-	return page.Body
+	e.fetch(page)
+	return page.Body()
 }
 
-func (e *ErrorResponse) fetch(location string) []byte {
-	log.Debugf("Fetching error page from %s", location)
-	resp, err := e.client.Get(location)
+func (e *ErrorResponse) fetch(page *ErrorPage) {
+	log.Debugf("Fetching error page from %s", page.Location)
+	resp, err := e.client.Get(page.Location)
 	if err != nil {
-		log.Warnf("Could not fetch %s: %s", location, err.Error())
-		return nil
+		log.Warnf("Could not fetch %s: %s", page.Location, err.Error())
+		return
 	}
 	defer resp.Body.Close()
 
+	// If the StatusCode matches any of our registered codes, it's OK
+	for _, code := range page.StatusCodes {
+		if resp.StatusCode == code {
+			break
+		}
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		log.Warnf("Server returned %d when fetching %s", resp.StatusCode, location)
-		return nil
+		log.Warnf("Server returned %d when fetching %s", resp.StatusCode, page.Location)
+		return
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Warnf("Error reading response from %s: %s", location, err.Error())
-		return nil
+		log.Warnf("Error reading response from %s: %s", page.Location, err.Error())
+		return
 	}
 
-	return body
+	if len(body) > 0 {
+		page.SetBody(body)
+		return
+	}
+	log.Warnf("Empty response from %s", page.Location)
 }
 
 // This replaces all existing ErrorPages
