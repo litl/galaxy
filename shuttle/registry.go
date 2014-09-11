@@ -98,8 +98,10 @@ func (v *VirtualHost) Service() *Service {
 			return v.services[idx]
 		}
 	}
-	log.Warnf("No Available backends for VirtualHost %s", v.Name)
-	return nil
+
+	// even if all backends are down, return a service so that the request can
+	// be processed normally (we may have a custom 502 error page for this)
+	return v.services[v.last]
 }
 
 //TODO: notify or prevent vhost name conflicts between services.
