@@ -41,8 +41,9 @@ func registerShuttle(c *cli.Context) {
 			backends[r.Name] = service
 		}
 		b := shuttle.BackendConfig{
-			Name: r.ContainerID[0:12],
-			Addr: r.ExternalAddr(),
+			Name:      r.ContainerID[0:12],
+			Addr:      r.ExternalAddr(),
+			CheckAddr: r.ExternalAddr(),
 		}
 		service.Backends = append(service.Backends, b)
 
