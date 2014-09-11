@@ -8,6 +8,7 @@ import (
 
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/shuttle/client"
+	"github.com/litl/galaxy/utils"
 )
 
 var (
@@ -307,8 +308,21 @@ func (s *ServiceRegistry) RemoveService(name string) error {
 		delete(s.svcs, name)
 		svc.stop()
 
-		for host := range s.vhosts {
-			delete(s.vhosts, host)
+		for host, vhost := range s.vhosts {
+			vhost.Remove(svc)
+
+			removeVhost := true
+			for _, service := range s.svcs {
+				if utils.StringInSlice(host, service.VirtualHosts) {
+					removeVhost = false
+					break
+				}
+			}
+			if removeVhost {
+				log.Debugf("Removing VirtualHost %s", host)
+				delete(s.vhosts, host)
+
+			}
 		}
 
 		return nil
