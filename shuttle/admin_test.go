@@ -335,7 +335,7 @@ func (s *HTTPSuite) TestAddRemoveBackends(c *C) {
 	}
 
 	cfg := Registry.Config()
-	if len(cfg) != 1 || len(cfg[0].Backends) != 4 {
+	if !svcCfg.DeepEqual(cfg[0]) {
 		c.Errorf("we should have 1 service, we have %d", len(cfg))
 		c.Errorf("we should have 4 backends, we have %d", len(cfg[0].Backends))
 	}
@@ -347,7 +347,7 @@ func (s *HTTPSuite) TestAddRemoveBackends(c *C) {
 	}
 
 	cfg = Registry.Config()
-	if len(cfg) != 1 || len(cfg[0].Backends) != 3 {
+	if !svcCfg.DeepEqual(cfg[0]) {
 		c.Errorf("we should have 1 service, we have %d", len(cfg))
 		c.Errorf("we should have 3 backends, we have %d", len(cfg[0].Backends))
 	}
@@ -380,7 +380,7 @@ func (s *HTTPSuite) TestHTTPAddRemoveBackends(c *C) {
 	}
 
 	cfg := Registry.Config()
-	if len(cfg) != 1 || len(cfg[0].Backends) != 4 {
+	if !svcCfg.DeepEqual(cfg[0]) {
 		c.Errorf("we should have 1 service, we have %d", len(cfg))
 		c.Errorf("we should have 4 backends, we have %d", len(cfg[0].Backends))
 	}
@@ -412,7 +412,7 @@ func (s *HTTPSuite) TestHTTPAddRemoveBackends(c *C) {
 		c.Fatal(err)
 	}
 
-	if len(cfg) != 1 || len(cfg[0].Backends) != 3 {
+	if !svcCfg.DeepEqual(cfg[0]) {
 		c.Errorf("we should have 1 service, we have %d", len(cfg))
 		c.Errorf("we should have 3 backends, we have %d", len(cfg[0].Backends))
 	}

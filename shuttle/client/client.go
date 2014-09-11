@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 )
 
@@ -23,6 +24,11 @@ func (b BackendConfig) Equal(other BackendConfig) bool {
 	if other.Weight == 0 {
 		other.Weight = 1
 	}
+
+	if b.Weight == 0 {
+		b.Weight = 1
+	}
+
 	return b == other
 }
 
@@ -100,4 +106,33 @@ func (b *ServiceConfig) Marshal() []byte {
 
 func (b *ServiceConfig) String() string {
 	return string(b.Marshal())
+}
+
+// Check for equality including backends
+func (s ServiceConfig) DeepEqual(other ServiceConfig) bool {
+	if len(s.Backends) != len(other.Backends) {
+		return false
+	}
+
+	if !s.Equal(other) {
+		return false
+	}
+
+	// O(n^2), but we shouldn't have many backends
+	for _, a := range s.Backends {
+	NEXT:
+		for _, b := range other.Backends {
+			if a.Name == b.Name {
+				if a.Equal(b) {
+					break NEXT
+				} else {
+					fmt.Println("A", a)
+					fmt.Println("B", b)
+					return false
+				}
+			}
+		}
+	}
+
+	return true
 }
