@@ -308,7 +308,9 @@ func (s *ServiceRegistry) RemoveService(name string) error {
 		delete(s.svcs, name)
 		svc.stop()
 
-		for host := range s.vhosts {
+		for host, vhost := range s.vhosts {
+			vhost.Remove(svc)
+
 			removeVhost := true
 			for _, service := range s.svcs {
 				if utils.StringInSlice(host, service.VirtualHosts) {
@@ -317,6 +319,7 @@ func (s *ServiceRegistry) RemoveService(name string) error {
 				}
 			}
 			if removeVhost {
+				log.Debugf("Removing VirtualHost %s", host)
 				delete(s.vhosts, host)
 
 			}

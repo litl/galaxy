@@ -92,6 +92,7 @@ func register(c *cli.Context) {
 
 				log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
 					reg.ContainerID[0:12], reg.Name, locationAt(reg))
+				registerShuttle(c)
 			case "die", "stop":
 				reg, err := serviceRegistry.UnRegisterService(ce.Container, ce.ServiceConfig)
 				if err != nil {
@@ -103,10 +104,12 @@ func register(c *cli.Context) {
 					log.Printf("Unregistered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
 						reg.ContainerID[0:12], reg.Name, locationAt(reg))
 				}
+				pruneShuttleBackends(c)
 			}
 
 		case <-time.After(10 * time.Second):
 			registerAll(c, true)
+			pruneShuttleBackends(c)
 		}
 	}
 }

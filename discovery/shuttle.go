@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -11,6 +13,65 @@ import (
 	"github.com/litl/galaxy/log"
 	shuttle "github.com/litl/galaxy/shuttle/client"
 )
+
+func getShuttleConfig(c *cli.Context) ([]shuttle.ServiceConfig, error) {
+	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
+	httpClient := &http.Client{Transport: transport}
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/_config", c.GlobalString("shuttleAddr")), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var config []shuttle.ServiceConfig
+	err = json.Unmarshal(body, &config)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+
+}
+func pruneShuttleBackends(c *cli.Context) {
+	configs, err := getShuttleConfig(c)
+	if err != nil {
+		log.Errorf("ERROR: Unable to get shuttle config: %s", err)
+		return
+	}
+
+	registrations, err := serviceRegistry.ListRegistrations()
+	if err != nil {
+		log.Errorf("ERROR: Unable to list registrations: %s", err)
+		return
+	}
+
+	for _, config := range configs {
+		configExists := false
+		for _, r := range registrations {
+			if config.Name == r.Name {
+				configExists = true
+				break
+			}
+		}
+		if !configExists {
+			err := unregisterShuttleService(c, &config)
+			if err != nil {
+				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", config.Name, err)
+			}
+			log.Printf("Unregisterred shuttle service %s", config.Name)
+		}
+	}
+}
 
 func registerShuttle(c *cli.Context) {
 
@@ -130,33 +191,39 @@ func unregisterShuttle(c *cli.Context) {
 		service.Backends = append(service.Backends, b)
 	}
 
+	for _, service := range backends {
+
+		err := unregisterShuttleService(c, service)
+		if err != nil {
+			log.Errorf("ERROR: Unable to remove shuttle service: %s", err)
+		}
+	}
+
+}
+
+func unregisterShuttleService(c *cli.Context, service *shuttle.ServiceConfig) error {
 	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
 	httpClient := &http.Client{Transport: transport}
 
-	for k, service := range backends {
-
-		js, err := json.Marshal(service)
-		if err != nil {
-			log.Printf("ERROR: Marshaling service to JSON: %s", err)
-			continue
-		}
-
-		req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), k), bytes.NewBuffer(js))
-		if err != nil {
-			log.Printf("ERROR: Unable to create delete request: %s", err)
-			continue
-		}
-
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			log.Errorf("ERROR: Registerring backend with shuttle: %s", err)
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			log.Errorf("ERROR: Failed to register service with shuttle: %s", resp.Status)
-		}
-		resp.Body.Close()
+	js, err := json.Marshal(service)
+	if err != nil {
+		return err
 	}
+
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), service.Name), bytes.NewBuffer(js))
+	if err != nil {
+		return err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("failed to unregister service: %s", resp.Status))
+	}
+	return nil
 
 }
