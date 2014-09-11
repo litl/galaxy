@@ -28,6 +28,13 @@ type ServiceRuntime struct {
 	serviceRegistry *registry.ServiceRegistry
 }
 
+type ContainerEvent struct {
+	Status              string
+	Container           *docker.Container
+	ServiceConfig       *registry.ServiceConfig
+	ServiceRegistration *registry.ServiceRegistration
+}
+
 func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, statsdHost string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
@@ -159,8 +166,16 @@ func (s *ServiceRuntime) ensureDockerClient() *docker.Client {
 	return s.dockerClient
 }
 
+func (s *ServiceRuntime) Ping() error {
+	return s.ensureDockerClient().Ping()
+}
+
 func (s *ServiceRuntime) InspectImage(image string) (*docker.Image, error) {
 	return s.ensureDockerClient().InspectImage(image)
+}
+
+func (s *ServiceRuntime) InspectContainer(id string) (*docker.Container, error) {
+	return s.ensureDockerClient().InspectContainer(id)
 }
 
 func (s *ServiceRuntime) StopAllMatching(name string) error {
@@ -651,7 +666,18 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 	configDiffers := containerName != serviceConfig.ContainerName()
 	notRunning := !container.State.Running
 
+	// If their is a stopped container, remove it so we start a new one instead.
+	if notRunning {
+		err := s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+			ID: container.ID,
+		})
+		if err != nil {
+			return false, nil, err
+		}
+	}
+
 	if imageDiffers || configDiffers || notRunning {
+
 		container, err := s.Start(serviceConfig)
 		return true, container, err
 	}
@@ -813,4 +839,89 @@ func (s *ServiceRuntime) UnRegisterAll() ([]*docker.Container, error) {
 		}
 	}
 	return removed, nil
+}
+
+func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
+	go func() {
+		c := make(chan *docker.APIEvents)
+
+		watching := false
+		for {
+
+			err := s.Ping()
+			if err != nil {
+				log.Errorf("ERROR: Unable to ping docker daemaon: %s", err)
+				if watching {
+					s.ensureDockerClient().RemoveEventListener(c)
+					watching = false
+				}
+				time.Sleep(10 * time.Second)
+				continue
+
+			}
+
+			if !watching {
+				err = s.ensureDockerClient().AddEventListener(c)
+				if err != nil && err != docker.ErrListenerAlreadyExists {
+					log.Printf("ERROR: Error registering docker event listener: %s", err)
+					time.Sleep(10 * time.Second)
+					continue
+				}
+				watching = true
+			}
+
+			select {
+
+			case e := <-c:
+				if e.Status == "start" || e.Status == "stop" || e.Status == "die" {
+					container, err := s.InspectContainer(e.ID)
+					if err != nil {
+						log.Printf("ERROR: %s", err)
+						continue
+					}
+
+					if container == nil {
+						log.Printf("WARN: Nil container returned for %s", e.ID[:12])
+						continue
+					}
+
+					if strings.Contains(container.Name, "_") {
+						parts := strings.Split(strings.TrimPrefix(container.Name, "/"), "_")
+						service := parts[0]
+						svcCfg, err := s.serviceRegistry.GetServiceConfig(service)
+						if err != nil {
+							log.Printf("WARN: Could not find service config for %s", service)
+							continue
+						}
+
+						if svcCfg == nil {
+							continue
+						}
+
+						registration, err := s.serviceRegistry.GetServiceRegistration(container, svcCfg)
+						if err != nil {
+							log.Printf("WARN: Could not find service registration for %s/%s: %s", svcCfg.Name, container.ID[:12], err)
+							continue
+						}
+
+						if registration == nil && e.Status != "start" {
+							continue
+						}
+
+						listener <- ContainerEvent{
+							Status:              e.Status,
+							Container:           container,
+							ServiceConfig:       svcCfg,
+							ServiceRegistration: registration,
+						}
+					}
+
+				}
+			case <-time.After(10 * time.Second):
+				// check for docker liveness
+			}
+
+		}
+	}()
+	return nil
 }

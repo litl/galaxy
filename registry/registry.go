@@ -98,7 +98,7 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 func (r *ServiceRegistry) CountInstances(app string) int {
 	// TODO: convert to SCAN
 	// TODO: Should this just sum hosts? (this counts all services on all hosts)
-	matches, err := r.backend.Keys(path.Join(r.Env, r.Pool, "hosts", "*", app))
+	matches, err := r.backend.Keys(path.Join(r.Env, "*", "hosts", "*", app))
 	if err != nil {
 		log.Printf("ERROR: could not count instances - %s\n", err)
 	}
@@ -295,4 +295,20 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 	}
 
 	return appList, nil
+}
+
+func (r *ServiceRegistry) ListEnvs() ([]string, error) {
+	envs := []string{}
+	apps, err := r.backend.Keys(path.Join("*", "*", "environment"))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, app := range apps {
+		parts := strings.Split(app, "/")
+		if !utils.StringInSlice(parts[0], envs) {
+			envs = append(envs, parts[0])
+		}
+	}
+	return envs, nil
 }

@@ -11,10 +11,6 @@ import (
 	"github.com/litl/galaxy/utils"
 )
 
-const (
-	ETCD_ENTRY_ALREADY_EXISTS = 105
-)
-
 var (
 	client          *docker.Client
 	serviceRegistry *registry.ServiceRegistry

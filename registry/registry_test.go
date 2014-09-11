@@ -199,7 +199,7 @@ func TestCountInstancesKeyFormat(t *testing.T) {
 	}
 	r.backend = &fakeBackend{
 		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/web/hosts/*/foo" {
+			if key != "dev/*/hosts/*/foo" {
 				t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
 			}
 			return []string{}, nil
@@ -216,7 +216,7 @@ func TestCountInstancesOne(t *testing.T) {
 	}
 	r.backend = &fakeBackend{
 		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/web/hosts/*/foo" {
+			if key != "dev/*/hosts/*/foo" {
 				t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
 			}
 			return []string{"dev/web/hosts/me/foo"}, nil

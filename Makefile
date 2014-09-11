@@ -1,10 +1,10 @@
 .SILENT :
-.PHONY : commander shuttle discovery galaxy quasar clean fmt test upload-release
+.PHONY : commander shuttle discovery galaxy clean fmt test upload-release
 
 TAG:=`git describe --abbrev=0 --tags`
 LDFLAGS:=-X main.buildVersion `git describe --long`
 
-all: commander shuttle discovery galaxy quasar
+all: commander shuttle discovery galaxy
 
 deps:
 	godep restore
@@ -25,15 +25,10 @@ galaxy:
 	echo "Building galaxy"
 	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy
 
-quasar:
-	echo "Building quasar"
-	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/quasar
-
 clean: dist-clean
 	rm -f $(GOPATH)/bin/commander
 	rm -f $(GOPATH)/bin/discovery
 	rm -f $(GOPATH)/bin/shuttle
-	rm -f $(GOPATH)/bin/quasar
 	rm -f $(GOPATH)/bin/galaxy
 
 fmt:
@@ -55,7 +50,6 @@ dist-build: dist-init
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/commander
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/shuttle github.com/litl/galaxy/shuttle
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/discovery github.com/litl/galaxy/discovery
-	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/quasar github.com/litl/galaxy/quasar
 
 dist-linux-amd64:
 	export GOOS="linux"; \
@@ -81,7 +75,7 @@ dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64 dis
 
 release-tarball:
 	echo "Building $$GOOS-$$GOARCH-$(TAG).tar.gz"
-	GZIP=-9 tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle quasar >/dev/null 2>&1
+	GZIP=-9 tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander discovery shuttle >/dev/null 2>&1
 
 release-linux-amd64:
 	export GOOS="linux"; \

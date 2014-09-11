@@ -78,19 +78,6 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
-func EtcdJoin(elem ...string) string {
-	for i, e := range elem {
-		if e != "" {
-			joined := strings.Join(elem[i:], "/")
-			if !strings.HasPrefix(joined, "/") {
-				return "/" + joined
-			}
-			return joined
-		}
-	}
-	return ""
-}
-
 func GetEnv(name, defaultValue string) string {
 	if os.Getenv(name) == "" {
 		return defaultValue
