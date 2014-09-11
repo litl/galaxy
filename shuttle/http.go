@@ -239,6 +239,7 @@ func (e *ErrorResponse) fetch(page *ErrorPage) {
 	// If the StatusCode matches any of our registered codes, it's OK
 	for _, code := range page.StatusCodes {
 		if resp.StatusCode == code {
+			resp.StatusCode = http.StatusOK
 			break
 		}
 	}
