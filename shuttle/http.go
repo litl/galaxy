@@ -171,8 +171,8 @@ func (e *ErrorPage) SetBody(b []byte) {
 	e.body = b
 }
 
-// ErrorResponse provides vulcan middleware to process a response and insert
-// custom error pages for a virtual host.
+// ErrorResponse provides a ReverProxy callback to process a response and
+// insert custom error pages for a virtual host.
 type ErrorResponse struct {
 	sync.Mutex
 
@@ -188,10 +188,6 @@ func NewErrorResponse(pages map[string][]int) *ErrorResponse {
 		pages: make(map[int]*ErrorPage),
 	}
 
-	if pages != nil {
-		errors.Update(pages)
-	}
-
 	// aggressively timeout connections
 	errors.client = &http.Client{
 		Transport: &http.Transport{
@@ -203,29 +199,10 @@ func NewErrorResponse(pages map[string][]int) *ErrorResponse {
 		Timeout: 5 * time.Second,
 	}
 
-	go errors.update()
+	if pages != nil {
+		errors.Update(pages)
+	}
 	return errors
-}
-
-// attempt to fetch and cache all error pages
-func (e *ErrorResponse) update() {
-	e.Lock()
-	// find the set of error pages
-	pages := make(map[*ErrorPage]bool)
-	for _, page := range e.pages {
-		pages[page] = true
-	}
-
-	// Unlock while fetching the pages so we don't block any incoming errors
-	e.Unlock()
-
-	for page := range pages {
-		if page.Body() != nil {
-			continue
-		}
-
-		e.fetch(page)
-	}
 }
 
 // Get the error page body
@@ -300,8 +277,8 @@ func (e *ErrorResponse) Update(pages map[string][]int) {
 		for _, code := range codes {
 			e.pages[code] = page
 		}
+		go e.fetch(page)
 	}
-	go e.update()
 }
 
 func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
