@@ -148,7 +148,7 @@ func sslRedirect(pr *ProxyRequest) bool {
 }
 
 type ErrorPage struct {
-	// The Mutex protects access to the body slice.
+	// The Mutex protects access to the body slice, and headers
 	// Everything else should be static once the ErrorPage is created.
 	sync.Mutex
 
@@ -157,6 +157,8 @@ type ErrorPage struct {
 
 	// body contains the cached error page
 	body []byte
+	// important headers
+	header http.Header
 }
 
 func (e *ErrorPage) Body() []byte {
@@ -169,6 +171,28 @@ func (e *ErrorPage) SetBody(b []byte) {
 	e.Lock()
 	defer e.Unlock()
 	e.body = b
+}
+
+func (e *ErrorPage) Header() http.Header {
+	e.Lock()
+	defer e.Unlock()
+	return e.header
+}
+
+func (e *ErrorPage) SetHeader(h http.Header) {
+	e.Lock()
+	defer e.Unlock()
+	e.header = h
+}
+
+// List of headers we want to cache for ErrorPages
+var ErrorHeaders = []string{
+	"Content-Type",
+	"Content-Encoding",
+	"Cache-Control",
+	"Last-Modified",
+	"Retry-After",
+	"Set-Cookie",
 }
 
 // ErrorResponse provides a ReverProxy callback to process a response and
@@ -205,9 +229,9 @@ func NewErrorResponse(pages map[string][]int) *ErrorResponse {
 	return errors
 }
 
-// Get the error page body
-// We permanently cache error pages once we've seen them
-func (e *ErrorResponse) Get(code int) []byte {
+// Get the ErrorPage, returning nil if the page was incomplete.
+// We permanently cache error pages and headers once we've seen them.
+func (e *ErrorResponse) Get(code int) *ErrorPage {
 	e.Lock()
 	page, ok := e.pages[code]
 	e.Unlock()
@@ -219,12 +243,12 @@ func (e *ErrorResponse) Get(code int) []byte {
 
 	body := page.Body()
 	if body != nil {
-		return body
+		return page
 	}
 
 	// we haven't successfully fetched this error
 	e.fetch(page)
-	return page.Body()
+	return page
 }
 
 func (e *ErrorResponse) fetch(page *ErrorPage) {
@@ -249,6 +273,14 @@ func (e *ErrorResponse) fetch(page *ErrorPage) {
 		return
 	}
 
+	header := make(map[string][]string)
+	for _, key := range ErrorHeaders {
+		if hdr, ok := resp.Header[key]; ok {
+			header[key] = hdr
+		}
+	}
+	// set the headers along with the body below
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Warnf("Error reading response from %s: %s", page.Location, err.Error())
@@ -256,6 +288,7 @@ func (e *ErrorResponse) fetch(page *ErrorPage) {
 	}
 
 	if len(body) > 0 {
+		page.SetHeader(header)
 		page.SetBody(body)
 		return
 	}
@@ -286,8 +319,14 @@ func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
 
 	errPage := e.Get(pr.Response.StatusCode)
 	if errPage != nil {
+		// load the cached headers
+		header := pr.ResponseWriter.Header()
+		for key, val := range errPage.Header() {
+			header[key] = val
+		}
+
 		pr.ResponseWriter.WriteHeader(pr.Response.StatusCode)
-		pr.ResponseWriter.Write(errPage)
+		pr.ResponseWriter.Write(errPage.Body())
 		return false
 	}
 
