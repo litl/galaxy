@@ -12,6 +12,13 @@ type Value struct {
 
 type MemoryBackend struct {
 	maps map[string]map[string]string
+
+	MembersFunc      func(key string) ([]string, error)
+	KeysFunc         func(key string) ([]string, error)
+	AddMemberFunc    func(key, value string) (int, error)
+	RemoveMemberFunc func(key, value string) (int, error)
+	NotifyFunc       func(key, value string) (int, error)
+	SetMultiFunc     func(key string, values map[string]string) (string, error)
 }
 
 func NewMemoryBackend() *MemoryBackend {
@@ -27,6 +34,10 @@ func (r *MemoryBackend) Reconnect() {
 }
 
 func (r *MemoryBackend) Keys(key string) ([]string, error) {
+	if r.KeysFunc != nil {
+		return r.KeysFunc(key)
+	}
+
 	keys := []string{}
 	rp := strings.NewReplacer("*", `.*`)
 	p := rp.Replace(key)
@@ -58,6 +69,10 @@ func (r *MemoryBackend) Delete(key string) (int, error) {
 }
 
 func (r *MemoryBackend) AddMember(key, value string) (int, error) {
+	if r.AddMemberFunc != nil {
+		return r.AddMemberFunc(key, value)
+	}
+
 	set := r.maps[key]
 	if set == nil {
 		set = make(map[string]string)
@@ -68,6 +83,10 @@ func (r *MemoryBackend) AddMember(key, value string) (int, error) {
 }
 
 func (r *MemoryBackend) RemoveMember(key, value string) (int, error) {
+	if r.RemoveMemberFunc != nil {
+		return r.RemoveMemberFunc(key, value)
+	}
+
 	set := r.maps[key]
 	if set == nil {
 		return 0, nil
@@ -82,6 +101,10 @@ func (r *MemoryBackend) RemoveMember(key, value string) (int, error) {
 }
 
 func (r *MemoryBackend) Members(key string) ([]string, error) {
+	if r.MembersFunc != nil {
+		return r.MembersFunc(key)
+	}
+
 	values := []string{}
 	set := r.maps[key]
 	for v := range set {
@@ -91,6 +114,9 @@ func (r *MemoryBackend) Members(key string) ([]string, error) {
 }
 
 func (r *MemoryBackend) Notify(key, value string) (int, error) {
+	if r.NotifyFunc != nil {
+		return r.NotifyFunc(key, value)
+	}
 	return 0, nil
 }
 
@@ -111,6 +137,10 @@ func (r *MemoryBackend) GetAll(key string) (map[string]string, error) {
 }
 
 func (r *MemoryBackend) SetMulti(key string, values map[string]string) (string, error) {
+	if r.SetMultiFunc != nil {
+		return r.SetMultiFunc(key, values)
+	}
+
 	r.maps[key] = values
 	return "OK", nil
 }

@@ -5,105 +5,18 @@ import (
 	"testing"
 )
 
-type fakeBackend struct {
-	MembersFunc      func(key string) ([]string, error)
-	KeysFunc         func(key string) ([]string, error)
-	AddMemberFunc    func(key, value string) (int, error)
-	RemoveMemberFunc func(key, value string) (int, error)
-	NotifyFunc       func(key, value string) (int, error)
-	SetMultiFunc     func(key string, values map[string]string) (string, error)
-}
-
-func (f *fakeBackend) Connect()   {}
-func (f *fakeBackend) Reconnect() {}
-
-func (f *fakeBackend) Delete(key string) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Expire(key string, ttl uint64) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Ttl(key string) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Members(key string) ([]string, error) {
-	if f.MembersFunc != nil {
-		return f.MembersFunc(key)
-	}
-	return []string{}, nil
-}
-
-func (f *fakeBackend) Keys(key string) ([]string, error) {
-	if f.KeysFunc != nil {
-		return f.KeysFunc(key)
-	}
-	return []string{}, nil
-}
-
-func (f *fakeBackend) AddMember(key, value string) (int, error) {
-	if f.AddMemberFunc != nil {
-		return f.AddMemberFunc(key, value)
-	}
-	return 0, nil
-}
-
-func (f *fakeBackend) RemoveMember(key, value string) (int, error) {
-	if f.RemoveMemberFunc != nil {
-		return f.RemoveMemberFunc(key, value)
-	}
-	return 0, nil
-
-}
-
-func (f *fakeBackend) Notify(key, value string) (int, error) {
-	if f.NotifyFunc != nil {
-		return f.NotifyFunc(key, value)
-	}
-	return 0, nil
-
-}
-
-func (f *fakeBackend) Set(key, field string, value string) (string, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Get(key, field string) (string, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) GetAll(key string) (map[string]string, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) SetMulti(key string, values map[string]string) (string, error) {
-	if f.SetMultiFunc != nil {
-		return f.SetMultiFunc(key, values)
-	}
-	return "OK", nil
-}
-
-func (f *fakeBackend) DeleteMulti(key string, fields ...string) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Subscribe(key string) chan string {
-	panic("not implemented")
-}
-
 func TestListAssignmentKeyFormat(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			if key != "dev/pools/foo" {
-				t.Errorf("ListAssignments(%q) wrong key, want %s", key, "dev/pools/foo")
-			}
-			return []string{}, nil
-		},
+	backend := NewMemoryBackend()
+	r.backend = backend
+
+	backend.MembersFunc = func(key string) ([]string, error) {
+		if key != "dev/pools/foo" {
+			t.Errorf("ListAssignments(%q) wrong key, want %s", key, "dev/pools/foo")
+		}
+		return []string{}, nil
 	}
 
 	r.ListAssignments("foo")
@@ -163,13 +76,14 @@ func TestAppExistsKeyFormat(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/foo/*" {
-				t.Errorf("AppExists(%q) wrong key, want %s", key, "dev/foo/*")
-			}
-			return []string{}, nil
-		},
+	backend := NewMemoryBackend()
+	r.backend = backend
+
+	backend.KeysFunc = func(key string) ([]string, error) {
+		if key != "dev/foo/*" {
+			t.Errorf("AppExists(%q) wrong key, want %s", key, "dev/foo/*")
+		}
+		return []string{}, nil
 	}
 
 	r.AppExists("foo")
@@ -207,13 +121,14 @@ func TestCountInstancesKeyFormat(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/*/hosts/*/foo" {
-				t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
-			}
-			return []string{}, nil
-		},
+	backend := NewMemoryBackend()
+	r.backend = backend
+
+	backend.KeysFunc = func(key string) ([]string, error) {
+		if key != "dev/*/hosts/*/foo" {
+			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
+		}
+		return []string{}, nil
 	}
 
 	r.CountInstances("foo")
@@ -224,13 +139,15 @@ func TestCountInstancesOne(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/*/hosts/*/foo" {
-				t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
-			}
-			return []string{"dev/web/hosts/me/foo"}, nil
-		},
+
+	backend := NewMemoryBackend()
+	r.backend = backend
+
+	backend.KeysFunc = func(key string) ([]string, error) {
+		if key != "dev/*/hosts/*/foo" {
+			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
+		}
+		return []string{"dev/web/hosts/me/foo"}, nil
 	}
 
 	got := r.CountInstances("foo")
@@ -278,17 +195,24 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"a"}, nil
-		},
-		AddMemberFunc: func(key, value string) (int, error) {
-			return 0, errors.New("something failed")
-		},
+	backend := NewMemoryBackend()
+	r.backend = backend
+
+	if created, err := r.CreateApp("app"); !created || err != nil {
+		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 
-	if assigned, err := r.AssignApp("foo"); err == nil || assigned {
-		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "foo", assigned, err, false, nil)
+	if created, err := r.CreatePool("web"); !created || err != nil {
+		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
+	}
+
+	backend.AddMemberFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
+	}
+
+	if assigned, err := r.AssignApp("app"); assigned || err == nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, false,
+			errors.New("something failed"))
 	}
 }
 
@@ -309,14 +233,29 @@ func TestUnassignAppRemoveMemberFail(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			return 0, errors.New("something failed")
-		},
+
+	backend := NewMemoryBackend()
+	r.backend = backend
+
+	if created, err := r.CreateApp("app"); !created || err != nil {
+		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
+	}
+
+	if created, err := r.CreatePool("web"); !created || err != nil {
+		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
+	}
+
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, true, nil)
+	}
+
+	backend.RemoveMemberFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
 	}
 
 	if unassigned, err := r.UnassignApp("foo"); unassigned || err == nil {
-		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err, false, nil)
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err,
+			false, errors.New("something failed"))
 	}
 }
 
@@ -325,27 +264,33 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"a"}, nil
-		},
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			return 1, nil
-		},
-		NotifyFunc: func(key, value string) (int, error) {
-			if key != "galaxy-dev" {
-				t.Errorf("UnassignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy-dev")
-			}
+	backend := NewMemoryBackend()
+	r.backend = backend
 
-			if value != "restart foo" {
-				t.Errorf("UnassignApp(%q) wrong notify value, want %s. got %s", "foo", value, "restart foo")
-			}
-			return 1, nil
-		},
+	if created, err := r.CreateApp("app"); !created || err != nil {
+		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 
-	if unassigned, err := r.UnassignApp("foo"); !unassigned || err != nil {
-		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err, true, nil)
+	if created, err := r.CreatePool("web"); !created || err != nil {
+		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
+	}
+
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
+	}
+
+	backend.NotifyFunc = func(key, value string) (int, error) {
+		if key != "galaxy-dev" {
+			t.Errorf("UnassignApp(%q) wrong notify key, want %s. got %s", "app", key, "galaxy-dev")
+		}
+
+		if value != "restart app" {
+			t.Errorf("UnassignApp(%q) wrong notify value, want %s. got %s", "app", value, "restart app")
+		}
+		return 1, nil
+	}
+	if unassigned, err := r.UnassignApp("app"); !unassigned || err != nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "app", unassigned, err, true, nil)
 	}
 }
 
@@ -464,10 +409,11 @@ func TestCreateAppError(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{}, errors.New("something failed")
-		},
+	backend := NewMemoryBackend()
+	r.backend = backend
+
+	backend.KeysFunc = func(key string) ([]string, error) {
+		return []string{}, errors.New("something failed")
 	}
 
 	if created, err := r.CreateApp("foo"); created || err == nil {
