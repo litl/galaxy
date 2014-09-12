@@ -56,20 +56,42 @@ func pruneShuttleBackends(c *cli.Context) {
 	}
 
 	for _, config := range configs {
-		configExists := false
-		for _, r := range registrations {
-			if config.Name == r.Name {
-				configExists = true
-				break
-			}
+
+		// Remove services that no longer exist
+		svcCfg, err := serviceRegistry.GetServiceConfig(config.Name)
+		if err != nil {
+			log.Errorf("ERROR: Unable to get service config for %s: %s", config.Name, err)
+			return
 		}
-		if !configExists {
+
+		if svcCfg == nil {
 			err := unregisterShuttleService(c, &config)
 			if err != nil {
 				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", config.Name, err)
 			}
 			log.Printf("Unregisterred shuttle service %s", config.Name)
+			continue
 		}
+
+		for _, backend := range config.Backends {
+			backendExists := false
+			for _, r := range registrations {
+				if backend.Name == r.ContainerID[0:12] {
+					backendExists = true
+					break
+				}
+			}
+
+			if !backendExists {
+				err := unregisterShuttleBackend(c, config.Name, backend.Name)
+				if err != nil {
+					log.Errorf("ERROR: Unable to remove backend %s from shuttle: %s", backend.Name, err)
+				}
+				log.Printf("Unregisterred shuttle backend %s", backend.Name)
+			}
+
+		}
+
 	}
 }
 
@@ -225,5 +247,25 @@ func unregisterShuttleService(c *cli.Context, service *shuttle.ServiceConfig) er
 		return errors.New(fmt.Sprintf("failed to unregister service: %s", resp.Status))
 	}
 	return nil
+}
 
+func unregisterShuttleBackend(c *cli.Context, service, backend string) error {
+	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
+	httpClient := &http.Client{Transport: transport}
+
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s/%s", c.GlobalString("shuttleAddr"), service, backend), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("failed to unregister backend: %s", resp.Status))
+	}
+	return nil
 }
