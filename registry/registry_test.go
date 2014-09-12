@@ -113,11 +113,7 @@ func TestListAssignmentsEmpty(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
-	}
+	r.backend = &fakeBackend{}
 
 	assignments, err := r.ListAssignments("foo")
 	if err != nil {
@@ -177,11 +173,7 @@ func TestAppNotExists(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
-	}
+	r.backend = &fakeBackend{}
 
 	exists, err := r.AppExists("foo")
 	if err != nil {
@@ -255,11 +247,7 @@ func TestAssignAppNotExists(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
-	}
+	r.backend = &fakeBackend{}
 
 	assigned, err := r.AssignApp("foo")
 	if assigned {
@@ -334,11 +322,7 @@ func TestUnassignAppNotExists(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			return 0, nil
-		},
-	}
+	r.backend = &fakeBackend{}
 
 	unassigned, err := r.UnassignApp("foo")
 	if unassigned {
@@ -439,10 +423,6 @@ func TestDeletePool(t *testing.T) {
 		Pool: "web",
 	}
 	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
-
 		RemoveMemberFunc: func(key, value string) (int, error) {
 			if key != "dev/pools/*" {
 				t.Errorf("DeletePool(%q) wrong key, want %s. got %s", "foo", key, "dev/pools/*")
