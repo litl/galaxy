@@ -50,6 +50,10 @@ func (r *MemoryBackend) Ttl(key string) (int, error) {
 }
 
 func (r *MemoryBackend) Delete(key string) (int, error) {
+	if _, ok := r.maps[key]; ok {
+		delete(r.maps, key)
+		return 1, nil
+	}
 	return 0, nil
 }
 
@@ -80,8 +84,8 @@ func (r *MemoryBackend) RemoveMember(key, value string) (int, error) {
 func (r *MemoryBackend) Members(key string) ([]string, error) {
 	values := []string{}
 	set := r.maps[key]
-	for k := range set {
-		values = append(values, k)
+	for v := range set {
+		values = append(values, v)
 	}
 	return values, nil
 }

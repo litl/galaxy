@@ -127,16 +127,18 @@ func TestListAssignmentsEmpty(t *testing.T) {
 
 func TestListAssignmentsNotEmpty(t *testing.T) {
 	r := &ServiceRegistry{
-		Env: "dev",
+		Env:  "dev",
+		Pool: "web",
 	}
 
 	r.backend = NewMemoryBackend()
 
+	r.CreatePool("web")
 	for _, k := range []string{"one", "two"} {
 		if created, err := r.CreateApp(k); !created || err != nil {
 			t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", k, created, err, true, nil)
 		}
-		r.Pool = "foo"
+
 		if assigned, err := r.AssignApp(k); !assigned || err != nil {
 			t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", k, assigned, err, true, nil)
 		}
@@ -144,8 +146,8 @@ func TestListAssignmentsNotEmpty(t *testing.T) {
 
 	var assignments []string
 	var err error
-	if assignments, err = r.ListAssignments("foo"); len(assignments) != 2 || err != nil {
-		t.Fatalf("ListAssignments(%q) = %d, %v, want %d, %v", "foo", len(assignments), err, 2, nil)
+	if assignments, err = r.ListAssignments("web"); len(assignments) != 2 || err != nil {
+		t.Fatalf("ListAssignments(%q) = %d, %v, want %d, %v", "web", len(assignments), err, 2, nil)
 	}
 
 	if assignments[0] != "one" {
@@ -254,6 +256,23 @@ func TestAssignAppNotExists(t *testing.T) {
 	}
 }
 
+func TestAssignAppPoolExists(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	r.backend = NewMemoryBackend()
+
+	if created, err := r.CreateApp("app"); !created || err != nil {
+		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
+	}
+
+	if assigned, err := r.AssignApp("app"); assigned || err == nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err,
+			false, errors.New("pool web does not exist"))
+	}
+}
+
 func TestAssignAppAddMemberFail(t *testing.T) {
 	r := &ServiceRegistry{
 		Env:  "dev",
@@ -270,35 +289,6 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 
 	if assigned, err := r.AssignApp("foo"); err == nil || assigned {
 		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "foo", assigned, err, false, nil)
-	}
-}
-
-func TestAssignAppAddMemberNotifyRestart(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"a"}, nil
-		},
-		AddMemberFunc: func(key, value string) (int, error) {
-			return 1, nil
-		},
-		NotifyFunc: func(key, value string) (int, error) {
-			if key != "galaxy-dev" {
-				t.Errorf("AssignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy-dev")
-			}
-
-			if value != "restart foo" {
-				t.Errorf("AssignApp(%q) wrong notify value, want %s. got %s", "foo", value, "restart foo")
-			}
-			return 1, nil
-		},
-	}
-
-	if assigned, err := r.AssignApp("foo"); !assigned || err != nil {
-		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "foo", assigned, err, true, nil)
 	}
 }
 
@@ -483,6 +473,122 @@ func TestCreateAppError(t *testing.T) {
 	if created, err := r.CreateApp("foo"); created || err == nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
 			created, err,
-			err, errors.New("something failed"))
+			false, errors.New("something failed"))
+	}
+}
+
+func TestDeleteApp(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	r.backend = NewMemoryBackend()
+
+	if created, err := r.CreateApp("foo"); !created || err != nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
+			created, err,
+			true, nil)
+	}
+
+	if exists, err := r.AppExists("foo"); !exists || err != nil {
+		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "foo", exists, err,
+			true, nil)
+	}
+
+	if deleted, err := r.DeleteApp("foo"); !deleted || err != nil {
+		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "foo", deleted, err,
+			true, nil)
+	}
+}
+
+func TestDeleteAppStillAssigned(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	r.backend = NewMemoryBackend()
+
+	if created, err := r.CreateApp("foo"); !created || err != nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
+			created, err,
+			true, nil)
+	}
+
+	if exists, err := r.AppExists("foo"); !exists || err != nil {
+		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "foo", exists, err,
+			true, nil)
+	}
+
+	if created, err := r.CreatePool("web"); !created || err != nil {
+		t.Fatalf("CreatePool(%q) = %t, %v, want %t, %v", "web", created, err,
+			true, nil)
+	}
+
+	if assigned, err := r.AssignApp("foo"); !assigned || err != nil {
+		t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", "foo", assigned, err,
+			true, nil)
+	}
+
+	if deleted, err := r.DeleteApp("foo"); deleted || err == nil {
+		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "foo", deleted, err,
+			false, errors.New("app is assigned to pool web"))
+	}
+}
+
+func TestListApps(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	r.backend = NewMemoryBackend()
+
+	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			0, nil)
+	}
+
+	for _, k := range []string{"one", "two"} {
+		if created, err := r.CreateApp(k); !created || err != nil {
+			t.Fatalf("CreateApp() = %t, %v, want %t, %v",
+				created, err,
+				true, nil)
+		}
+	}
+
+	if apps, err := r.ListApps(); len(apps) != 2 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			2, nil)
+	}
+}
+
+func TestListAppsIgnoreSpecialKeys(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	backend := NewMemoryBackend()
+	r.backend = backend
+	backend.maps["dev/hosts/environment"] = make(map[string]string)
+
+	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			0, nil)
+	}
+}
+
+func TestListEnvs(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	backend := NewMemoryBackend()
+	r.backend = backend
+	backend.maps["dev/hosts/environment"] = make(map[string]string)
+	backend.maps["prod/web/foo/environment"] = make(map[string]string)
+	backend.maps["prod/hosts/environment"] = make(map[string]string)
+
+	if apps, err := r.ListEnvs(); len(apps) != 2 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			2, nil)
 	}
 }
