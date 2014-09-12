@@ -46,10 +46,7 @@ func TestListAssignmentsNotEmpty(t *testing.T) {
 
 	r.CreatePool("web")
 	for _, k := range []string{"one", "two"} {
-		if created, err := r.CreateApp(k); !created || err != nil {
-			t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", k, created, err, true, nil)
-		}
-
+		assertAppCreated(t, r, k)
 		if assigned, err := r.AssignApp(k); !assigned || err != nil {
 			t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", k, assigned, err, true, nil)
 		}
@@ -95,9 +92,7 @@ func TestAppNotExists(t *testing.T) {
 func TestAppExists(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreateApp("foo"); !created || err != nil {
-		t.Errorf("CreateApp(%q) = %t, %v, want %t, %v", "foo", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "foo")
 
 	if exists, err := r.AppExists("foo"); !exists || err != nil {
 		t.Errorf("AppExists(%q) = %t, %v, want %t, %v", "foo", exists, err, true, nil)
@@ -149,9 +144,7 @@ func TestAssignAppNotExists(t *testing.T) {
 func TestAssignAppPoolExists(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreateApp("app"); !created || err != nil {
-		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
 
 	if assigned, err := r.AssignApp("app"); assigned || err == nil {
 		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err,
@@ -162,9 +155,7 @@ func TestAssignAppPoolExists(t *testing.T) {
 func TestAssignAppAddMemberFail(t *testing.T) {
 	r, b := NewTestRegistry()
 
-	if created, err := r.CreateApp("app"); !created || err != nil {
-		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
 
 	if created, err := r.CreatePool("web"); !created || err != nil {
 		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
@@ -191,9 +182,7 @@ func TestUnassignAppNotExists(t *testing.T) {
 func TestUnassignAppRemoveMemberFail(t *testing.T) {
 	r, b := NewTestRegistry()
 
-	if created, err := r.CreateApp("app"); !created || err != nil {
-		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
 
 	if created, err := r.CreatePool("web"); !created || err != nil {
 		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
@@ -216,9 +205,7 @@ func TestUnassignAppRemoveMemberFail(t *testing.T) {
 func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 	r, b := NewTestRegistry()
 
-	if created, err := r.CreateApp("app"); !created || err != nil {
-		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
 
 	if created, err := r.CreatePool("web"); !created || err != nil {
 		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
@@ -271,9 +258,7 @@ func TestDeletePool(t *testing.T) {
 func TestDeletePoolHasAssignments(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreateApp("app"); !created || err != nil {
-		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
 
 	if created, err := r.CreatePool("foo"); !created || err != nil {
 		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
@@ -308,19 +293,15 @@ func TestListPools(t *testing.T) {
 func TestCreateApp(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreateApp("foo"); !created || err != nil {
-		t.Fatalf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
 }
 
 func TestCreateAppAlreadyExists(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreateApp("foo"); !created || err != nil {
-		t.Fatalf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
 
-	if created, err := r.CreateApp("foo"); created || err != nil {
+	if created, err := r.CreateApp("app"); created || err != nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
 			created, err,
 			false, nil)
@@ -344,19 +325,15 @@ func TestCreateAppError(t *testing.T) {
 func TestDeleteApp(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreateApp("foo"); !created || err != nil {
-		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
-			created, err,
+	assertAppCreated(t, r, "app")
+
+	if exists, err := r.AppExists("app"); !exists || err != nil {
+		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "app", exists, err,
 			true, nil)
 	}
 
-	if exists, err := r.AppExists("foo"); !exists || err != nil {
-		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "foo", exists, err,
-			true, nil)
-	}
-
-	if deleted, err := r.DeleteApp("foo"); !deleted || err != nil {
-		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "foo", deleted, err,
+	if deleted, err := r.DeleteApp("app"); !deleted || err != nil {
+		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "app", deleted, err,
 			true, nil)
 	}
 }
@@ -364,14 +341,10 @@ func TestDeleteApp(t *testing.T) {
 func TestDeleteAppStillAssigned(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreateApp("foo"); !created || err != nil {
-		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
-			created, err,
-			true, nil)
-	}
+	assertAppCreated(t, r, "app")
 
-	if exists, err := r.AppExists("foo"); !exists || err != nil {
-		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "foo", exists, err,
+	if exists, err := r.AppExists("app"); !exists || err != nil {
+		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "app", exists, err,
 			true, nil)
 	}
 
@@ -380,13 +353,13 @@ func TestDeleteAppStillAssigned(t *testing.T) {
 			true, nil)
 	}
 
-	if assigned, err := r.AssignApp("foo"); !assigned || err != nil {
-		t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", "foo", assigned, err,
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err,
 			true, nil)
 	}
 
-	if deleted, err := r.DeleteApp("foo"); deleted || err == nil {
-		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "foo", deleted, err,
+	if deleted, err := r.DeleteApp("app"); deleted || err == nil {
+		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "app", deleted, err,
 			false, errors.New("app is assigned to pool web"))
 	}
 }
@@ -400,11 +373,7 @@ func TestListApps(t *testing.T) {
 	}
 
 	for _, k := range []string{"one", "two"} {
-		if created, err := r.CreateApp(k); !created || err != nil {
-			t.Fatalf("CreateApp() = %t, %v, want %t, %v",
-				created, err,
-				true, nil)
-		}
+		assertAppCreated(t, r, k)
 	}
 
 	if apps, err := r.ListApps(); len(apps) != 2 || err != nil {
@@ -434,5 +403,13 @@ func TestListEnvs(t *testing.T) {
 	if apps, err := r.ListEnvs(); len(apps) != 2 || err != nil {
 		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
 			2, nil)
+	}
+}
+
+func assertAppCreated(t *testing.T, r *ServiceRegistry, app string) {
+	if created, err := r.CreateApp(app); !created || err != nil {
+		t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", app,
+			created, err,
+			true, nil)
 	}
 }
