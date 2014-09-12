@@ -113,7 +113,7 @@ func TestListAssignmentsEmpty(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{}
+	r.backend = NewMemoryBackend()
 
 	assignments, err := r.ListAssignments("foo")
 	if err != nil {
@@ -129,27 +129,31 @@ func TestListAssignmentsNotEmpty(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{"one", "two"}, nil
-		},
+
+	r.backend = NewMemoryBackend()
+
+	for _, k := range []string{"one", "two"} {
+		if created, err := r.CreateApp(k); !created || err != nil {
+			t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", k, created, err, true, nil)
+		}
+		r.Pool = "foo"
+		if assigned, err := r.AssignApp(k); !assigned || err != nil {
+			t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", k, assigned, err, true, nil)
+		}
 	}
 
-	assignments, err := r.ListAssignments("foo")
-	if err != nil {
-		t.Error(err)
-	}
-
-	if len(assignments) != 2 {
-		t.Errorf("ListAssignments(%q) = %d, want %d", "foo", len(assignments), 0)
+	var assignments []string
+	var err error
+	if assignments, err = r.ListAssignments("foo"); len(assignments) != 2 || err != nil {
+		t.Fatalf("ListAssignments(%q) = %d, %v, want %d, %v", "foo", len(assignments), err, 2, nil)
 	}
 
 	if assignments[0] != "one" {
-		t.Errorf("assignments[0] = %d, want %d", assignments[0], "one")
+		t.Fatalf("assignments[0] = %v, want %v", assignments[0], "one")
 	}
 
 	if assignments[1] != "two" {
-		t.Errorf("assignments[1] = %d, want %d", assignments[0], "two")
+		t.Fatalf("assignments[1] = %v, want %v", assignments[0], "two")
 	}
 }
 
@@ -173,7 +177,7 @@ func TestAppNotExists(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{}
+	r.backend = NewMemoryBackend()
 
 	exists, err := r.AppExists("foo")
 	if err != nil {
@@ -181,7 +185,7 @@ func TestAppNotExists(t *testing.T) {
 	}
 
 	if exists {
-		t.Errorf("AppExists(%q) = %t, want %t", exists, false)
+		t.Errorf("AppExists(%q) = %t, want %t", "foo", exists, false)
 	}
 }
 
@@ -189,10 +193,10 @@ func TestAppExists(t *testing.T) {
 	r := &ServiceRegistry{
 		Env: "dev",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"/dev/foo/environment"}, nil
-		},
+	r.backend = NewMemoryBackend()
+
+	if created, err := r.CreateApp("foo"); !created || err != nil {
+		t.Errorf("CreateApp(%q) = %t, %v, want %t, %v", "foo", created, err, true, nil)
 	}
 
 	exists, err := r.AppExists("foo")
@@ -201,7 +205,7 @@ func TestAppExists(t *testing.T) {
 	}
 
 	if !exists {
-		t.Errorf("AppExists(%q) = %t, want %t", exists, true)
+		t.Errorf("AppExists(%q) = %t, want %t", "foo", exists, true)
 	}
 }
 
@@ -238,7 +242,7 @@ func TestCountInstancesOne(t *testing.T) {
 
 	got := r.CountInstances("foo")
 	if got != 1 {
-		t.Errorf("CountInstances(%q) = %t, want %t", "foo", got, 1)
+		t.Errorf("CountInstances(%q) = %v, want %v", "foo", got, 1)
 	}
 }
 
@@ -247,7 +251,7 @@ func TestAssignAppNotExists(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{}
+	r.backend = NewMemoryBackend()
 
 	assigned, err := r.AssignApp("foo")
 	if assigned {
@@ -279,7 +283,7 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 	}
 
 	if err == nil {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", err, errors.New("something failed"))
+		t.Errorf("AssignApp(%q) = %v, want %v", "foo", err, errors.New("something failed"))
 	}
 }
 
@@ -313,7 +317,7 @@ func TestAssignAppAddMemberNotifyRestart(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", err, nil)
+		t.Errorf("AssignApp(%q) = %v, want %v", "foo", err, nil)
 	}
 }
 
@@ -322,7 +326,7 @@ func TestUnassignAppNotExists(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{}
+	r.backend = NewMemoryBackend()
 
 	unassigned, err := r.UnassignApp("foo")
 	if unassigned {
@@ -351,7 +355,7 @@ func TestUnassignAppRemoveMemberFail(t *testing.T) {
 	}
 
 	if err == nil {
-		t.Errorf("UnssignApp(%q) = %t, want %t", "foo", err, errors.New("something failed"))
+		t.Errorf("UnssignApp(%q) = %v, want %v", "foo", err, errors.New("something failed"))
 	}
 }
 
@@ -385,7 +389,7 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Errorf("UnassignApp(%q) = %t, want %t", "foo", err, nil)
+		t.Errorf("UnassignApp(%q) = %v, want %v", "foo", err, nil)
 	}
 }
 
@@ -394,18 +398,7 @@ func TestCreatePool(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		AddMemberFunc: func(key, value string) (int, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("CreatePool(%q) wrong key, want %s. got %s", "foo", key, "dev/pools/*")
-			}
-			if value != "foo" {
-				t.Errorf("CreatePool(%q) wrong value, want %s. got %s", "foo", key, "foo")
-			}
-
-			return 1, nil
-		},
-	}
+	r.backend = NewMemoryBackend()
 
 	created, err := r.CreatePool("foo")
 	if !created {
@@ -413,7 +406,7 @@ func TestCreatePool(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Errorf("CreatePool(%q) = %t, want %t", "foo", err, nil)
+		t.Errorf("CreatePool(%q) = %v, want %v", "foo", err, nil)
 	}
 }
 
@@ -422,17 +415,20 @@ func TestDeletePool(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("DeletePool(%q) wrong key, want %s. got %s", "foo", key, "dev/pools/*")
-			}
-			if value != "foo" {
-				t.Errorf("DeletePool(%q) wrong value, want %s. got %s", "foo", key, "foo")
-			}
 
-			return 1, nil
-		},
+	r.backend = NewMemoryBackend()
+	created, err := r.CreatePool("foo")
+	if err != nil {
+		t.Errorf("CreatePool() = %v, want %v", err, nil)
+	}
+
+	if !created {
+		t.Errorf("CreatePool()) = %t, want %t", created, true)
+	}
+
+	r.Pool = "foo"
+	if exists, err := r.PoolExists(); !exists || err != nil {
+		t.Errorf("PoolExists()) = %t, %v, want %t, %v", exists, err, true, nil)
 	}
 
 	deleted, err := r.DeletePool("foo")
@@ -441,7 +437,7 @@ func TestDeletePool(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", err, nil)
+		t.Errorf("DeletePool(%q) = %v, want %v", "foo", err, nil)
 	}
 }
 
@@ -450,21 +446,35 @@ func TestDeletePoolHasAssignments(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{"one", "two"}, nil
-		},
 
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("DeletePool(%q) wrong key, want %s. got %s", "foo", key, "dev/pools/*")
-			}
-			if value != "foo" {
-				t.Errorf("DeletePool(%q) wrong value, want %s. got %s", "foo", key, "foo")
-			}
+	r.backend = NewMemoryBackend()
+	created, err := r.CreateApp("app")
+	if err != nil {
+		t.Errorf("CreateApp() = %v, want %v", err, nil)
+	}
 
-			return 1, nil
-		},
+	if !created {
+		t.Errorf("CreateApp()) = %t, want %t", created, true)
+	}
+
+	created, err = r.CreatePool("foo")
+	if err != nil {
+		t.Errorf("CreatePool() = %v, want %v", err, nil)
+	}
+
+	if !created {
+		t.Errorf("CreatePool()) = %t, want %t", created, true)
+	}
+
+	// This is weird. AssignApp should probably take app & pool as params.
+	r.Pool = "foo"
+	assigned, err := r.AssignApp("app")
+	if err != nil {
+		t.Errorf("AssignApp() = %v, want %v", err, nil)
+	}
+
+	if !assigned {
+		t.Errorf("AssignApp()) = %t, want %t", assigned, true)
 	}
 
 	deleted, err := r.DeletePool("foo")
@@ -473,7 +483,7 @@ func TestDeletePoolHasAssignments(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", err, nil)
+		t.Errorf("DeletePool(%q) = %v, want %v", "foo", err, nil)
 	}
 }
 
@@ -483,44 +493,17 @@ func TestListPools(t *testing.T) {
 		Pool: "web",
 	}
 
-	// This is a table of Member func calls that are expected to be
-	// invoked in the order that they are listed
-	callCnt := 0
-	memberFuncs := []func(key string) ([]string, error){
-		func(key string) ([]string, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("ListPools() wrong key, want %s. got %s", key, "dev/pools/*")
-			}
-			return []string{"one", "two"}, nil
-		},
-		func(key string) ([]string, error) {
-			if key != "dev/pools/one" {
-				t.Errorf("ListPools() wrong key, want %s. got %s", key, "dev/pools/one")
-			}
-			return []string{"one"}, nil
+	r.backend = NewMemoryBackend()
 
-		},
-		func(key string) ([]string, error) {
-			if key != "dev/pools/two" {
-				t.Errorf("ListPools() wrong key, want %s. got %s", key, "dev/pools/two")
-			}
-			return []string{"two"}, nil
-		},
-	}
-
-	// Calls the func pointed to by callCnt index, then increments it
-	memberFunc := func(key string) ([]string, error) {
-		if callCnt > len(memberFuncs) {
-			t.Errorf("ListPools() too many calls to Members. got %s", callCnt, len(memberFuncs))
+	for _, pool := range []string{"one", "two"} {
+		created, err := r.CreatePool(pool)
+		if err != nil {
+			t.Errorf("CreatePool() = %v, want %v", err, nil)
 		}
-		defer func() {
-			callCnt = callCnt + 1
-		}()
-		return memberFuncs[callCnt](key)
-	}
 
-	r.backend = &fakeBackend{
-		MembersFunc: memberFunc,
+		if !created {
+			t.Errorf("CreatePool() = %t, want %t", created, true)
+		}
 	}
 
 	pools, err := r.ListPools()
@@ -529,7 +512,7 @@ func TestListPools(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Errorf("ListPools() = %t, want %t", err, nil)
+		t.Errorf("ListPools() = %v, want %v", err, nil)
 	}
 }
 
@@ -538,15 +521,15 @@ func TestCreateApp(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{}
+	r.backend = NewMemoryBackend()
 
 	created, err := r.CreateApp("foo")
 	if err != nil {
-		t.Fatalf("CreateApp() = %t, want %t", err, nil)
+		t.Fatalf("CreateApp() = %v, want %v", err, nil)
 	}
 
 	if !created {
-		t.Fatalf("CreateApp() = %b, want %b", created, true)
+		t.Fatalf("CreateApp() = %t, want %t", created, true)
 	}
 }
 
@@ -555,19 +538,25 @@ func TestCreateAppAlreadyExists(t *testing.T) {
 		Env:  "dev",
 		Pool: "web",
 	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"exists"}, nil
-		},
-	}
+
+	r.backend = NewMemoryBackend()
 
 	created, err := r.CreateApp("foo")
 	if err != nil {
-		t.Fatalf("CreateApp() = %t, want %t", err, nil)
+		t.Fatalf("CreateApp() = %v, want %v", err, nil)
+	}
+
+	if !created {
+		t.Fatalf("CreateApp() = %t, want %t", created, true)
+	}
+
+	created, err = r.CreateApp("foo")
+	if err != nil {
+		t.Fatalf("CreateApp() = %v, want %v", err, nil)
 	}
 
 	if created {
-		t.Fatalf("CreateApp() = %b, want %b", created, false)
+		t.Fatalf("CreateApp() = %t, want %t", created, false)
 	}
 }
 
@@ -584,10 +573,10 @@ func TestCreateAppError(t *testing.T) {
 
 	created, err := r.CreateApp("foo")
 	if err == nil {
-		t.Fatalf("CreateApp() = %t, want %t", err, errors.New("something failed"))
+		t.Fatalf("CreateApp() = %v, want %v", err, errors.New("something failed"))
 	}
 
 	if created {
-		t.Fatalf("CreateApp() = %b, want %b", created, false)
+		t.Fatalf("CreateApp() = %t, want %t", created, false)
 	}
 }
