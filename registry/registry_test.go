@@ -164,6 +164,22 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 	}
 }
 
+func TestAssignAppNotifyFail(t *testing.T) {
+	r, b := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	b.NotifyFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
+	}
+
+	if assigned, err := r.AssignApp("app"); !assigned || err == nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, false,
+			errors.New("something failed"))
+	}
+}
+
 func TestUnassignAppNotExists(t *testing.T) {
 	r, _ := NewTestRegistry()
 
@@ -217,9 +233,40 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 	}
 }
 
+func TestUnassignAppNotifyFailed(t *testing.T) {
+	r, b := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
+	}
+
+	b.NotifyFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
+	}
+
+	if unassigned, err := r.UnassignApp("app"); !unassigned || err == nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "app", unassigned, err, true, nil)
+	}
+
+}
+
 func TestCreatePool(t *testing.T) {
 	r, _ := NewTestRegistry()
 	assertPoolCreated(t, r, "web")
+}
+
+func TestCreatePoolAddMemberFailedl(t *testing.T) {
+	r, b := NewTestRegistry()
+	b.AddMemberFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
+	}
+
+	if created, err := r.CreatePool("web"); created || err == nil {
+		t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", "web", created, err, true, nil)
+	}
 }
 
 func TestDeletePool(t *testing.T) {
