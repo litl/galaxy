@@ -91,12 +91,8 @@ func TestAppNotExists(t *testing.T) {
 
 func TestAppExists(t *testing.T) {
 	r, _ := NewTestRegistry()
-
-	assertAppCreated(t, r, "foo")
-
-	if exists, err := r.AppExists("foo"); !exists || err != nil {
-		t.Errorf("AppExists(%q) = %t, %v, want %t, %v", "foo", exists, err, true, nil)
-	}
+	assertAppCreated(t, r, "app")
+	assertAppExists(t, r, "app")
 }
 
 func TestCountInstancesKeyFormat(t *testing.T) {
@@ -326,11 +322,7 @@ func TestDeleteApp(t *testing.T) {
 	r, _ := NewTestRegistry()
 
 	assertAppCreated(t, r, "app")
-
-	if exists, err := r.AppExists("app"); !exists || err != nil {
-		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "app", exists, err,
-			true, nil)
-	}
+	assertAppExists(t, r, "app")
 
 	if deleted, err := r.DeleteApp("app"); !deleted || err != nil {
 		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "app", deleted, err,
@@ -342,11 +334,7 @@ func TestDeleteAppStillAssigned(t *testing.T) {
 	r, _ := NewTestRegistry()
 
 	assertAppCreated(t, r, "app")
-
-	if exists, err := r.AppExists("app"); !exists || err != nil {
-		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", "app", exists, err,
-			true, nil)
-	}
+	assertAppExists(t, r, "app")
 
 	if created, err := r.CreatePool("web"); !created || err != nil {
 		t.Fatalf("CreatePool(%q) = %t, %v, want %t, %v", "web", created, err,
@@ -410,6 +398,13 @@ func assertAppCreated(t *testing.T, r *ServiceRegistry, app string) {
 	if created, err := r.CreateApp(app); !created || err != nil {
 		t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", app,
 			created, err,
+			true, nil)
+	}
+}
+
+func assertAppExists(t *testing.T, r *ServiceRegistry, app string) {
+	if exists, err := r.AppExists(app); !exists || err != nil {
+		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", app, exists, err,
 			true, nil)
 	}
 }
