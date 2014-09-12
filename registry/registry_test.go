@@ -179,13 +179,9 @@ func TestAppNotExists(t *testing.T) {
 	}
 	r.backend = NewMemoryBackend()
 
-	exists, err := r.AppExists("foo")
-	if err != nil {
-		t.Error(err)
-	}
-
-	if exists {
-		t.Errorf("AppExists(%q) = %t, want %t", "foo", exists, false)
+	if exists, err := r.AppExists("foo"); exists || err != nil {
+		t.Errorf("AppExists(%q) = %t, %v, want %t, %v",
+			"foo", exists, err, false, nil)
 	}
 }
 
@@ -199,13 +195,8 @@ func TestAppExists(t *testing.T) {
 		t.Errorf("CreateApp(%q) = %t, %v, want %t, %v", "foo", created, err, true, nil)
 	}
 
-	exists, err := r.AppExists("foo")
-	if err != nil {
-		t.Error(err)
-	}
-
-	if !exists {
-		t.Errorf("AppExists(%q) = %t, want %t", "foo", exists, true)
+	if exists, err := r.AppExists("foo"); !exists || err != nil {
+		t.Errorf("AppExists(%q) = %t, %v, want %t, %v", "foo", exists, err, true, nil)
 	}
 }
 
@@ -277,13 +268,8 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 		},
 	}
 
-	assigned, err := r.AssignApp("foo")
-	if assigned {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", assigned, false)
-	}
-
-	if err == nil {
-		t.Errorf("AssignApp(%q) = %v, want %v", "foo", err, errors.New("something failed"))
+	if assigned, err := r.AssignApp("foo"); err == nil || assigned {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "foo", assigned, err, false, nil)
 	}
 }
 
@@ -311,13 +297,8 @@ func TestAssignAppAddMemberNotifyRestart(t *testing.T) {
 		},
 	}
 
-	assigned, err := r.AssignApp("foo")
-	if !assigned {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", assigned, true)
-	}
-
-	if err != nil {
-		t.Errorf("AssignApp(%q) = %v, want %v", "foo", err, nil)
+	if assigned, err := r.AssignApp("foo"); !assigned || err != nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "foo", assigned, err, true, nil)
 	}
 }
 
@@ -328,13 +309,8 @@ func TestUnassignAppNotExists(t *testing.T) {
 	}
 	r.backend = NewMemoryBackend()
 
-	unassigned, err := r.UnassignApp("foo")
-	if unassigned {
-		t.Errorf("UnAssignApp(%q) = %t, want %t", "foo", unassigned, false)
-	}
-
-	if err != nil {
-		t.Error(err)
+	if unassigned, err := r.UnassignApp("foo"); unassigned || err != nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err, false, nil)
 	}
 }
 
@@ -349,13 +325,8 @@ func TestUnassignAppRemoveMemberFail(t *testing.T) {
 		},
 	}
 
-	unassigned, err := r.UnassignApp("foo")
-	if unassigned {
-		t.Errorf("UnassignApp(%q) = %t, want %t", "foo", unassigned, false)
-	}
-
-	if err == nil {
-		t.Errorf("UnssignApp(%q) = %v, want %v", "foo", err, errors.New("something failed"))
+	if unassigned, err := r.UnassignApp("foo"); unassigned || err == nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err, false, nil)
 	}
 }
 
@@ -383,13 +354,8 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 		},
 	}
 
-	unassigned, err := r.UnassignApp("foo")
-	if !unassigned {
-		t.Errorf("UnassignApp(%q) = %t, want %t", "foo", unassigned, true)
-	}
-
-	if err != nil {
-		t.Errorf("UnassignApp(%q) = %v, want %v", "foo", err, nil)
+	if unassigned, err := r.UnassignApp("foo"); !unassigned || err != nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err, true, nil)
 	}
 }
 
@@ -400,13 +366,8 @@ func TestCreatePool(t *testing.T) {
 	}
 	r.backend = NewMemoryBackend()
 
-	created, err := r.CreatePool("foo")
-	if !created {
-		t.Errorf("CreatePool(%q) = %t, want %t", "foo", created, true)
-	}
-
-	if err != nil {
-		t.Errorf("CreatePool(%q) = %v, want %v", "foo", err, nil)
+	if created, err := r.CreatePool("foo"); !created || err != nil {
+		t.Errorf("CreatePool(%q) = %tm %v, want %t, %v", "foo", created, err, true, nil)
 	}
 }
 
@@ -417,13 +378,8 @@ func TestDeletePool(t *testing.T) {
 	}
 
 	r.backend = NewMemoryBackend()
-	created, err := r.CreatePool("foo")
-	if err != nil {
-		t.Errorf("CreatePool() = %v, want %v", err, nil)
-	}
-
-	if !created {
-		t.Errorf("CreatePool()) = %t, want %t", created, true)
+	if created, err := r.CreatePool("foo"); !created || err != nil {
+		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 
 	r.Pool = "foo"
@@ -431,13 +387,8 @@ func TestDeletePool(t *testing.T) {
 		t.Errorf("PoolExists()) = %t, %v, want %t, %v", exists, err, true, nil)
 	}
 
-	deleted, err := r.DeletePool("foo")
-	if !deleted {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", deleted, true)
-	}
-
-	if err != nil {
-		t.Errorf("DeletePool(%q) = %v, want %v", "foo", err, nil)
+	if deleted, err := r.DeletePool("foo"); !deleted || err != nil {
+		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "foo", deleted, err, true, nil)
 	}
 }
 
@@ -448,42 +399,23 @@ func TestDeletePoolHasAssignments(t *testing.T) {
 	}
 
 	r.backend = NewMemoryBackend()
-	created, err := r.CreateApp("app")
-	if err != nil {
-		t.Errorf("CreateApp() = %v, want %v", err, nil)
+	if created, err := r.CreateApp("app"); !created || err != nil {
+		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 
-	if !created {
-		t.Errorf("CreateApp()) = %t, want %t", created, true)
-	}
-
-	created, err = r.CreatePool("foo")
-	if err != nil {
-		t.Errorf("CreatePool() = %v, want %v", err, nil)
-	}
-
-	if !created {
-		t.Errorf("CreatePool()) = %t, want %t", created, true)
+	if created, err := r.CreatePool("foo"); !created || err != nil {
+		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 
 	// This is weird. AssignApp should probably take app & pool as params.
 	r.Pool = "foo"
-	assigned, err := r.AssignApp("app")
-	if err != nil {
-		t.Errorf("AssignApp() = %v, want %v", err, nil)
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
 	}
 
-	if !assigned {
-		t.Errorf("AssignApp()) = %t, want %t", assigned, true)
-	}
-
-	deleted, err := r.DeletePool("foo")
-	if deleted {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", deleted, false)
-	}
-
-	if err != nil {
-		t.Errorf("DeletePool(%q) = %v, want %v", "foo", err, nil)
+	// Should fail.  Can't delete a pool if apps are assigned
+	if deleted, err := r.DeletePool("foo"); deleted || err != nil {
+		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "foo", deleted, err, false, nil)
 	}
 }
 
@@ -496,23 +428,13 @@ func TestListPools(t *testing.T) {
 	r.backend = NewMemoryBackend()
 
 	for _, pool := range []string{"one", "two"} {
-		created, err := r.CreatePool(pool)
-		if err != nil {
-			t.Errorf("CreatePool() = %v, want %v", err, nil)
-		}
-
-		if !created {
-			t.Errorf("CreatePool() = %t, want %t", created, true)
+		if created, err := r.CreatePool(pool); !created || err != nil {
+			t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", pool, created, err, true, nil)
 		}
 	}
 
-	pools, err := r.ListPools()
-	if len(pools) == 0 {
-		t.Errorf("ListPools() = %d, want %d", len(pools), 2)
-	}
-
-	if err != nil {
-		t.Errorf("ListPools() = %v, want %v", err, nil)
+	if pools, err := r.ListPools(); len(pools) == 0 || err != nil {
+		t.Errorf("ListPools() = %d, %v, want %d, %v", len(pools), err, 2, nil)
 	}
 }
 
@@ -523,13 +445,8 @@ func TestCreateApp(t *testing.T) {
 	}
 	r.backend = NewMemoryBackend()
 
-	created, err := r.CreateApp("foo")
-	if err != nil {
-		t.Fatalf("CreateApp() = %v, want %v", err, nil)
-	}
-
-	if !created {
-		t.Fatalf("CreateApp() = %t, want %t", created, true)
+	if created, err := r.CreateApp("foo"); !created || err != nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 }
 
@@ -541,22 +458,14 @@ func TestCreateAppAlreadyExists(t *testing.T) {
 
 	r.backend = NewMemoryBackend()
 
-	created, err := r.CreateApp("foo")
-	if err != nil {
-		t.Fatalf("CreateApp() = %v, want %v", err, nil)
+	if created, err := r.CreateApp("foo"); !created || err != nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 
-	if !created {
-		t.Fatalf("CreateApp() = %t, want %t", created, true)
-	}
-
-	created, err = r.CreateApp("foo")
-	if err != nil {
-		t.Fatalf("CreateApp() = %v, want %v", err, nil)
-	}
-
-	if created {
-		t.Fatalf("CreateApp() = %t, want %t", created, false)
+	if created, err := r.CreateApp("foo"); created || err != nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
+			created, err,
+			false, nil)
 	}
 }
 
@@ -571,12 +480,9 @@ func TestCreateAppError(t *testing.T) {
 		},
 	}
 
-	created, err := r.CreateApp("foo")
-	if err == nil {
-		t.Fatalf("CreateApp() = %v, want %v", err, errors.New("something failed"))
-	}
-
-	if created {
-		t.Fatalf("CreateApp() = %t, want %t", created, false)
+	if created, err := r.CreateApp("foo"); created || err == nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
+			created, err,
+			err, errors.New("something failed"))
 	}
 }
