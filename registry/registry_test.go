@@ -11,6 +11,7 @@ type fakeBackend struct {
 	AddMemberFunc    func(key, value string) (int, error)
 	RemoveMemberFunc func(key, value string) (int, error)
 	NotifyFunc       func(key, value string) (int, error)
+	SetMultiFunc     func(key string, values map[string]string) (string, error)
 }
 
 func (f *fakeBackend) Connect()   {}
@@ -29,23 +30,40 @@ func (f *fakeBackend) Ttl(key string) (int, error) {
 }
 
 func (f *fakeBackend) Members(key string) ([]string, error) {
-	return f.MembersFunc(key)
+	if f.MembersFunc != nil {
+		return f.MembersFunc(key)
+	}
+	return []string{}, nil
 }
 
 func (f *fakeBackend) Keys(key string) ([]string, error) {
-	return f.KeysFunc(key)
+	if f.KeysFunc != nil {
+		return f.KeysFunc(key)
+	}
+	return []string{}, nil
 }
 
 func (f *fakeBackend) AddMember(key, value string) (int, error) {
-	return f.AddMemberFunc(key, value)
+	if f.AddMemberFunc != nil {
+		return f.AddMemberFunc(key, value)
+	}
+	return 0, nil
 }
 
 func (f *fakeBackend) RemoveMember(key, value string) (int, error) {
-	return f.RemoveMemberFunc(key, value)
+	if f.RemoveMemberFunc != nil {
+		return f.RemoveMemberFunc(key, value)
+	}
+	return 0, nil
+
 }
 
 func (f *fakeBackend) Notify(key, value string) (int, error) {
-	return f.NotifyFunc(key, value)
+	if f.NotifyFunc != nil {
+		return f.NotifyFunc(key, value)
+	}
+	return 0, nil
+
 }
 
 func (f *fakeBackend) Set(key, field string, value string) (string, error) {
@@ -61,7 +79,10 @@ func (f *fakeBackend) GetAll(key string) (map[string]string, error) {
 }
 
 func (f *fakeBackend) SetMulti(key string, values map[string]string) (string, error) {
-	panic("not implemented")
+	if f.SetMultiFunc != nil {
+		return f.SetMultiFunc(key, values)
+	}
+	return "OK", nil
 }
 
 func (f *fakeBackend) DeleteMulti(key string, fields ...string) (int, error) {
@@ -529,5 +550,64 @@ func TestListPools(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("ListPools() = %t, want %t", err, nil)
+	}
+}
+
+func TestCreateApp(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	r.backend = &fakeBackend{}
+
+	created, err := r.CreateApp("foo")
+	if err != nil {
+		t.Fatalf("CreateApp() = %t, want %t", err, nil)
+	}
+
+	if !created {
+		t.Fatalf("CreateApp() = %b, want %b", created, true)
+	}
+}
+
+func TestCreateAppAlreadyExists(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	r.backend = &fakeBackend{
+		KeysFunc: func(key string) ([]string, error) {
+			return []string{"exists"}, nil
+		},
+	}
+
+	created, err := r.CreateApp("foo")
+	if err != nil {
+		t.Fatalf("CreateApp() = %t, want %t", err, nil)
+	}
+
+	if created {
+		t.Fatalf("CreateApp() = %b, want %b", created, false)
+	}
+}
+
+func TestCreateAppError(t *testing.T) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	r.backend = &fakeBackend{
+		KeysFunc: func(key string) ([]string, error) {
+			return []string{}, errors.New("something failed")
+		},
+	}
+
+	created, err := r.CreateApp("foo")
+	if err == nil {
+		t.Fatalf("CreateApp() = %t, want %t", err, errors.New("something failed"))
+	}
+
+	if created {
+		t.Fatalf("CreateApp() = %b, want %b", created, false)
 	}
 }
