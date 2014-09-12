@@ -44,7 +44,7 @@ func TestListAssignmentsEmpty(t *testing.T) {
 func TestListAssignmentsNotEmpty(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	r.CreatePool("web")
+	assertPoolCreated(t, r, "web")
 	for _, k := range []string{"one", "two"} {
 		assertAppCreated(t, r, k)
 		if assigned, err := r.AssignApp(k); !assigned || err != nil {
@@ -152,10 +152,7 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 	r, b := NewTestRegistry()
 
 	assertAppCreated(t, r, "app")
-
-	if created, err := r.CreatePool("web"); !created || err != nil {
-		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertPoolCreated(t, r, "web")
 
 	b.AddMemberFunc = func(key, value string) (int, error) {
 		return 0, errors.New("something failed")
@@ -179,10 +176,7 @@ func TestUnassignAppRemoveMemberFail(t *testing.T) {
 	r, b := NewTestRegistry()
 
 	assertAppCreated(t, r, "app")
-
-	if created, err := r.CreatePool("web"); !created || err != nil {
-		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertPoolCreated(t, r, "web")
 
 	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
 		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, true, nil)
@@ -202,10 +196,7 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 	r, b := NewTestRegistry()
 
 	assertAppCreated(t, r, "app")
-
-	if created, err := r.CreatePool("web"); !created || err != nil {
-		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertPoolCreated(t, r, "web")
 
 	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
 		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
@@ -228,26 +219,20 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 
 func TestCreatePool(t *testing.T) {
 	r, _ := NewTestRegistry()
-
-	if created, err := r.CreatePool("foo"); !created || err != nil {
-		t.Errorf("CreatePool(%q) = %tm %v, want %t, %v", "foo", created, err, true, nil)
-	}
+	assertPoolCreated(t, r, "web")
 }
 
 func TestDeletePool(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if created, err := r.CreatePool("foo"); !created || err != nil {
-		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertPoolCreated(t, r, "web")
 
-	r.Pool = "foo"
 	if exists, err := r.PoolExists(); !exists || err != nil {
 		t.Errorf("PoolExists()) = %t, %v, want %t, %v", exists, err, true, nil)
 	}
 
-	if deleted, err := r.DeletePool("foo"); !deleted || err != nil {
-		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "foo", deleted, err, true, nil)
+	if deleted, err := r.DeletePool("web"); !deleted || err != nil {
+		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "web", deleted, err, true, nil)
 	}
 }
 
@@ -255,20 +240,16 @@ func TestDeletePoolHasAssignments(t *testing.T) {
 	r, _ := NewTestRegistry()
 
 	assertAppCreated(t, r, "app")
-
-	if created, err := r.CreatePool("foo"); !created || err != nil {
-		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
-	}
+	assertPoolCreated(t, r, "web")
 
 	// This is weird. AssignApp should probably take app & pool as params.
-	r.Pool = "foo"
 	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
 		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
 	}
 
 	// Should fail.  Can't delete a pool if apps are assigned
-	if deleted, err := r.DeletePool("foo"); deleted || err != nil {
-		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "foo", deleted, err, false, nil)
+	if deleted, err := r.DeletePool("web"); deleted || err != nil {
+		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "web", deleted, err, false, nil)
 	}
 }
 
@@ -276,9 +257,7 @@ func TestListPools(t *testing.T) {
 	r, _ := NewTestRegistry()
 
 	for _, pool := range []string{"one", "two"} {
-		if created, err := r.CreatePool(pool); !created || err != nil {
-			t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", pool, created, err, true, nil)
-		}
+		assertPoolCreated(t, r, pool)
 	}
 
 	if pools, err := r.ListPools(); len(pools) == 0 || err != nil {
@@ -335,11 +314,7 @@ func TestDeleteAppStillAssigned(t *testing.T) {
 
 	assertAppCreated(t, r, "app")
 	assertAppExists(t, r, "app")
-
-	if created, err := r.CreatePool("web"); !created || err != nil {
-		t.Fatalf("CreatePool(%q) = %t, %v, want %t, %v", "web", created, err,
-			true, nil)
-	}
+	assertPoolCreated(t, r, "web")
 
 	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
 		t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err,
@@ -406,5 +381,11 @@ func assertAppExists(t *testing.T, r *ServiceRegistry, app string) {
 	if exists, err := r.AppExists(app); !exists || err != nil {
 		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", app, exists, err,
 			true, nil)
+	}
+}
+
+func assertPoolCreated(t *testing.T, r *ServiceRegistry, pool string) {
+	if created, err := r.CreatePool(pool); !created || err != nil {
+		t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", pool, created, err, true, nil)
 	}
 }
