@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -100,6 +101,20 @@ func (s *testHTTPServer) addrHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, s.addr)
 }
 
+func (s *testHTTPServer) errorHandler(w http.ResponseWriter, r *http.Request) {
+	code, _ := strconv.Atoi(r.FormValue("code"))
+	if code > 0 {
+		w.WriteHeader(code)
+		io.WriteString(w, s.addr)
+		return
+	}
+
+	// set a nonsense header to chech ErrorPage caching
+	w.Header().Set("Last-Modified", s.addr)
+	w.WriteHeader(400)
+	io.WriteString(w, s.addr)
+}
+
 // Start a tcp server which responds with it's addr after every read.
 func NewHTTPTestServer(addr string, c Tester) (*testHTTPServer, error) {
 	s := &testHTTPServer{
@@ -115,6 +130,7 @@ func NewHTTPTestServer(addr string, c Tester) (*testHTTPServer, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/addr", s.addrHandler)
+	mux.HandleFunc("/error", s.errorHandler)
 
 	s.Config.Handler = mux
 	s.Start()

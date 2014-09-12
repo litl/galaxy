@@ -417,3 +417,53 @@ func (s *HTTPSuite) TestHTTPAddRemoveBackends(c *C) {
 		c.Errorf("we should have 3 backends, we have %d", len(cfg[0].Backends))
 	}
 }
+
+func (s *HTTPSuite) TestErrorPage(c *C) {
+	svcCfg := client.ServiceConfig{
+		Name:         "VHostTest",
+		Addr:         "127.0.0.1:9000",
+		VirtualHosts: []string{"test-vhost"},
+	}
+
+	okServer := s.backendServers[0]
+	errServer := s.backendServers[1]
+
+	// Add one backend to service requests
+	cfg := client.BackendConfig{
+		Addr: okServer.addr,
+		Name: okServer.addr,
+	}
+	svcCfg.Backends = append(svcCfg.Backends, cfg)
+
+	// use another backend to provide the error page
+	svcCfg.ErrorPages = map[string][]int{
+		"http://" + errServer.addr + "/error": []int{400, 503},
+	}
+
+	err := Registry.AddService(svcCfg)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// check that the normal response comes from srv1
+	checkHTTP("http://"+listenAddr+"/addr", "test-vhost", okServer.addr, 200, c)
+	// verify that an unregistered error doesn't give the cached page
+	checkHTTP("http://"+listenAddr+"/error?code=504", "test-vhost", okServer.addr, 504, c)
+	// now see if the registered error comes from srv2
+	checkHTTP("http://"+listenAddr+"/error?code=503", "test-vhost", errServer.addr, 503, c)
+
+	// now check that we got the header cached in the error page as well
+	req, err := http.NewRequest("GET", "http://"+listenAddr+"/error?code=503", nil)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	req.Host = "test-vhost"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	c.Assert(resp.StatusCode, Equals, 503)
+	c.Assert(resp.Header.Get("Last-Modified"), Equals, errServer.addr)
+}
