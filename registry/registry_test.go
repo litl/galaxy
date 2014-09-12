@@ -5,14 +5,20 @@ import (
 	"testing"
 )
 
-func TestListAssignmentKeyFormat(t *testing.T) {
+func NewTestRegistry() (*ServiceRegistry, *MemoryBackend) {
 	r := &ServiceRegistry{
-		Env: "dev",
+		Env:  "dev",
+		Pool: "web",
 	}
-	backend := NewMemoryBackend()
-	r.backend = backend
+	b := NewMemoryBackend()
+	r.backend = b
+	return r, b
+}
 
-	backend.MembersFunc = func(key string) ([]string, error) {
+func TestListAssignmentKeyFormat(t *testing.T) {
+	r, b := NewTestRegistry()
+
+	b.MembersFunc = func(key string) ([]string, error) {
 		if key != "dev/pools/foo" {
 			t.Errorf("ListAssignments(%q) wrong key, want %s", key, "dev/pools/foo")
 		}
@@ -23,10 +29,7 @@ func TestListAssignmentKeyFormat(t *testing.T) {
 }
 
 func TestListAssignmentsEmpty(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	assignments, err := r.ListAssignments("foo")
 	if err != nil {
@@ -39,12 +42,7 @@ func TestListAssignmentsEmpty(t *testing.T) {
 }
 
 func TestListAssignmentsNotEmpty(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	r.CreatePool("web")
 	for _, k := range []string{"one", "two"} {
@@ -73,13 +71,9 @@ func TestListAssignmentsNotEmpty(t *testing.T) {
 }
 
 func TestAppExistsKeyFormat(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	backend := NewMemoryBackend()
-	r.backend = backend
+	r, b := NewTestRegistry()
 
-	backend.KeysFunc = func(key string) ([]string, error) {
+	b.KeysFunc = func(key string) ([]string, error) {
 		if key != "dev/foo/*" {
 			t.Errorf("AppExists(%q) wrong key, want %s", key, "dev/foo/*")
 		}
@@ -90,10 +84,7 @@ func TestAppExistsKeyFormat(t *testing.T) {
 }
 
 func TestAppNotExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if exists, err := r.AppExists("foo"); exists || err != nil {
 		t.Errorf("AppExists(%q) = %t, %v, want %t, %v",
@@ -102,10 +93,7 @@ func TestAppNotExists(t *testing.T) {
 }
 
 func TestAppExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if created, err := r.CreateApp("foo"); !created || err != nil {
 		t.Errorf("CreateApp(%q) = %t, %v, want %t, %v", "foo", created, err, true, nil)
@@ -117,14 +105,9 @@ func TestAppExists(t *testing.T) {
 }
 
 func TestCountInstancesKeyFormat(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	backend := NewMemoryBackend()
-	r.backend = backend
+	r, b := NewTestRegistry()
 
-	backend.KeysFunc = func(key string) ([]string, error) {
+	b.KeysFunc = func(key string) ([]string, error) {
 		if key != "dev/*/hosts/*/foo" {
 			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
 		}
@@ -135,15 +118,9 @@ func TestCountInstancesKeyFormat(t *testing.T) {
 }
 
 func TestCountInstancesOne(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
+	r, b := NewTestRegistry()
 
-	backend := NewMemoryBackend()
-	r.backend = backend
-
-	backend.KeysFunc = func(key string) ([]string, error) {
+	b.KeysFunc = func(key string) ([]string, error) {
 		if key != "dev/*/hosts/*/foo" {
 			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
 		}
@@ -157,11 +134,7 @@ func TestCountInstancesOne(t *testing.T) {
 }
 
 func TestAssignAppNotExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	assigned, err := r.AssignApp("foo")
 	if assigned {
@@ -174,11 +147,7 @@ func TestAssignAppNotExists(t *testing.T) {
 }
 
 func TestAssignAppPoolExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if created, err := r.CreateApp("app"); !created || err != nil {
 		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
@@ -191,12 +160,7 @@ func TestAssignAppPoolExists(t *testing.T) {
 }
 
 func TestAssignAppAddMemberFail(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	backend := NewMemoryBackend()
-	r.backend = backend
+	r, b := NewTestRegistry()
 
 	if created, err := r.CreateApp("app"); !created || err != nil {
 		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
@@ -206,7 +170,7 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
 	}
 
-	backend.AddMemberFunc = func(key, value string) (int, error) {
+	b.AddMemberFunc = func(key, value string) (int, error) {
 		return 0, errors.New("something failed")
 	}
 
@@ -217,11 +181,7 @@ func TestAssignAppAddMemberFail(t *testing.T) {
 }
 
 func TestUnassignAppNotExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if unassigned, err := r.UnassignApp("foo"); unassigned || err != nil {
 		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err, false, nil)
@@ -229,13 +189,7 @@ func TestUnassignAppNotExists(t *testing.T) {
 }
 
 func TestUnassignAppRemoveMemberFail(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-
-	backend := NewMemoryBackend()
-	r.backend = backend
+	r, b := NewTestRegistry()
 
 	if created, err := r.CreateApp("app"); !created || err != nil {
 		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
@@ -249,7 +203,7 @@ func TestUnassignAppRemoveMemberFail(t *testing.T) {
 		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, true, nil)
 	}
 
-	backend.RemoveMemberFunc = func(key, value string) (int, error) {
+	b.RemoveMemberFunc = func(key, value string) (int, error) {
 		return 0, errors.New("something failed")
 	}
 
@@ -260,12 +214,7 @@ func TestUnassignAppRemoveMemberFail(t *testing.T) {
 }
 
 func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	backend := NewMemoryBackend()
-	r.backend = backend
+	r, b := NewTestRegistry()
 
 	if created, err := r.CreateApp("app"); !created || err != nil {
 		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
@@ -279,7 +228,7 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
 	}
 
-	backend.NotifyFunc = func(key, value string) (int, error) {
+	b.NotifyFunc = func(key, value string) (int, error) {
 		if key != "galaxy-dev" {
 			t.Errorf("UnassignApp(%q) wrong notify key, want %s. got %s", "app", key, "galaxy-dev")
 		}
@@ -295,11 +244,7 @@ func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
 }
 
 func TestCreatePool(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if created, err := r.CreatePool("foo"); !created || err != nil {
 		t.Errorf("CreatePool(%q) = %tm %v, want %t, %v", "foo", created, err, true, nil)
@@ -307,12 +252,8 @@ func TestCreatePool(t *testing.T) {
 }
 
 func TestDeletePool(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
+	r, _ := NewTestRegistry()
 
-	r.backend = NewMemoryBackend()
 	if created, err := r.CreatePool("foo"); !created || err != nil {
 		t.Errorf("CreatePool() = %t, %v, want %t, %v", created, err, true, nil)
 	}
@@ -328,12 +269,8 @@ func TestDeletePool(t *testing.T) {
 }
 
 func TestDeletePoolHasAssignments(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
+	r, _ := NewTestRegistry()
 
-	r.backend = NewMemoryBackend()
 	if created, err := r.CreateApp("app"); !created || err != nil {
 		t.Errorf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
 	}
@@ -355,12 +292,7 @@ func TestDeletePoolHasAssignments(t *testing.T) {
 }
 
 func TestListPools(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	for _, pool := range []string{"one", "two"} {
 		if created, err := r.CreatePool(pool); !created || err != nil {
@@ -374,11 +306,7 @@ func TestListPools(t *testing.T) {
 }
 
 func TestCreateApp(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if created, err := r.CreateApp("foo"); !created || err != nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
@@ -386,12 +314,7 @@ func TestCreateApp(t *testing.T) {
 }
 
 func TestCreateAppAlreadyExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if created, err := r.CreateApp("foo"); !created || err != nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v", created, err, true, nil)
@@ -405,14 +328,9 @@ func TestCreateAppAlreadyExists(t *testing.T) {
 }
 
 func TestCreateAppError(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	backend := NewMemoryBackend()
-	r.backend = backend
+	r, b := NewTestRegistry()
 
-	backend.KeysFunc = func(key string) ([]string, error) {
+	b.KeysFunc = func(key string) ([]string, error) {
 		return []string{}, errors.New("something failed")
 	}
 
@@ -424,11 +342,7 @@ func TestCreateAppError(t *testing.T) {
 }
 
 func TestDeleteApp(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if created, err := r.CreateApp("foo"); !created || err != nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
@@ -448,11 +362,7 @@ func TestDeleteApp(t *testing.T) {
 }
 
 func TestDeleteAppStillAssigned(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if created, err := r.CreateApp("foo"); !created || err != nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
@@ -482,11 +392,7 @@ func TestDeleteAppStillAssigned(t *testing.T) {
 }
 
 func TestListApps(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = NewMemoryBackend()
+	r, _ := NewTestRegistry()
 
 	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
 		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
@@ -508,13 +414,9 @@ func TestListApps(t *testing.T) {
 }
 
 func TestListAppsIgnoreSpecialKeys(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	backend := NewMemoryBackend()
-	r.backend = backend
-	backend.maps["dev/hosts/environment"] = make(map[string]string)
+	r, b := NewTestRegistry()
+
+	b.maps["dev/hosts/environment"] = make(map[string]string)
 
 	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
 		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
@@ -523,15 +425,11 @@ func TestListAppsIgnoreSpecialKeys(t *testing.T) {
 }
 
 func TestListEnvs(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	backend := NewMemoryBackend()
-	r.backend = backend
-	backend.maps["dev/hosts/environment"] = make(map[string]string)
-	backend.maps["prod/web/foo/environment"] = make(map[string]string)
-	backend.maps["prod/hosts/environment"] = make(map[string]string)
+	r, b := NewTestRegistry()
+
+	b.maps["dev/hosts/environment"] = make(map[string]string)
+	b.maps["prod/web/foo/environment"] = make(map[string]string)
+	b.maps["prod/hosts/environment"] = make(map[string]string)
 
 	if apps, err := r.ListEnvs(); len(apps) != 2 || err != nil {
 		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
