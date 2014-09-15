@@ -5,98 +5,31 @@ import (
 	"testing"
 )
 
-type fakeBackend struct {
-	MembersFunc      func(key string) ([]string, error)
-	KeysFunc         func(key string) ([]string, error)
-	AddMemberFunc    func(key, value string) (int, error)
-	RemoveMemberFunc func(key, value string) (int, error)
-	NotifyFunc       func(key, value string) (int, error)
-}
-
-func (f *fakeBackend) Connect()   {}
-func (f *fakeBackend) Reconnect() {}
-
-func (f *fakeBackend) Delete(key string) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Expire(key string, ttl uint64) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Ttl(key string) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Members(key string) ([]string, error) {
-	return f.MembersFunc(key)
-}
-
-func (f *fakeBackend) Keys(key string) ([]string, error) {
-	return f.KeysFunc(key)
-}
-
-func (f *fakeBackend) AddMember(key, value string) (int, error) {
-	return f.AddMemberFunc(key, value)
-}
-
-func (f *fakeBackend) RemoveMember(key, value string) (int, error) {
-	return f.RemoveMemberFunc(key, value)
-}
-
-func (f *fakeBackend) Notify(key, value string) (int, error) {
-	return f.NotifyFunc(key, value)
-}
-
-func (f *fakeBackend) Set(key, field string, value string) (string, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Get(key, field string) (string, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) GetAll(key string) (map[string]string, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) SetMulti(key string, values map[string]string) (string, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) DeleteMulti(key string, fields ...string) (int, error) {
-	panic("not implemented")
-}
-
-func (f *fakeBackend) Subscribe(key string) chan string {
-	panic("not implemented")
+func NewTestRegistry() (*ServiceRegistry, *MemoryBackend) {
+	r := &ServiceRegistry{
+		Env:  "dev",
+		Pool: "web",
+	}
+	b := NewMemoryBackend()
+	r.backend = b
+	return r, b
 }
 
 func TestListAssignmentKeyFormat(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			if key != "dev/pools/foo" {
-				t.Errorf("ListAssignments(%q) wrong key, want %s", key, "dev/pools/foo")
-			}
-			return []string{}, nil
-		},
+	r, b := NewTestRegistry()
+
+	b.MembersFunc = func(key string) ([]string, error) {
+		if key != "dev/pools/foo" {
+			t.Errorf("ListAssignments(%q) wrong key, want %s", key, "dev/pools/foo")
+		}
+		return []string{}, nil
 	}
 
 	r.ListAssignments("foo")
 }
 
 func TestListAssignmentsEmpty(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
-	}
+	r, _ := NewTestRegistry()
 
 	assignments, err := r.ListAssignments("foo")
 	if err != nil {
@@ -109,136 +42,90 @@ func TestListAssignmentsEmpty(t *testing.T) {
 }
 
 func TestListAssignmentsNotEmpty(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{"one", "two"}, nil
-		},
+	r, _ := NewTestRegistry()
+
+	assertPoolCreated(t, r, "web")
+	for _, k := range []string{"one", "two"} {
+		assertAppCreated(t, r, k)
+		if assigned, err := r.AssignApp(k); !assigned || err != nil {
+			t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", k, assigned, err, true, nil)
+		}
 	}
 
-	assignments, err := r.ListAssignments("foo")
-	if err != nil {
-		t.Error(err)
-	}
-
-	if len(assignments) != 2 {
-		t.Errorf("ListAssignments(%q) = %d, want %d", "foo", len(assignments), 0)
+	var assignments []string
+	var err error
+	if assignments, err = r.ListAssignments("web"); len(assignments) != 2 || err != nil {
+		t.Fatalf("ListAssignments(%q) = %d, %v, want %d, %v", "web", len(assignments), err, 2, nil)
 	}
 
 	if assignments[0] != "one" {
-		t.Errorf("assignments[0] = %d, want %d", assignments[0], "one")
+		t.Fatalf("assignments[0] = %v, want %v", assignments[0], "one")
 	}
 
 	if assignments[1] != "two" {
-		t.Errorf("assignments[1] = %d, want %d", assignments[0], "two")
+		t.Fatalf("assignments[1] = %v, want %v", assignments[0], "two")
 	}
 }
 
 func TestAppExistsKeyFormat(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/foo/*" {
-				t.Errorf("AppExists(%q) wrong key, want %s", key, "dev/foo/*")
-			}
-			return []string{}, nil
-		},
+	r, b := NewTestRegistry()
+
+	b.KeysFunc = func(key string) ([]string, error) {
+		if key != "dev/foo/*" {
+			t.Errorf("AppExists(%q) wrong key, want %s", key, "dev/foo/*")
+		}
+		return []string{}, nil
 	}
 
 	r.AppExists("foo")
 }
 
 func TestAppNotExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
-	}
+	r, _ := NewTestRegistry()
 
-	exists, err := r.AppExists("foo")
-	if err != nil {
-		t.Error(err)
-	}
-
-	if exists {
-		t.Errorf("AppExists(%q) = %t, want %t", exists, false)
+	if exists, err := r.AppExists("foo"); exists || err != nil {
+		t.Errorf("AppExists(%q) = %t, %v, want %t, %v",
+			"foo", exists, err, false, nil)
 	}
 }
 
 func TestAppExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env: "dev",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"/dev/foo/environment"}, nil
-		},
-	}
-
-	exists, err := r.AppExists("foo")
-	if err != nil {
-		t.Error(err)
-	}
-
-	if !exists {
-		t.Errorf("AppExists(%q) = %t, want %t", exists, true)
-	}
+	r, _ := NewTestRegistry()
+	assertAppCreated(t, r, "app")
+	assertAppExists(t, r, "app")
 }
 
 func TestCountInstancesKeyFormat(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/*/hosts/*/foo" {
-				t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
-			}
-			return []string{}, nil
-		},
+	r, b := NewTestRegistry()
+
+	b.KeysFunc = func(key string) ([]string, error) {
+		if key != "dev/*/hosts/*/foo" {
+			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
+		}
+		return []string{}, nil
 	}
 
 	r.CountInstances("foo")
 }
 
 func TestCountInstancesOne(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			if key != "dev/*/hosts/*/foo" {
-				t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
-			}
-			return []string{"dev/web/hosts/me/foo"}, nil
-		},
+	r, b := NewTestRegistry()
+
+	b.KeysFunc = func(key string) ([]string, error) {
+		if key != "dev/*/hosts/*/foo" {
+			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
+		}
+		return []string{"dev/web/hosts/me/foo"}, nil
 	}
 
 	got := r.CountInstances("foo")
 	if got != 1 {
-		t.Errorf("CountInstances(%q) = %t, want %t", "foo", got, 1)
+		t.Errorf("CountInstances(%q) = %v, want %v", "foo", got, 1)
 	}
 }
 
 func TestAssignAppNotExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
-	}
+	r, _ := NewTestRegistry()
 
 	assigned, err := r.AssignApp("foo")
 	if assigned {
@@ -247,287 +134,305 @@ func TestAssignAppNotExists(t *testing.T) {
 
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+func TestAssignAppPoolExists(t *testing.T) {
+	r, _ := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+
+	if assigned, err := r.AssignApp("app"); assigned || err == nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err,
+			false, errors.New("pool web does not exist"))
 	}
 }
 
 func TestAssignAppAddMemberFail(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"a"}, nil
-		},
-		AddMemberFunc: func(key, value string) (int, error) {
-			return 0, errors.New("something failed")
-		},
+	r, b := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	b.AddMemberFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
 	}
 
-	assigned, err := r.AssignApp("foo")
-	if assigned {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", assigned, false)
-	}
-
-	if err == nil {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", err, errors.New("something failed"))
+	if assigned, err := r.AssignApp("app"); assigned || err == nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, false,
+			errors.New("something failed"))
 	}
 }
 
-func TestAssignAppAddMemberNotifyRestart(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"a"}, nil
-		},
-		AddMemberFunc: func(key, value string) (int, error) {
-			return 1, nil
-		},
-		NotifyFunc: func(key, value string) (int, error) {
-			if key != "galaxy-dev" {
-				t.Errorf("AssignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy-dev")
-			}
+func TestAssignAppNotifyFail(t *testing.T) {
+	r, b := NewTestRegistry()
 
-			if value != "restart foo" {
-				t.Errorf("AssignApp(%q) wrong notify value, want %s. got %s", "foo", value, "restart foo")
-			}
-			return 1, nil
-		},
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	b.NotifyFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
 	}
 
-	assigned, err := r.AssignApp("foo")
-	if !assigned {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", assigned, true)
-	}
-
-	if err != nil {
-		t.Errorf("AssignApp(%q) = %t, want %t", "foo", err, nil)
+	if assigned, err := r.AssignApp("app"); !assigned || err == nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, false,
+			errors.New("something failed"))
 	}
 }
 
 func TestUnassignAppNotExists(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			return 0, nil
-		},
-	}
+	r, _ := NewTestRegistry()
 
-	unassigned, err := r.UnassignApp("foo")
-	if unassigned {
-		t.Errorf("UnAssignApp(%q) = %t, want %t", "foo", unassigned, false)
-	}
-
-	if err != nil {
-		t.Error(err)
+	if unassigned, err := r.UnassignApp("foo"); unassigned || err != nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err, false, nil)
 	}
 }
 
 func TestUnassignAppRemoveMemberFail(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			return 0, errors.New("something failed")
-		},
+	r, b := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err, true, nil)
 	}
 
-	unassigned, err := r.UnassignApp("foo")
-	if unassigned {
-		t.Errorf("UnassignApp(%q) = %t, want %t", "foo", unassigned, false)
+	b.RemoveMemberFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
 	}
 
-	if err == nil {
-		t.Errorf("UnssignApp(%q) = %t, want %t", "foo", err, errors.New("something failed"))
+	if unassigned, err := r.UnassignApp("foo"); unassigned || err == nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "foo", unassigned, err,
+			false, errors.New("something failed"))
 	}
 }
 
 func TestUnassignAppAddMemberNotifyRestart(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		KeysFunc: func(key string) ([]string, error) {
-			return []string{"a"}, nil
-		},
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			return 1, nil
-		},
-		NotifyFunc: func(key, value string) (int, error) {
-			if key != "galaxy-dev" {
-				t.Errorf("UnassignApp(%q) wrong notify key, want %s. got %s", "foo", key, "galaxy-dev")
-			}
+	r, b := NewTestRegistry()
 
-			if value != "restart foo" {
-				t.Errorf("UnassignApp(%q) wrong notify value, want %s. got %s", "foo", value, "restart foo")
-			}
-			return 1, nil
-		},
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
 	}
 
-	unassigned, err := r.UnassignApp("foo")
-	if !unassigned {
-		t.Errorf("UnassignApp(%q) = %t, want %t", "foo", unassigned, true)
-	}
+	b.NotifyFunc = func(key, value string) (int, error) {
+		if key != "galaxy-dev" {
+			t.Errorf("UnassignApp(%q) wrong notify key, want %s. got %s", "app", key, "galaxy-dev")
+		}
 
-	if err != nil {
-		t.Errorf("UnassignApp(%q) = %t, want %t", "foo", err, nil)
+		if value != "restart app" {
+			t.Errorf("UnassignApp(%q) wrong notify value, want %s. got %s", "app", value, "restart app")
+		}
+		return 1, nil
+	}
+	if unassigned, err := r.UnassignApp("app"); !unassigned || err != nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "app", unassigned, err, true, nil)
 	}
 }
 
+func TestUnassignAppNotifyFailed(t *testing.T) {
+	r, b := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
+	}
+
+	b.NotifyFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
+	}
+
+	if unassigned, err := r.UnassignApp("app"); !unassigned || err == nil {
+		t.Errorf("UnAssignApp(%q) = %t, %v, want %t, %v", "app", unassigned, err, true, nil)
+	}
+
+}
+
 func TestCreatePool(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		AddMemberFunc: func(key, value string) (int, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("CreatePool(%q) wrong key, want %s. got %s", "foo", key, "dev/pools/*")
-			}
-			if value != "foo" {
-				t.Errorf("CreatePool(%q) wrong value, want %s. got %s", "foo", key, "foo")
-			}
+	r, _ := NewTestRegistry()
+	assertPoolCreated(t, r, "web")
+}
 
-			return 1, nil
-		},
+func TestCreatePoolAddMemberFailedl(t *testing.T) {
+	r, b := NewTestRegistry()
+	b.AddMemberFunc = func(key, value string) (int, error) {
+		return 0, errors.New("something failed")
 	}
 
-	created, err := r.CreatePool("foo")
-	if !created {
-		t.Errorf("CreatePool(%q) = %t, want %t", "foo", created, true)
-	}
-
-	if err != nil {
-		t.Errorf("CreatePool(%q) = %t, want %t", "foo", err, nil)
+	if created, err := r.CreatePool("web"); created || err == nil {
+		t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", "web", created, err, true, nil)
 	}
 }
 
 func TestDeletePool(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{}, nil
-		},
+	r, _ := NewTestRegistry()
 
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("DeletePool(%q) wrong key, want %s. got %s", "foo", key, "dev/pools/*")
-			}
-			if value != "foo" {
-				t.Errorf("DeletePool(%q) wrong value, want %s. got %s", "foo", key, "foo")
-			}
+	assertPoolCreated(t, r, "web")
 
-			return 1, nil
-		},
+	if exists, err := r.PoolExists(); !exists || err != nil {
+		t.Errorf("PoolExists()) = %t, %v, want %t, %v", exists, err, true, nil)
 	}
 
-	deleted, err := r.DeletePool("foo")
-	if !deleted {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", deleted, true)
-	}
-
-	if err != nil {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", err, nil)
+	if deleted, err := r.DeletePool("web"); !deleted || err != nil {
+		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "web", deleted, err, true, nil)
 	}
 }
 
 func TestDeletePoolHasAssignments(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
-	}
-	r.backend = &fakeBackend{
-		MembersFunc: func(key string) ([]string, error) {
-			return []string{"one", "two"}, nil
-		},
+	r, _ := NewTestRegistry()
 
-		RemoveMemberFunc: func(key, value string) (int, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("DeletePool(%q) wrong key, want %s. got %s", "foo", key, "dev/pools/*")
-			}
-			if value != "foo" {
-				t.Errorf("DeletePool(%q) wrong value, want %s. got %s", "foo", key, "foo")
-			}
+	assertAppCreated(t, r, "app")
+	assertPoolCreated(t, r, "web")
 
-			return 1, nil
-		},
+	// This is weird. AssignApp should probably take app & pool as params.
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Errorf("AssignApp() = %t, %v, want %t, %v", assigned, err, true, nil)
 	}
 
-	deleted, err := r.DeletePool("foo")
-	if deleted {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", deleted, false)
-	}
-
-	if err != nil {
-		t.Errorf("DeletePool(%q) = %t, want %t", "foo", err, nil)
+	// Should fail.  Can't delete a pool if apps are assigned
+	if deleted, err := r.DeletePool("web"); deleted || err != nil {
+		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "web", deleted, err, false, nil)
 	}
 }
 
 func TestListPools(t *testing.T) {
-	r := &ServiceRegistry{
-		Env:  "dev",
-		Pool: "web",
+	r, _ := NewTestRegistry()
+
+	for _, pool := range []string{"one", "two"} {
+		assertPoolCreated(t, r, pool)
 	}
 
-	// This is a table of Member func calls that are expected to be
-	// invoked in the order that they are listed
-	callCnt := 0
-	memberFuncs := []func(key string) ([]string, error){
-		func(key string) ([]string, error) {
-			if key != "dev/pools/*" {
-				t.Errorf("ListPools() wrong key, want %s. got %s", key, "dev/pools/*")
-			}
-			return []string{"one", "two"}, nil
-		},
-		func(key string) ([]string, error) {
-			if key != "dev/pools/one" {
-				t.Errorf("ListPools() wrong key, want %s. got %s", key, "dev/pools/one")
-			}
-			return []string{"one"}, nil
+	if pools, err := r.ListPools(); len(pools) == 0 || err != nil {
+		t.Errorf("ListPools() = %d, %v, want %d, %v", len(pools), err, 2, nil)
+	}
+}
 
-		},
-		func(key string) ([]string, error) {
-			if key != "dev/pools/two" {
-				t.Errorf("ListPools() wrong key, want %s. got %s", key, "dev/pools/two")
-			}
-			return []string{"two"}, nil
-		},
+func TestCreateApp(t *testing.T) {
+	r, _ := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+}
+
+func TestCreateAppAlreadyExists(t *testing.T) {
+	r, _ := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+
+	if created, err := r.CreateApp("app"); created || err != nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
+			created, err,
+			false, nil)
+	}
+}
+
+func TestCreateAppError(t *testing.T) {
+	r, b := NewTestRegistry()
+
+	b.KeysFunc = func(key string) ([]string, error) {
+		return []string{}, errors.New("something failed")
 	}
 
-	// Calls the func pointed to by callCnt index, then increments it
-	memberFunc := func(key string) ([]string, error) {
-		if callCnt > len(memberFuncs) {
-			t.Errorf("ListPools() too many calls to Members. got %s", callCnt, len(memberFuncs))
-		}
-		defer func() {
-			callCnt = callCnt + 1
-		}()
-		return memberFuncs[callCnt](key)
+	if created, err := r.CreateApp("foo"); created || err == nil {
+		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
+			created, err,
+			false, errors.New("something failed"))
+	}
+}
+
+func TestDeleteApp(t *testing.T) {
+	r, _ := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+	assertAppExists(t, r, "app")
+
+	if deleted, err := r.DeleteApp("app"); !deleted || err != nil {
+		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "app", deleted, err,
+			true, nil)
+	}
+}
+
+func TestDeleteAppStillAssigned(t *testing.T) {
+	r, _ := NewTestRegistry()
+
+	assertAppCreated(t, r, "app")
+	assertAppExists(t, r, "app")
+	assertPoolCreated(t, r, "web")
+
+	if assigned, err := r.AssignApp("app"); !assigned || err != nil {
+		t.Fatalf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err,
+			true, nil)
 	}
 
-	r.backend = &fakeBackend{
-		MembersFunc: memberFunc,
+	if deleted, err := r.DeleteApp("app"); deleted || err == nil {
+		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "app", deleted, err,
+			false, errors.New("app is assigned to pool web"))
+	}
+}
+
+func TestListApps(t *testing.T) {
+	r, _ := NewTestRegistry()
+
+	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			0, nil)
 	}
 
-	pools, err := r.ListPools()
-	if len(pools) == 0 {
-		t.Errorf("ListPools() = %d, want %d", len(pools), 2)
+	for _, k := range []string{"one", "two"} {
+		assertAppCreated(t, r, k)
 	}
 
-	if err != nil {
-		t.Errorf("ListPools() = %t, want %t", err, nil)
+	if apps, err := r.ListApps(); len(apps) != 2 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			2, nil)
+	}
+}
+
+func TestListAppsIgnoreSpecialKeys(t *testing.T) {
+	r, b := NewTestRegistry()
+
+	b.maps["dev/hosts/environment"] = make(map[string]string)
+
+	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			0, nil)
+	}
+}
+
+func TestListEnvs(t *testing.T) {
+	r, b := NewTestRegistry()
+
+	b.maps["dev/hosts/environment"] = make(map[string]string)
+	b.maps["prod/web/foo/environment"] = make(map[string]string)
+	b.maps["prod/hosts/environment"] = make(map[string]string)
+
+	if apps, err := r.ListEnvs(); len(apps) != 2 || err != nil {
+		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
+			2, nil)
+	}
+}
+
+func assertAppCreated(t *testing.T, r *ServiceRegistry, app string) {
+	if created, err := r.CreateApp(app); !created || err != nil {
+		t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", app,
+			created, err,
+			true, nil)
+	}
+}
+
+func assertAppExists(t *testing.T, r *ServiceRegistry, app string) {
+	if exists, err := r.AppExists(app); !exists || err != nil {
+		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", app, exists, err,
+			true, nil)
+	}
+}
+
+func assertPoolCreated(t *testing.T, r *ServiceRegistry, pool string) {
+	if created, err := r.CreatePool(pool); !created || err != nil {
+		t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", pool, created, err, true, nil)
 	}
 }

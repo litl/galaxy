@@ -278,7 +278,7 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *registry.Servic
 		}
 
 		if image == nil {
-			log.Errorf("ERROR: Image for container %s does not exist!: %s", container.ID[0:12])
+			log.Errorf("ERROR: Image for container %s does not exist!", container.ID[0:12])
 			continue
 
 		}

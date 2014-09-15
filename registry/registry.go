@@ -141,6 +141,10 @@ func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 		return false, err
 	}
 
+	if exists, err := r.PoolExists(); !exists || err != nil {
+		return false, errors.New(fmt.Sprintf("pool %s does not exist", r.Pool))
+	}
+
 	added, err := r.backend.AddMember(path.Join(r.Env, "pools", r.Pool), app)
 	if err != nil {
 		return false, err
