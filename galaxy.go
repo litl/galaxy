@@ -394,10 +394,9 @@ func configSet(c *cli.Context) {
 			return
 
 		}
-		values := strings.Split(arg, "=")
-
-		k := strings.ToUpper(strings.TrimSpace(values[0]))
-		v := strings.TrimSpace(values[1])
+		sep := strings.Index(arg, "=")
+		k := strings.ToUpper(strings.TrimSpace(arg[0:sep]))
+		v := strings.TrimSpace(arg[sep+1:])
 		if k == "ENV" {
 			log.Warnf("%s cannot be updated.", k)
 			continue
