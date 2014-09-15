@@ -15,20 +15,16 @@ There are three sub-projects: commander, discovery and shuttle.
   * Commander - deploys service containers.
   * Discovery - registers and discovers services containers through the docker API and redis. It
     configures routes using the Shuttle API.
-  * Shuttle - A TCP proxy that can be configured through a HTTP based API.
+  * Shuttle - An HTTP/TCP proxy that can be configured through a HTTP based API.
 
 ## Dev Setup
 
-You need to have a docker 0.9+ env available.  Set that up w/ boot2docker or use the provided
+You need to have a docker 1.1.2+ env available.  Set that up w/ boot2docker or use the provided
 vagrant file.
 
-1. Install vagrant 1.5.2
-2. Install virtualbox 4.3.10
-3. vagrant up
-4. vagrant ssh
-5. cd /vagrant
-6. godep restore
-7. make
-8. goreman start
+1. Install (glock)[https://github.com/robfig/glock]
+2. make deps
+3. make
+
 
 

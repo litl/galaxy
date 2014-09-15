@@ -1,0 +1,11 @@
+github.com/BurntSushi/toml f87ce853111478914f0bcffa34d43a93643e6eda
+github.com/codegangsta/cli 8f0575f520013467eb175a5dd30158ed816eeda9
+github.com/crowdmob/goamz c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88
+github.com/dotcloud/docker 24c4c3e0e99ddb4d65200f2f7367883e47008898
+github.com/fatih/color 95b468b5f34882796c597b718955603a584a9bd4
+github.com/fsouza/go-dockerclient 00755f6230e95ffce30eade8e9da6733818f839d
+github.com/garyburd/redigo ed54f4ed86a815cf09870e4bd1a10a2ee39a4308
+github.com/gorilla/context a08edd30ad9e104612741163dc087a613829a23c
+github.com/gorilla/mux 270c42505a11c779b5a5aaecfa5ec717adac996e
+github.com/ryanuber/columnize fef4ee9c9ecfb000e86ca19ac9cea7d58200d5b6
+gopkg.in/check.v1 871360013c92e1c715c2de6d06b54899468a8a2d
