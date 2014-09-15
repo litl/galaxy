@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/codegangsta/cli"
 	"github.com/litl/galaxy/log"
@@ -15,8 +14,6 @@ import (
 )
 
 func getShuttleConfig(c *cli.Context) ([]shuttle.ServiceConfig, error) {
-	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
-	httpClient := &http.Client{Transport: transport}
 
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/_config", c.GlobalString("shuttleAddr")), nil)
 	if err != nil {
@@ -39,6 +36,7 @@ func getShuttleConfig(c *cli.Context) ([]shuttle.ServiceConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return config, nil
 
 }
@@ -147,9 +145,6 @@ func registerShuttle(c *cli.Context) {
 		}
 	}
 
-	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
-	httpClient := &http.Client{Transport: transport}
-
 	for k, service := range backends {
 
 		js, err := json.Marshal(service)
@@ -224,9 +219,6 @@ func unregisterShuttle(c *cli.Context) {
 }
 
 func unregisterShuttleService(c *cli.Context, service *shuttle.ServiceConfig) error {
-	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
-	httpClient := &http.Client{Transport: transport}
-
 	js, err := json.Marshal(service)
 	if err != nil {
 		return err
@@ -250,9 +242,6 @@ func unregisterShuttleService(c *cli.Context, service *shuttle.ServiceConfig) er
 }
 
 func unregisterShuttleBackend(c *cli.Context, service, backend string) error {
-	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
-	httpClient := &http.Client{Transport: transport}
-
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s/%s", c.GlobalString("shuttleAddr"), service, backend), nil)
 	if err != nil {
 		return err

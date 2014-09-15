@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,6 +14,10 @@ import (
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
+)
+
+var (
+	httpClient *http.Client
 )
 
 func unregisterAll(c *cli.Context, signals chan os.Signal) {
@@ -59,6 +64,9 @@ func registerAll(c *cli.Context, loggedOnce bool) {
 func register(c *cli.Context) {
 
 	initOrDie(c)
+
+	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
+	httpClient = &http.Client{Transport: transport}
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM)
