@@ -78,7 +78,7 @@ func pullImageAsync(serviceConfig registry.ServiceConfig, errChan chan error) {
 func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
 
 	image, err := serviceRuntime.InspectImage(serviceConfig.Version())
-	if image != nil && image.ID == serviceConfig.VersionID() {
+	if image != nil && image.ID == serviceConfig.VersionID() || serviceConfig.VersionID() == "" {
 		return image, nil
 	}
 
