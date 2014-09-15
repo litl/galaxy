@@ -283,7 +283,7 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *registry.Servic
 
 		}
 
-		if image.ID != serviceConfig.VersionID() {
+		if image.ID != serviceConfig.VersionID() && serviceConfig.VersionID() != "" {
 			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
 			if err != nil {
 				log.Errorf("ERROR: Unable to stop container: %s", container.ID)
@@ -530,8 +530,13 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 
 func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
+
+	imgIdRef := serviceConfig.Version()
+	if serviceConfig.VersionID() != "" {
+		imgIdRef = serviceConfig.VersionID()
+	}
 	// see if we have the image locally
-	image, err := s.PullImage(img, serviceConfig.VersionID(), false)
+	image, err := s.PullImage(img, imgIdRef, false)
 	if err != nil {
 		return nil, err
 	}
