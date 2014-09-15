@@ -7,7 +7,7 @@ LDFLAGS:=-X main.buildVersion `git describe --long`
 all: commander shuttle discovery galaxy
 
 deps:
-	godep restore
+	glock sync github.com/litl/galaxy
 
 commander:
 	echo "Building commander"
