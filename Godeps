@@ -10,10 +10,6 @@
 			"Rev": "f87ce853111478914f0bcffa34d43a93643e6eda"
 		},
 		{
-			"ImportPath": "github.com/bitly/go-simplejson",
-			"Rev": "2abbab791406d7c6c4c0a3e11db0b0f9f41ef90d"
-		},
-		{
 			"ImportPath": "github.com/codegangsta/cli",
 			"Comment": "1.0.0-39-g8f0575f",
 			"Rev": "8f0575f520013467eb175a5dd30158ed816eeda9"
@@ -53,7 +49,7 @@
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
-			"Rev": "0903e75a83a527249edcd5fb77cde2c6669d4c2e"
+			"Rev": "00755f6230e95ffce30eade8e9da6733818f839d"
 		},
 		{
 			"ImportPath": "github.com/garyburd/redigo/redis",
@@ -66,19 +62,6 @@
 		{
 			"ImportPath": "github.com/gorilla/mux",
 			"Rev": "270c42505a11c779b5a5aaecfa5ec717adac996e"
-		},
-		{
-			"ImportPath": "github.com/mailgun/gotools-log",
-			"Rev": "da2af22c05c9bd65fe86def9dda80c1a2110e06c"
-		},
-		{
-			"ImportPath": "github.com/mailgun/gotools-time",
-			"Rev": "82801ed53d1e7c010e946201bc74548924ebae5d"
-		},
-		{
-			"ImportPath": "github.com/mailgun/vulcan",
-			"Comment": "v0.1-164-g4e769f1",
-			"Rev": "4e769f1ab976be8ae28f5e1b7ec754091fbb3a07"
 		},
 		{
 			"ImportPath": "github.com/ryanuber/columnize",
