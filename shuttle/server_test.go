@@ -115,8 +115,12 @@ func (s *testHTTPServer) errorHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, s.addr)
 }
 
+type fataler interface {
+	Fatal(...interface{})
+}
+
 // Start a tcp server which responds with it's addr after every read.
-func NewHTTPTestServer(addr string, c Tester) (*testHTTPServer, error) {
+func NewHTTPTestServer(addr string, c fataler) (*testHTTPServer, error) {
 	s := &testHTTPServer{
 		Server: httptest.NewUnstartedServer(nil),
 	}
