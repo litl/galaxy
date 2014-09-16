@@ -210,7 +210,6 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 		read:      &b.Rcvd,
 		written:   &b.Sent,
 	}
-
 	// TODO: No way to force shutdown. Do we need it, or should we always just
 	// let a connection run out?
 
@@ -294,3 +293,8 @@ func (c *shuttleConn) Write(b []byte) (int, error) {
 	atomic.AddInt64(c.written, int64(n))
 	return n, err
 }
+
+// Empty function to override the ReadFrom in *net.TCPConn
+// io.Copy will attempt to use ReadFrom when it can, but there's no bennefit
+// for a TCPConn, and it prevents us from collecting Read/Write stats.
+func (c *shuttleConn) ReadFrom() {}
