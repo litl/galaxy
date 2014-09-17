@@ -39,6 +39,12 @@ func NewHostRouter() *HostRouter {
 }
 
 func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	reqId := genId()
+	req.Header.Set("X-Request-Id", reqId)
+	defer func(start time.Time) {
+		log.Printf("id=%s total_duration=%s", reqId, time.Since(start))
+	}(time.Now())
+
 	var err error
 	host := req.Host
 	if strings.Contains(host, ":") {
@@ -135,8 +141,6 @@ func startHTTPServer() {
 }
 
 func sslRedirect(pr *ProxyRequest) bool {
-	pr.Request.Header.Set("X-Request-Id", genId())
-
 	if sslOnly && pr.Request.Header.Get("X-Forwarded-Proto") != "https" {
 		//TODO: verify RequestURI
 		redirLoc := "https://" + pr.Request.Host + pr.Request.RequestURI

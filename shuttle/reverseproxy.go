@@ -66,8 +66,11 @@ type ReverseProxy struct {
 
 // Create a new ReverseProxy
 // This will still need to have a Director and Transport assigned.
-func NewReverseProxy() *ReverseProxy {
-	p := &ReverseProxy{}
+func NewReverseProxy(t *http.Transport) *ReverseProxy {
+	p := &ReverseProxy{
+		Transport:     t,
+		FlushInterval: 1109 * time.Millisecond,
+	}
 	return p
 }
 
@@ -190,6 +193,7 @@ func (p *ReverseProxy) doRequest(pr *ProxyRequest) (*http.Response, error) {
 				copyHeader(outreq.Header, pr.Request.Header)
 				copiedHeaders = true
 			}
+
 			outreq.Header.Del(h)
 		}
 	}
@@ -210,6 +214,7 @@ func (p *ReverseProxy) doRequest(pr *ProxyRequest) (*http.Response, error) {
 	for _, addr := range pr.Backends {
 		outreq.URL.Host = addr
 		resp, err = transport.RoundTrip(outreq)
+
 		if err == nil {
 			return resp, nil
 		}

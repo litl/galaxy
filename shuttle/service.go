@@ -106,13 +106,14 @@ func NewService(cfg client.ServiceConfig) *Service {
 	}
 
 	// create our reverse proxy, using our load-balancing Dial method
-	s.httpProxy = NewReverseProxy()
-	s.httpProxy.Director = func(req *http.Request) {
-		req.URL.Scheme = "http"
-	}
-	s.httpProxy.Transport = &http.Transport{
+	proxyTransport := &http.Transport{
 		Dial:                s.Dial,
 		MaxIdleConnsPerHost: 10,
+	}
+	s.httpProxy = NewReverseProxy(proxyTransport)
+	s.httpProxy.FlushInterval = time.Second
+	s.httpProxy.Director = func(req *http.Request) {
+		req.URL.Scheme = "http"
 	}
 
 	s.httpProxy.OnRequest = []ProxyCallback{sslRedirect}
