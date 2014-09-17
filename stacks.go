@@ -599,8 +599,6 @@ func stackUpdatePool(c *cli.Context) {
 
 	if insType := c.String("instance-type"); insType != "" {
 		lc.Properties.InstanceType = insType
-	} else {
-		lc.Properties.InstanceType = resources.Parameters["PoolInstanceType"]
 	}
 
 	// add autoscaling if it's required
