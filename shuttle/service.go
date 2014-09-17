@@ -37,6 +37,7 @@ type Service struct {
 	Errors        int64
 	HTTPConns     int64
 	HTTPErrors    int64
+	HTTPActive    int64
 
 	// Next returns the backends in priority order.
 	next func() []*Backend
@@ -79,6 +80,7 @@ type ServiceStat struct {
 	Errors        int64         `json:"errors"`
 	Conns         int64         `json:"connections"`
 	Active        int64         `json:"active"`
+	HTTPActive    int64         `json:"http_active"`
 	HTTPConns     int64         `json:"http_connections"`
 	HTTPErrors    int64         `json:"http_errors"`
 }
@@ -162,6 +164,7 @@ func (s *Service) Stats() ServiceStat {
 		DialTimeout:   int(s.DialTimeout / time.Millisecond),
 		HTTPConns:     s.HTTPConns,
 		HTTPErrors:    s.HTTPErrors,
+		HTTPActive:    atomic.LoadInt64(&s.HTTPActive),
 	}
 
 	for _, b := range s.Backends {
@@ -358,8 +361,15 @@ func (s *Service) Dial(nw, addr string) (net.Conn, error) {
 		rwTimeout: s.ServerTimeout,
 		written:   &backend.Sent,
 		read:      &backend.Rcvd,
+		connected: &backend.HTTPActive,
 	}
 
+	atomic.AddInt64(&backend.Conns, 1)
+
+	// NOTE: this relies on conn.Close being called, which *should* happen in
+	// all cases, but may be at fault in the active count becomes skewed in
+	// some error case.
+	atomic.AddInt64(&backend.HTTPActive, 1)
 	return conn, nil
 }
 
@@ -409,6 +419,9 @@ func (s *Service) stop() {
 // Provide a ServeHTTP method for out ReverseProxy
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt64(&s.HTTPConns, 1)
+	atomic.AddInt64(&s.HTTPActive, 1)
+	defer atomic.AddInt64(&s.HTTPActive, -1)
+
 	s.httpProxy.ServeHTTP(w, r, s.NextAddrs())
 }
 

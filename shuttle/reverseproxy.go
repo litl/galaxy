@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/litl/galaxy/log"
 )
 
 // onExitFlushLoop is a callback set by tests to detect the state of the
@@ -162,7 +163,10 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request, addr
 	// calls all completed with true, write the Response back to the client.
 	defer res.Body.Close()
 	rw.WriteHeader(res.StatusCode)
-	p.copyResponse(rw, res.Body)
+	_, err = p.copyResponse(rw, res.Body)
+	if err != nil {
+		log.Warnf("id=%s transfer error: %s", req.Header.Get("X-Request-Id"), err)
+	}
 }
 
 func (p *ReverseProxy) doRequest(pr *ProxyRequest) (*http.Response, error) {
@@ -237,7 +241,7 @@ func (p *ReverseProxy) doRequest(pr *ProxyRequest) (*http.Response, error) {
 	return nil, fmt.Errorf("no http backends available")
 }
 
-func (p *ReverseProxy) copyResponse(dst io.Writer, src io.Reader) {
+func (p *ReverseProxy) copyResponse(dst io.Writer, src io.Reader) (int64, error) {
 	if p.FlushInterval != 0 {
 		if wf, ok := dst.(writeFlusher); ok {
 			mlw := &maxLatencyWriter{
@@ -251,7 +255,7 @@ func (p *ReverseProxy) copyResponse(dst io.Writer, src io.Reader) {
 		}
 	}
 
-	io.Copy(dst, src)
+	return io.Copy(dst, src)
 }
 
 type writeFlusher interface {

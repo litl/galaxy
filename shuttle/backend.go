@@ -13,16 +13,17 @@ import (
 
 type Backend struct {
 	sync.Mutex
-	Name      string
-	Addr      string
-	CheckAddr string
-	up        bool
-	Weight    int
-	Sent      int64
-	Rcvd      int64
-	Errors    int64
-	Conns     int64
-	Active    int64
+	Name       string
+	Addr       string
+	CheckAddr  string
+	up         bool
+	Weight     int
+	Sent       int64
+	Rcvd       int64
+	Errors     int64
+	Conns      int64
+	Active     int64
+	HTTPActive int64
 
 	// these are loaded from the service, so a backend doesn't need to access
 	// the service struct at all.
@@ -43,18 +44,19 @@ type Backend struct {
 
 // The json stats we return for the backend
 type BackendStat struct {
-	Name      string `json:"name"`
-	Addr      string `json:"address"`
-	CheckAddr string `json:"check_address"`
-	Up        bool   `json:"up"`
-	Weight    int    `json:"weight"`
-	Sent      int64  `json:"sent"`
-	Rcvd      int64  `json:"received"`
-	Errors    int64  `json:"errors"`
-	Conns     int64  `json:"connections"`
-	Active    int64  `json:"active"`
-	CheckOK   int    `json:"check_success"`
-	CheckFail int    `json:"check_fail"`
+	Name       string `json:"name"`
+	Addr       string `json:"address"`
+	CheckAddr  string `json:"check_address"`
+	Up         bool   `json:"up"`
+	Weight     int    `json:"weight"`
+	Sent       int64  `json:"sent"`
+	Rcvd       int64  `json:"received"`
+	Errors     int64  `json:"errors"`
+	Conns      int64  `json:"connections"`
+	Active     int64  `json:"active"`
+	HTTPActive int64  `json:"http_active"`
+	CheckOK    int    `json:"check_success"`
+	CheckFail  int    `json:"check_fail"`
 }
 
 func NewBackend(cfg client.BackendConfig) *Backend {
@@ -80,18 +82,19 @@ func (b *Backend) Stats() BackendStat {
 	defer b.Unlock()
 
 	stats := BackendStat{
-		Name:      b.Name,
-		Addr:      b.Addr,
-		CheckAddr: b.CheckAddr,
-		Up:        b.up,
-		Weight:    b.Weight,
-		Sent:      atomic.LoadInt64(&b.Sent),
-		Rcvd:      atomic.LoadInt64(&b.Rcvd),
-		Errors:    atomic.LoadInt64(&b.Errors),
-		Conns:     atomic.LoadInt64(&b.Conns),
-		Active:    atomic.LoadInt64(&b.Active),
-		CheckOK:   b.checkOK,
-		CheckFail: b.checkFail,
+		Name:       b.Name,
+		Addr:       b.Addr,
+		CheckAddr:  b.CheckAddr,
+		Up:         b.up,
+		Weight:     b.Weight,
+		Sent:       atomic.LoadInt64(&b.Sent),
+		Rcvd:       atomic.LoadInt64(&b.Rcvd),
+		Errors:     atomic.LoadInt64(&b.Errors),
+		Conns:      atomic.LoadInt64(&b.Conns),
+		Active:     atomic.LoadInt64(&b.Active),
+		HTTPActive: atomic.LoadInt64(&b.HTTPActive),
+		CheckOK:    b.checkOK,
+		CheckFail:  b.checkFail,
 	}
 
 	return stats
@@ -267,6 +270,9 @@ type shuttleConn struct {
 	// count bytes read and written through this connection
 	written *int64
 	read    *int64
+
+	// decrement when closed
+	connected *int64
 }
 
 func (c *shuttleConn) Read(b []byte) (int, error) {
@@ -292,6 +298,11 @@ func (c *shuttleConn) Write(b []byte) (int, error) {
 	n, err := c.TCPConn.Write(b)
 	atomic.AddInt64(c.written, int64(n))
 	return n, err
+}
+
+func (c *shuttleConn) Close() error {
+	atomic.AddInt64(c.connected, -1)
+	return c.TCPConn.Close()
 }
 
 // Empty function to override the ReadFrom in *net.TCPConn
