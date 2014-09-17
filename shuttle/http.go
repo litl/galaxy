@@ -103,16 +103,22 @@ func (r *HostRouter) Start(ready chan bool) {
 	log.Printf("HTTP server listening at %s", listenAddr)
 
 	// Proxy acts as http handler:
+	// These timeouts for for overall request duration. They don't effect
+	// keepalive, but will close an overly slow request.
 	r.server = &http.Server{
 		Addr:           listenAddr,
 		Handler:        r,
-		ReadTimeout:    60 * time.Second,
-		WriteTimeout:   60 * time.Second,
+		ReadTimeout:    10 * time.Minute,
+		WriteTimeout:   10 * time.Minute,
 		MaxHeaderBytes: 1 << 20,
 	}
 
 	var err error
-	r.listener, err = net.Listen("tcp", listenAddr)
+
+	// These timeouts are for each individual Read/Write operation
+	// These will close keepalive connections too.
+	// TODO: configure timeout somewhere
+	r.listener, err = newTimeoutListener(listenAddr, 120*time.Second)
 	if err != nil {
 		log.Errorf("%s", err)
 		r.Unlock()

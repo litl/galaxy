@@ -301,7 +301,9 @@ func (c *shuttleConn) Write(b []byte) (int, error) {
 }
 
 func (c *shuttleConn) Close() error {
-	atomic.AddInt64(c.connected, -1)
+	if c.connected != nil {
+		atomic.AddInt64(c.connected, -1)
+	}
 	return c.TCPConn.Close()
 }
 
