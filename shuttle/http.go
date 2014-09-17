@@ -340,6 +340,7 @@ func logProxyRequest(pr *ProxyRequest) bool {
 	}
 
 	var id, method, clientIP, url, backend, agent string
+	var status int
 
 	duration := pr.FinishTime.Sub(pr.StartTime)
 
@@ -349,6 +350,7 @@ func logProxyRequest(pr *ProxyRequest) bool {
 		clientIP = pr.Request.RemoteAddr
 		url = pr.Request.Host + pr.Request.RequestURI
 		agent = pr.Request.UserAgent()
+		status = pr.Response.StatusCode
 	}
 
 	if pr.Response != nil && pr.Response.Request != nil && pr.Response.Request.URL != nil {
@@ -357,8 +359,8 @@ func logProxyRequest(pr *ProxyRequest) bool {
 
 	err := fmt.Sprintf("%v", pr.ProxyError)
 
-	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s duration=%s agent=%s, err=%s"
+	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s status=%d duration=%s agent=%s, err=%s"
 
-	log.Printf(fmtStr, id, method, clientIP, url, backend, duration, agent, err)
+	log.Printf(fmtStr, id, method, clientIP, url, backend, status, duration, agent, err)
 	return true
 }
