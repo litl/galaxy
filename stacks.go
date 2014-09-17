@@ -595,8 +595,6 @@ func stackUpdatePool(c *cli.Context) {
 	lc := pool.LC()
 	if amiID := c.String("ami"); amiID != "" {
 		lc.Properties.ImageId = amiID
-	} else {
-		lc.Properties.ImageId = resources.Parameters["PoolImageId"]
 	}
 
 	if insType := c.String("instance-type"); insType != "" {
