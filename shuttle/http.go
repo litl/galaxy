@@ -39,6 +39,12 @@ func NewHostRouter() *HostRouter {
 }
 
 func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	reqId := genId()
+	req.Header.Set("X-Request-Id", reqId)
+	defer func(start time.Time) {
+		log.Printf("id=%s total_duration=%s", reqId, time.Since(start))
+	}(time.Now())
+
 	var err error
 	host := req.Host
 	if strings.Contains(host, ":") {
@@ -97,16 +103,22 @@ func (r *HostRouter) Start(ready chan bool) {
 	log.Printf("HTTP server listening at %s", listenAddr)
 
 	// Proxy acts as http handler:
+	// These timeouts for for overall request duration. They don't effect
+	// keepalive, but will close an overly slow request.
 	r.server = &http.Server{
 		Addr:           listenAddr,
 		Handler:        r,
-		ReadTimeout:    60 * time.Second,
-		WriteTimeout:   60 * time.Second,
+		ReadTimeout:    10 * time.Minute,
+		WriteTimeout:   10 * time.Minute,
 		MaxHeaderBytes: 1 << 20,
 	}
 
 	var err error
-	r.listener, err = net.Listen("tcp", listenAddr)
+
+	// These timeouts are for each individual Read/Write operation
+	// These will close keepalive connections too.
+	// TODO: configure timeout somewhere
+	r.listener, err = newTimeoutListener(listenAddr, 120*time.Second)
 	if err != nil {
 		log.Errorf("%s", err)
 		r.Unlock()
@@ -135,8 +147,6 @@ func startHTTPServer() {
 }
 
 func sslRedirect(pr *ProxyRequest) bool {
-	pr.Request.Header.Set("X-Request-Id", genId())
-
 	if sslOnly && pr.Request.Header.Get("X-Forwarded-Proto") != "https" {
 		//TODO: verify RequestURI
 		redirLoc := "https://" + pr.Request.Host + pr.Request.RequestURI
@@ -340,6 +350,7 @@ func logProxyRequest(pr *ProxyRequest) bool {
 	}
 
 	var id, method, clientIP, url, backend, agent string
+	var status int
 
 	duration := pr.FinishTime.Sub(pr.StartTime)
 
@@ -349,6 +360,7 @@ func logProxyRequest(pr *ProxyRequest) bool {
 		clientIP = pr.Request.RemoteAddr
 		url = pr.Request.Host + pr.Request.RequestURI
 		agent = pr.Request.UserAgent()
+		status = pr.Response.StatusCode
 	}
 
 	if pr.Response != nil && pr.Response.Request != nil && pr.Response.Request.URL != nil {
@@ -357,8 +369,8 @@ func logProxyRequest(pr *ProxyRequest) bool {
 
 	err := fmt.Sprintf("%v", pr.ProxyError)
 
-	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s duration=%s agent=%s, err=%s"
+	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s status=%d duration=%s agent=%s, err=%s"
 
-	log.Printf(fmtStr, id, method, clientIP, url, backend, duration, agent, err)
+	log.Printf(fmtStr, id, method, clientIP, url, backend, status, duration, agent, err)
 	return true
 }
