@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/codegangsta/cli"
-	"github.com/crowdmob/goamz/aws"
+	"github.com/goamz/goamz/aws"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/stack"
 	"github.com/litl/galaxy/utils"

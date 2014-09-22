@@ -756,6 +756,7 @@ func main() {
 		cli.StringFlag{Name: "parameters", Usage: "template parameters in json"},
 		cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
 		cli.StringFlag{Name: "policy", Usage: "stack policy"},
+		cli.StringFlag{Name: "region", Usage: "aws region"},
 		cli.StringFlag{Name: "template", Usage: "provide a template file"},
 		cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
 		cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},

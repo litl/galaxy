@@ -5,10 +5,11 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/crowdmob/goamz/aws"
+	"github.com/goamz/goamz/aws"
 
 	"github.com/litl/galaxy/log"
 )
@@ -18,6 +19,8 @@ Most of this should probably get wrapped up in a goamz/cloudformations package,
 if someone wants to write out the entire API.
 
 TODO: this is going to need some DRY love
+TODO: Switched to goamz/goamz, there may be redundant functionality here that
+      we can eliminate. Optimally we'll have a full-featured goamz someday.
 */
 
 var ErrTimeout = fmt.Errorf("timeout")
@@ -133,6 +136,17 @@ type ListStacksResponse struct {
 	Stacks []stackSummary `xml:"ListStacksResult>StackSummaries>member"`
 }
 
+type AvailabilityZoneInfo struct {
+	Name   string `xml:"zoneName"`
+	State  string `xml:"zoneState"`
+	Region string `xml:"regionName"`
+}
+
+type DescribeAvailabilityZonesResponse struct {
+	RequestId         string                 `xml:"requestId"`
+	AvailabilityZones []AvailabilityZoneInfo `xml:"availabilityZoneInfo>item"`
+}
+
 // Resources from the base stack that may need to be referenced from other
 // stacks
 type SharedResources struct {
@@ -152,15 +166,43 @@ func (s SharedResources) ListSubnets() []string {
 	return subnets
 }
 
-func getService(svcName string) (*aws.Service, error) {
-	services := map[string]string{
-		"cf":  "https://cloudformation.us-east-1.amazonaws.com/",
-		"iam": "https://iam.amazonaws.com/",
+func getService(service, region string) (*aws.Service, error) {
+	// AWS_REGION isn't used by the aws-cli, but check it here just in case
+	if region == "" {
+		region = os.Getenv("AWS_DEFAULT_REGION")
 	}
 
-	endPoint := services[svcName]
-	if endPoint == "" {
-		return nil, fmt.Errorf("unknown service")
+	if region == "" {
+		region = os.Getenv("AWS_REGION")
+	}
+
+	if region == "" {
+		log.Debug("Using default region: us-east-1")
+		region = "us-east-1"
+	}
+
+	var endpoint string
+
+	var reg aws.Region
+	for name, r := range aws.Regions {
+		if name == region {
+			reg = r
+		}
+	}
+
+	if reg.Name == "" {
+		return nil, fmt.Errorf("region %s not found", region)
+	}
+
+	switch service {
+	case "cf":
+		endpoint = reg.CloudFormationEndpoint
+	case "ec2":
+		endpoint = reg.EC2Endpoint
+	case "iam":
+		endpoint = reg.IAMEndpoint
+	default:
+		return nil, fmt.Errorf("Service %s not implemented", service)
 	}
 
 	// only get the creds from the env for now
@@ -170,7 +212,7 @@ func getService(svcName string) (*aws.Service, error) {
 	}
 
 	serviceInfo := aws.ServiceInfo{
-		Endpoint: endPoint,
+		Endpoint: endpoint,
 		Signer:   aws.V2Signature,
 	}
 
@@ -197,11 +239,42 @@ func GetPool(name string) (*Pool, error) {
 	return pool, nil
 }
 
+func ListAvailabilityZones(region string) (DescribeAvailabilityZonesResponse, error) {
+	azResp := DescribeAvailabilityZonesResponse{}
+
+	service, err := getService("ec2", region)
+	if err != nil {
+		return azResp, err
+	}
+
+	params := map[string]string{
+		"Action":  "DescribeAvailabilityZones",
+		"Version": "2014-02-01",
+	}
+
+	resp, err := service.Query("GET", "/", params)
+	if err != nil {
+		return azResp, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err := service.BuildError(resp)
+		return azResp, err
+	}
+	defer resp.Body.Close()
+
+	err = xml.NewDecoder(resp.Body).Decode(&azResp)
+	if err != nil {
+		return azResp, err
+	}
+	return azResp, nil
+}
+
 // List all resources associated with stackName
 func ListStackResources(stackName string) (ListStackResourcesResponse, error) {
 	listResp := ListStackResourcesResponse{}
 
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return listResp, err
 	}
@@ -233,7 +306,7 @@ func ListStackResources(stackName string) (ListStackResourcesResponse, error) {
 func DescribeStacks(name string) (DescribeStacksResponse, error) {
 	descResp := DescribeStacksResponse{}
 
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return descResp, err
 	}
@@ -268,7 +341,7 @@ func DescribeStacks(name string) (DescribeStacksResponse, error) {
 func DescribeStackEvents(name string) (DescribeStackEventsResult, error) {
 	descResp := DescribeStackEventsResult{}
 
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return descResp, err
 	}
@@ -319,7 +392,7 @@ func ListActive() ([]string, error) {
 func List() (ListStacksResponse, error) {
 	listResp := ListStacksResponse{}
 
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return listResp, err
 	}
@@ -471,7 +544,7 @@ func WaitForComplete(id string, timeout time.Duration) error {
 func ListServerCertificates() (ListServerCertsResponse, error) {
 	certResp := ListServerCertsResponse{}
 
-	svc, err := getService("iam")
+	svc, err := getService("iam", "")
 	if err != nil {
 		return certResp, err
 	}
@@ -561,7 +634,7 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 }
 
 func GetTemplate(name string) ([]byte, error) {
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return nil, err
 	}
@@ -592,7 +665,7 @@ func GetTemplate(name string) ([]byte, error) {
 // Request parameters which are taken from the options:
 //   StackPolicyDuringUpdateBody
 func Create(name string, stackTmpl []byte, options map[string]string) (*CreateStackResponse, error) {
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +711,7 @@ func Create(name string, stackTmpl []byte, options map[string]string) (*CreateSt
 // Request parameters which are taken from the options:
 //   StackPolicyDuringUpdateBody
 func Update(name string, stackTmpl []byte, options map[string]string) (*UpdateStackResponse, error) {
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return nil, err
 	}
@@ -683,7 +756,7 @@ func Update(name string, stackTmpl []byte, options map[string]string) (*UpdateSt
 
 // Delete and entire stack by name
 func Delete(name string) (*DeleteStackResponse, error) {
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return nil, err
 	}
@@ -721,7 +794,7 @@ func GalaxyTemplate() []byte {
 // set a stack policy
 // TODO: add delete policy
 func SetPolicy(name string, policy []byte) error {
-	svc, err := getService("cf")
+	svc, err := getService("cf", "")
 	if err != nil {
 		return err
 	}
