@@ -789,6 +789,8 @@ func main() {
 			Description: "stack:init <stack_name>",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "template", Usage: "template file"},
+				cli.StringFlag{Name: "region", Usage: "AWS Region"},
+				cli.BoolFlag{Name: "print", Usage: "print template and exit"},
 			},
 		},
 		{
@@ -947,6 +949,7 @@ func main() {
 			Description: "stack:delete <stack_name>",
 			Flags: []cli.Flag{
 				cli.BoolFlag{Name: "y", Usage: "skip confirmation"},
+				cli.StringFlag{Name: "region", Usage: "aws region"},
 			},
 		},
 		{

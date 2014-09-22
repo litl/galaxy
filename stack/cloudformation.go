@@ -21,9 +21,13 @@ if someone wants to write out the entire API.
 TODO: this is going to need some DRY love
 TODO: Switched to goamz/goamz, there may be redundant functionality here that
       we can eliminate. Optimally we'll have a full-featured goamz someday.
+TODO: regions are handled with global state, and ENV vars override cli options
+TODO: Use SQS instead of polling
 */
 
 var ErrTimeout = fmt.Errorf("timeout")
+
+var Region = "us-east-1"
 
 // thie error type also provides a list of failures from the stack's events
 type FailuresError struct {
@@ -167,18 +171,23 @@ func (s SharedResources) ListSubnets() []string {
 }
 
 func getService(service, region string) (*aws.Service, error) {
-	// AWS_REGION isn't used by the aws-cli, but check it here just in case
+	// REGION env vars aren't used by the aws-cli, but check here just in case
 	if region == "" {
 		region = os.Getenv("AWS_DEFAULT_REGION")
+		if region != "" {
+			log.Printf("Using AWS_DEFAULT_REGION=%s", region)
+		}
 	}
 
 	if region == "" {
 		region = os.Getenv("AWS_REGION")
+		if region != "" {
+			log.Printf("Using AWS_REGION=%s", region)
+		}
 	}
 
 	if region == "" {
-		log.Debug("Using default region: us-east-1")
-		region = "us-east-1"
+		region = Region
 	}
 
 	var endpoint string
@@ -421,7 +430,7 @@ func List() (ListStacksResponse, error) {
 }
 
 func Exists(name string) (bool, error) {
-	resp, err := DescribeStacks(name)
+	resp, err := DescribeStacks("")
 	if err != nil {
 		return false, err
 	}
@@ -663,7 +672,8 @@ func GetTemplate(name string) ([]byte, error) {
 
 // Create a CloudFormation stack
 // Request parameters which are taken from the options:
-//   StackPolicyDuringUpdateBody
+//   StackPolicyDuringUpdateBody: optional update policy
+//   tag.KEY: tags to be applied to this stack at creation
 func Create(name string, stackTmpl []byte, options map[string]string) (*CreateStackResponse, error) {
 	svc, err := getService("cf", "")
 	if err != nil {
@@ -671,17 +681,29 @@ func Create(name string, stackTmpl []byte, options map[string]string) (*CreateSt
 	}
 
 	params := map[string]string{
-		"Action":       "CreateStack",
-		"StackName":    name,
-		"TemplateBody": string(stackTmpl),
+		"Action":              "CreateStack",
+		"StackName":           name,
+		"TemplateBody":        string(stackTmpl),
+		"Tags.member.1.Key":   "Name",
+		"Tags.member.1.Value": name,
 	}
 
 	optNum := 1
+	tagNum := 2
 	for key, val := range options {
 		if key == "StackPolicyDuringUpdateBody" {
 			params["StackPolicyDuringUpdateBody"] = val
 			continue
 		}
+
+		if strings.HasPrefix(strings.ToLower(key), "tag.") {
+			params[fmt.Sprintf("Tags.member.%d.Key", tagNum)] = key[4:]
+			params[fmt.Sprintf("Tags.member.%d.Value", tagNum)] = val
+			tagNum++
+			continue
+		}
+
+		// everything else goes under Parameters
 		params[fmt.Sprintf("Parameters.member.%d.ParameterKey", optNum)] = key
 		params[fmt.Sprintf("Parameters.member.%d.ParameterValue", optNum)] = val
 		optNum++
@@ -728,6 +750,12 @@ func Update(name string, stackTmpl []byte, options map[string]string) (*UpdateSt
 			params["StackPolicyDuringUpdateBody"] = val
 			continue
 		}
+
+		if strings.HasPrefix(strings.ToLower(key), "tag.") {
+			// Currently can't update a stack's tags
+			continue
+		}
+
 		params[fmt.Sprintf("Parameters.member.%d.ParameterKey", optNum)] = key
 		params[fmt.Sprintf("Parameters.member.%d.ParameterValue", optNum)] = val
 		optNum++
@@ -786,9 +814,35 @@ func Delete(name string) (*DeleteStackResponse, error) {
 	return deleteResp, nil
 }
 
-// The default template used to create our base stack.
-func GalaxyTemplate() []byte {
-	return cloudformation_template
+// Return a default template to create our base stack.
+func DefaultGalaxyTemplate() []byte {
+	azResp, err := ListAvailabilityZones("")
+	if err != nil {
+		log.Warn(err)
+		return nil
+	}
+
+	p := &GalaxyTmplParams{
+		Name:    "galaxy",
+		VPCCIDR: "10.24.0.1/16",
+	}
+
+	for i, az := range azResp.AvailabilityZones {
+		s := &SubnetTmplParams{
+			Name:   fmt.Sprintf("galaxySubnet%d", i+1),
+			Subnet: fmt.Sprintf("10.24.%d.0/24", i+1),
+			AZ:     az.Name,
+		}
+
+		p.Subnets = append(p.Subnets, s)
+	}
+
+	tmpl, err := GalaxyTemplate(p)
+	if err != nil {
+		// TODO
+		log.Fatal(err)
+	}
+	return tmpl
 }
 
 // set a stack policy

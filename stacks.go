@@ -58,6 +58,7 @@ func getBase(c *cli.Context) string {
 		log.Fatalf("%s: %s", err, "use --base")
 	}
 
+	log.Printf("Referencing base stack: %s", base)
 	return base
 }
 
@@ -84,7 +85,14 @@ func promptValue(prompt, dflt string) string {
 	return val
 }
 
-func getInitOpts(c *cli.Context) map[string]string {
+// Prompt user for required arguments
+// TODO: parse CIDR and generate appropriate subnets
+// TODO: check for subnet collision
+func getInitOpts(c *cli.Context) *stack.GalaxyTmplParams {
+	name := c.Args().First()
+	if name == "" {
+		name = promptValue("Base Stack Name", "galaxy")
+	}
 
 	keyName := c.String("keyname")
 	if keyName == "" {
@@ -99,25 +107,48 @@ func getInitOpts(c *cli.Context) map[string]string {
 	poolAMI := promptValue("Default Pool AMI", "ami-018c9568")
 	poolInstance := promptValue("Default Pool Instance Type", "t2.medium")
 
-	vpcSubnet := promptValue("VPC Subnet", "10.24.0.0/16")
+	vpcSubnet := promptValue("VPC CIDR Block", "10.24.0.0/16")
 	// some *very* basic input verification
 	if !strings.Contains(vpcSubnet, "/") || strings.Count(vpcSubnet, ".") != 3 {
 		log.Fatal("VPC Subnet must be in CIDR notation")
 	}
 
-	azSubnets := promptValue("AvailabilityZone Subnets", "10.24.1.0/24, 10.24.2.0/24, 10.24.3.0/24")
-	if strings.Count(azSubnets, ",") != 2 || strings.Count(azSubnets, "/") != 3 {
-		log.Fatal("There must be 3 comma separated AZ Subnets")
+	region := c.String("region")
+	if region == "" {
+		region = promptValue("EC2 Region", "us-east-1")
 	}
 
-	opts := map[string]string{
-		"KeyName":                keyName,
-		"ControllerImageId":      controllerAMI,
-		"ControllerInstanceType": controllerInstance,
-		"PoolImageId":            poolAMI,
-		"PoolInstanceType":       poolInstance,
-		"VPCCidrBlock":           vpcSubnet,
-		"SubnetCidrBlocks":       azSubnets,
+	azResp, err := stack.ListAvailabilityZones(region)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	subnets := []*stack.SubnetTmplParams{}
+
+	for i, az := range azResp.AvailabilityZones {
+		s := &stack.SubnetTmplParams{
+			Name:   fmt.Sprintf("%sSubnet%d", name, i+1),
+			Subnet: fmt.Sprintf("10.24.%d.0/24", i+1),
+			AZ:     az.Name,
+		}
+
+		subnets = append(subnets, s)
+	}
+
+	// replace default subnets with user values
+	for i, s := range subnets {
+		s.Subnet = promptValue(fmt.Sprintf("Subnet %d", i+1), s.Subnet)
+	}
+
+	opts := &stack.GalaxyTmplParams{
+		Name:                   name,
+		KeyName:                keyName,
+		ControllerImageId:      controllerAMI,
+		ControllerInstanceType: controllerInstance,
+		PoolImageId:            poolAMI,
+		PoolInstanceType:       poolInstance,
+		VPCCIDR:                vpcSubnet,
+		Subnets:                subnets,
 	}
 
 	return opts
@@ -164,16 +195,31 @@ func stackInit(c *cli.Context) {
 		log.Fatal("ERROR: stack name required")
 	}
 
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
+	}
+
 	exists, err := stack.Exists(stackName)
 	if exists {
 		log.Fatalf("ERROR: stack %s already exists", stackName)
 	} else if err != nil {
+		fmt.Println("EXISTS ERROR")
 		log.Fatal(err)
 	}
 
-	stackTmpl := stack.GalaxyTemplate()
+	params := getInitOpts(c)
+	stackTmpl, err := stack.GalaxyTemplate(params)
+	if err != nil {
+		log.Fatalf("ERROR: %s", err)
+	}
 
-	opts := getInitOpts(c)
+	if c.Bool("print") {
+		fmt.Println(string(stackTmpl))
+		return
+	}
+
+	opts := make(map[string]string)
+	opts["tag.galaxy"] = "base"
 
 	_, err = stack.Create(stackName, stackTmpl, opts)
 	if err != nil {
@@ -190,6 +236,10 @@ func stackUpdate(c *cli.Context) {
 	stackName := c.Args().First()
 	if stackName == "" {
 		log.Fatal("ERROR: stack name required")
+	}
+
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
 	}
 
 	params := make(map[string]string)
@@ -260,12 +310,17 @@ func stackUpdate(c *cli.Context) {
 // Print a Cloudformation template to stdout.
 func stackTemplate(c *cli.Context) {
 	stackName := c.Args().First()
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
+	}
 
 	if stackName == "" {
-		if _, err := os.Stdout.Write(stack.GalaxyTemplate()); err != nil {
-			log.Fatal(err)
-		}
+		os.Stdout.Write(stack.DefaultGalaxyTemplate())
 		return
+	}
+
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
 	}
 
 	stackTmpl, err := stack.GetTemplate(stackName)
@@ -332,6 +387,10 @@ func stackCreatePool(c *cli.Context) {
 	var err error
 	ensureEnvArg(c)
 	ensurePoolArg(c)
+
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
+	}
 
 	poolName := utils.GalaxyPool(c)
 	baseStack := getBase(c)
@@ -463,7 +522,12 @@ func stackCreatePool(c *cli.Context) {
 		return
 	}
 
-	_, err = stack.Create(stackName, poolTmpl, nil)
+	opts := make(map[string]string)
+	opts["tag.env"] = poolEnv
+	opts["tag.pool"] = poolName
+	opts["tag.galaxy"] = "pool"
+
+	_, err = stack.Create(stackName, poolTmpl, opts)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -517,6 +581,10 @@ func waitAndDelete(name string) {
 func stackUpdatePool(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
+
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
+	}
 
 	poolName := utils.GalaxyPool(c)
 	baseStack := getBase(c)
@@ -631,6 +699,10 @@ func stackDeletePool(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
 
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
+	}
+
 	baseStack := getBase(c)
 
 	stackName := fmt.Sprintf("%s-%s-%s", baseStack,
@@ -655,10 +727,18 @@ func stackDelete(c *cli.Context) {
 		}
 	}
 
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
+	}
+
 	waitAndDelete(stackName)
 }
 
 func stackList(c *cli.Context) {
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
+	}
+
 	descResp, err := stack.DescribeStacks("")
 	if err != nil {
 		log.Fatal(err)
@@ -681,6 +761,10 @@ func stackListEvents(c *cli.Context) {
 	stackName := c.Args().First()
 	if stackName == "" {
 		log.Fatal("ERROR: stack name required")
+	}
+
+	if c.String("region") != "" {
+		stack.Region = c.String("region")
 	}
 
 	resp, err := stack.DescribeStackEvents(stackName)
