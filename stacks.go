@@ -739,6 +739,9 @@ func stackDelete(c *cli.Context) {
 			ok = true
 		}
 	}
+	if !ok {
+		log.Fatal("aborted")
+	}
 
 	if c.String("region") != "" {
 		stack.Region = c.String("region")
