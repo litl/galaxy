@@ -1,37 +1,95 @@
 package stack
 
-//TODO: replace "galaxy" strings with actual stack name for easier cross-reference
+import (
+	"bytes"
+	"fmt"
+	"strings"
+	"text/template"
+)
+
+func GalaxyTemplate(params *GalaxyTmplParams) ([]byte, error) {
+	t := template.New("galaxy")
+
+	funcMap := template.FuncMap{
+		"SubnetRefList": params.SubnetRefList,
+		"AZList":        params.AZList,
+	}
+
+	t.Funcs(funcMap)
+	template.Must(t.Parse(galaxyTmpl))
+
+	out := bytes.NewBuffer(nil)
+
+	err := t.Execute(out, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return out.Bytes(), nil
+}
+
+type GalaxyTmplParams struct {
+	Name                   string
+	VPCCIDR                string
+	ControllerImageId      string
+	ControllerInstanceType string
+	PoolImageId            string
+	PoolInstanceType       string
+	KeyName                string
+	Subnets                []*SubnetTmplParams
+}
+
+type SubnetTmplParams struct {
+	Name   string
+	Subnet string
+	AZ     string
+}
+
+// Format the subnet names into a list of "Ref" intrinsics
+func (p *GalaxyTmplParams) SubnetRefList() string {
+	quoted := []string{}
+	for _, s := range p.Subnets {
+		quoted = append(quoted, fmt.Sprintf(`{"Ref": "%s"}`, s.Name))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(quoted, ", "))
+}
+
+func (p *GalaxyTmplParams) AZList() string {
+	azs := []string{}
+	for _, s := range p.Subnets {
+		azs = append(azs, fmt.Sprintf(`"%s"`, s.AZ))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(azs, ", "))
+}
+
 // The base template for our Galaxy Cloudformation
-var cloudformation_template = []byte(`{
+var galaxyTmpl = `{{ $stackName := .Name }}{
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "Galaxy CloudFormation",
+    "Description": "{{ $stackName }} CloudFormation",
     "Parameters": {
         "ControllerImageId": {
-            "Description": "Galaxy Controller AMI",
+            "Default": "{{ .ControllerImageId }}",
+            "Description": "{{ $stackName }} Controller AMI",
             "Type": "String"
         },
         "ControllerInstanceType": {
+            "Default": "{{ .ControllerInstanceType }}",
             "Description": "LaunchConfig Instance Type",
             "Type": "String"
         },
         "PoolImageId": {
-            "Description": "Default galaxy pool AMI",
+            "Default": "{{ .PoolImageId }}",
+            "Description": "Default {{ $stackName }} pool AMI",
             "Type": "String"
         },
         "PoolInstanceType": {
-            "Description": "Default galaxy pool instance type",
+            "Default": "{{ .PoolInstanceType }}",
+            "Description": "Default {{ $stackName }} pool instance type",
             "Type": "String"
         },
         "KeyName": {
+            "Default": "{{ .KeyName }}",
             "Description": "The name of an EC2 Key Pair to allow SSH access to the instance.",
-            "Type": "String"
-        },
-        "SubnetCidrBlocks": {
-            "Description": "Comma delimited list of Cidr blocks for subnets (3)",
-            "Type": "CommaDelimitedList"
-        },
-        "VPCCidrBlock": {
-            "Description": "Cidr Block for the VPC",
             "Type": "String"
         }
     },
@@ -48,20 +106,20 @@ var cloudformation_template = []byte(`{
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy-default"
+                        "Value": "{{ $stackName }}-default"
                     }
                 ],
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::SecurityGroup"
         },
-        "galaxyACLIn": {
+        "{{ $stackName }}ACLIn": {
             "Properties": {
                 "CidrBlock": "0.0.0.0/0",
                 "NetworkAclId": {
-                    "Ref": "galaxyBaseACL"
+                    "Ref": "{{ $stackName }}BaseACL"
                 },
                 "Protocol": "-1",
                 "RuleAction": "allow",
@@ -69,12 +127,12 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::EC2::NetworkAclEntry"
         },
-        "galaxyACLOut": {
+        "{{ $stackName }}ACLOut": {
             "Properties": {
                 "CidrBlock": "0.0.0.0/0",
                 "Egress": true,
                 "NetworkAclId": {
-                    "Ref": "galaxyBaseACL"
+                    "Ref": "{{ $stackName }}BaseACL"
                 },
                 "Protocol": "-1",
                 "RuleAction": "allow",
@@ -82,64 +140,40 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::EC2::NetworkAclEntry"
         },
-        "galaxyACLSubnet1": {
+{{ range .Subnets }}        "{{ .Name }}ACL": {
             "Properties": {
                 "NetworkAclId": {
-                    "Ref": "galaxyBaseACL"
+                    "Ref": "{{ $stackName }}BaseACL"
                 },
                 "SubnetId": {
-                    "Ref": "galaxySubnet1"
+                    "Ref": "{{ .Name }}"
                 }
             },
             "Type": "AWS::EC2::SubnetNetworkAclAssociation"
         },
-        "galaxyACLSubnet2": {
-            "Properties": {
-                "NetworkAclId": {
-                    "Ref": "galaxyBaseACL"
-                },
-                "SubnetId": {
-                    "Ref": "galaxySubnet2"
-                }
-            },
-            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
-        },
-        "galaxyACLSubnet3": {
-            "Properties": {
-                "NetworkAclId": {
-                    "Ref": "galaxyBaseACL"
-                },
-                "SubnetId": {
-                    "Ref": "galaxySubnet3"
-                }
-            },
-            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
-        },
-        "galaxyBaseACL": {
+{{ end }}        "{{ $stackName }}BaseACL": {
             "Properties": {
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy-base"
+                        "Value": "{{ $stackName }}-base"
                     }
                 ],
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::NetworkAcl"
         },
-        "galaxyControllerASG": {
+        "{{ $stackName }}ControllerASG": {
             "Properties": {
-                "AvailabilityZones": {
-                    "Fn::GetAZs": ""
-                },
+                "AvailabilityZones": {{ AZList }},
                 "Cooldown": "300",
                 "DesiredCapacity": "1",
                 "HealthCheckGracePeriod": "300",
                 "HealthCheckType": "EC2",
                 "LaunchConfigurationName": {
-                    "Ref": "galaxyControllerLC"
+                    "Ref": "{{ $stackName }}ControllerLC"
                 },
                 "MaxSize": "1",
                 "MinSize": "1",
@@ -147,24 +181,14 @@ var cloudformation_template = []byte(`{
                     {
                         "Key": "Name",
                         "PropagateAtLaunch": true,
-                        "Value": "galaxy-controller"
+                        "Value": "{{ $stackName }}-controller"
                     }
                 ],
-                "VPCZoneIdentifier": [
-                    {
-                        "Ref": "galaxySubnet1"
-                    },
-                    {
-                        "Ref": "galaxySubnet2"
-                    },
-                    {
-                        "Ref": "galaxySubnet3"
-                    }
-                ]
+                "VPCZoneIdentifier": {{ SubnetRefList }}
             },
             "Type": "AWS::AutoScaling::AutoScalingGroup"
         },
-        "galaxyDHCP": {
+        "{{ $stackName }}DHCP": {
             "Properties": {
                 "DomainName": "ec2.internal",
                 "DomainNameServers": [
@@ -173,29 +197,29 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::EC2::DHCPOptions"
         },
-        "galaxyDHCPAssoc": {
+        "{{ $stackName }}DHCPAssoc": {
             "Properties": {
                 "DhcpOptionsId": {
-                    "Ref": "galaxyDHCP"
+                    "Ref": "{{ $stackName }}DHCP"
                 },
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::VPCDHCPOptionsAssociation"
         },
-        "galaxyGatewayAttachment": {
+        "{{ $stackName }}GatewayAttachment": {
             "Properties": {
                 "InternetGatewayId": {
-                    "Ref": "galaxyVPCGateway"
+                    "Ref": "{{ $stackName }}VPCGateway"
                 },
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::VPCGatewayAttachment"
         },
-        "galaxyIngress": {
+        "{{ $stackName }}Ingress": {
             "Properties": {
                 "GroupId": {
                     "Ref": "defaultSG"
@@ -207,18 +231,18 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::EC2::SecurityGroupIngress"
         },
-        "galaxyInstanceProfile": {
+        "{{ $stackName }}InstanceProfile": {
             "Properties": {
                 "Path": "/",
                 "Roles": [
                     {
-                        "Ref": "galaxyRootRole"
+                        "Ref": "{{ $stackName }}RootRole"
                     }
                 ]
             },
             "Type": "AWS::IAM::InstanceProfile"
         },
-        "galaxyPoolLC": {
+        "{{ $stackName }}PoolLC": {
             "Properties": {
                 "ImageId": {
                     "Ref": "ControllerImageId"
@@ -232,7 +256,7 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::AutoScaling::LaunchConfiguration"
         },
-        "galaxyControllerLC": {
+        "{{ $stackName }}ControllerLC": {
             "Properties": {
                 "AssociatePublicIpAddress": true,
                 "BlockDeviceMappings": [
@@ -240,12 +264,12 @@ var cloudformation_template = []byte(`{
                         "DeviceName": "/dev/sda1",
                         "Ebs": {
                             "VolumeSize": 100,
-							"VolumeType": "gp2"
+                            "VolumeType": "gp2"
                         }
                     }
                 ],
                 "IamInstanceProfile": {
-                    "Ref": "galaxyInstanceProfile"
+                    "Ref": "{{ $stackName }}InstanceProfile"
                 },
                 "ImageId": {
                     "Ref": "ControllerImageId"
@@ -267,7 +291,7 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::AutoScaling::LaunchConfiguration"
         },
-        "galaxyRootRole": {
+        "{{ $stackName }}RootRole": {
             "Properties": {
                 "AssumeRolePolicyDocument": {
                     "Statement": [
@@ -304,81 +328,52 @@ var cloudformation_template = []byte(`{
             },
             "Type": "AWS::IAM::Role"
         },
-        "galaxyRoute": {
-            "DependsOn": "galaxyGatewayAttachment",
+        "{{ $stackName }}Route": {
+            "DependsOn": "{{ $stackName }}GatewayAttachment",
             "Properties": {
                 "DestinationCidrBlock": "0.0.0.0/0",
                 "GatewayId": {
-                    "Ref": "galaxyVPCGateway"
+                    "Ref": "{{ $stackName }}VPCGateway"
                 },
                 "RouteTableId": {
-                    "Ref": "galaxyRouteTable"
+                    "Ref": "{{ $stackName }}RouteTable"
                 }
             },
             "Type": "AWS::EC2::Route"
         },
-        "galaxyRouteSubnet1": {
+{{ range .Subnets }}        "{{ .Name }}Route": {
             "Properties": {
                 "RouteTableId": {
-                    "Ref": "galaxyRouteTable"
+                    "Ref": "{{ $stackName }}RouteTable"
                 },
                 "SubnetId": {
-                    "Ref": "galaxySubnet1"
+                    "Ref": "{{ .Name }}"
                 }
             },
             "Type": "AWS::EC2::SubnetRouteTableAssociation"
         },
-        "galaxyRouteSubnet2": {
-            "Properties": {
-                "RouteTableId": {
-                    "Ref": "galaxyRouteTable"
-                },
-                "SubnetId": {
-                    "Ref": "galaxySubnet3"
-                }
-            },
-            "Type": "AWS::EC2::SubnetRouteTableAssociation"
-        },
-        "galaxyRouteSubnet3": {
-            "Properties": {
-                "RouteTableId": {
-                    "Ref": "galaxyRouteTable"
-                },
-                "SubnetId": {
-                    "Ref": "galaxySubnet2"
-                }
-            },
-            "Type": "AWS::EC2::SubnetRouteTableAssociation"
-        },
-        "galaxyRouteTable": {
+{{ end }}        "{{ $stackName }}RouteTable": {
             "Properties": {
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy-public"
+                        "Value": "{{ $stackName }}-public"
                     }
                 ],
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::RouteTable"
         },
-        "galaxySubnet1": {
+{{ range .Subnets }}        "{{ .Name }}": {
             "Properties": {
-                "AvailabilityZone": "us-east-1d",
-                "CidrBlock": {
-                    "Fn::Select": [
-                        "0",
-                        {
-                            "Ref": "SubnetCidrBlocks"
-                        }
-                    ]
-                },
+                "AvailabilityZone": "{{ .AZ }}",
+                "CidrBlock": "{{ .Subnet }}",
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy-us-east-1d"
+                        "Value": "{{ .Name }}-{{ .AZ }}"
                     },
                     {
                         "Key": "scope",
@@ -386,88 +381,32 @@ var cloudformation_template = []byte(`{
                     }
                 ],
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::Subnet"
         },
-        "galaxySubnet2": {
+{{ end }}        "{{ $stackName }}VPC": {
             "Properties": {
-                "AvailabilityZone": "us-east-1c",
-                "CidrBlock": {
-                    "Fn::Select": [
-                        "1",
-                        {
-                            "Ref": "SubnetCidrBlocks"
-                        }
-                    ]
-                },
-                "Tags": [
-                    {
-                        "Key": "scope",
-                        "Value": "public"
-                    },
-                    {
-                        "Key": "Name",
-                        "Value": "galaxy-us-east-1c"
-                    }
-                ],
-                "VpcId": {
-                    "Ref": "galaxyVPC"
-                }
-            },
-            "Type": "AWS::EC2::Subnet"
-        },
-        "galaxySubnet3": {
-            "Properties": {
-                "AvailabilityZone": "us-east-1b",
-                "CidrBlock": {
-                    "Fn::Select": [
-                        "2",
-                        {
-                            "Ref": "SubnetCidrBlocks"
-                        }
-                    ]
-                },
-                "Tags": [
-                    {
-                        "Key": "Name",
-                        "Value": "galaxy-us-east-1b"
-                    },
-                    {
-                        "Key": "scope",
-                        "Value": "public"
-                    }
-                ],
-                "VpcId": {
-                    "Ref": "galaxyVPC"
-                }
-            },
-            "Type": "AWS::EC2::Subnet"
-        },
-        "galaxyVPC": {
-            "Properties": {
-                "CidrBlock": {
-                    "Ref": "VPCCidrBlock"
-                },
+                "CidrBlock": "{{ .VPCCIDR }}",
                 "EnableDnsHostnames": "true",
                 "EnableDnsSupport": "true",
                 "InstanceTenancy": "default",
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy"
+                        "Value": "{{ $stackName }}"
                     }
                 ]
             },
             "Type": "AWS::EC2::VPC"
         },
-        "galaxyVPCGateway": {
+        "{{ $stackName }}VPCGateway": {
             "Properties": {
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy-gateway"
+                        "Value": "{{ $stackName }}-gateway"
                     }
                 ]
             },
@@ -499,11 +438,11 @@ var cloudformation_template = []byte(`{
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy-ssh"
+                        "Value": "{{ $stackName }}-ssh"
                     }
                 ],
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::SecurityGroup"
@@ -534,14 +473,14 @@ var cloudformation_template = []byte(`{
                 "Tags": [
                     {
                         "Key": "Name",
-                        "Value": "galaxy-web"
+                        "Value": "{{ $stackName }}-web"
                     }
                 ],
                 "VpcId": {
-                    "Ref": "galaxyVPC"
+                    "Ref": "{{ $stackName }}VPC"
                 }
             },
             "Type": "AWS::EC2::SecurityGroup"
         }
     }
-}`)
+}`
