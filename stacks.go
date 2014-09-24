@@ -474,7 +474,7 @@ func stackCreatePool(c *cli.Context) {
 	asg.AddTag("Name", fmt.Sprintf("%s-%s-%s", baseStack, poolEnv, poolName), true)
 	asg.AddTag("env", poolEnv, true)
 	asg.AddTag("pool", poolName, true)
-	asg.AddTag("source", "galaxy", true)
+	asg.AddTag("galaxy", "pool", true)
 
 	if desiredCap > 0 {
 		asg.Properties.DesiredCapacity = desiredCap

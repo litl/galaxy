@@ -29,6 +29,7 @@ var poolTmpl = []byte(`
         },
 		"elb_": {
 			"Properties": {
+				"CrossZone": true,
 				"HealthCheck": {
 					"HealthyThreshold": "2",
 					"Interval": "30",
