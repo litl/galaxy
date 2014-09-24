@@ -27,30 +27,43 @@ func getBase(c *cli.Context) string {
 		return base
 	}
 
-	stacks, err := stack.ListActive()
+	descResp, err := stack.DescribeStacks("")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, name := range stacks {
-		parts := strings.Split(name, "-")
+	for _, stack := range descResp.Stacks {
+		// first check for galaxy:base tag
+		baseTag := false
+		for _, t := range stack.Tags {
+			if t.Key == "galaxy" && t.Value == "base" {
+				baseTag = true
+			}
+		}
+		if baseTag {
+			if base != "" {
+				err = errNoBase
+			}
+			base = stack.Name
+			continue
+		}
+		parts := strings.Split(stack.Name, "-")
+
+		// check for "-base" in the name
+		if parts[len(parts)-1] == "base" {
+			if base != "" {
+				err = errNoBase
+			}
+			base = stack.Name
+			continue
+		}
 
 		// the best we can do for now is look for a stack with a single word
 		if len(parts) == 1 {
 			if base != "" {
 				err = errNoBase
 			}
-			base = name
-		}
-
-		// or check for "-base" in the name
-		for _, p := range parts {
-			if p == "base" {
-				if base != "" {
-					err = errNoBase
-				}
-				base = name
-			}
+			base = stack.Name
 		}
 	}
 
@@ -338,9 +351,9 @@ func stackTemplate(c *cli.Context) {
 	}
 }
 
-func sharedResources(c *cli.Context) stack.SharedResources {
+func sharedResources(c *cli.Context, baseStack string) stack.SharedResources {
 	// get the resources we need from the base stack
-	resources, err := stack.GetSharedResources(getBase(c))
+	resources, err := stack.GetSharedResources(baseStack)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -402,7 +415,7 @@ func stackCreatePool(c *cli.Context) {
 
 	// get the resources we need from the base stack
 	// TODO: this may search for the base stack a second time
-	resources := sharedResources(c)
+	resources := sharedResources(c, baseStack)
 
 	desiredCap := c.Int("desired-size")
 	minSize := c.Int("min-size")
@@ -607,7 +620,7 @@ func stackUpdatePool(c *cli.Context) {
 		options["StackPolicyDuringUpdateBody"] = string(policyJSON)
 	}
 
-	resources := sharedResources(c)
+	resources := sharedResources(c, baseStack)
 
 	asg := pool.ASG()
 	if asg == nil {

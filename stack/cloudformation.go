@@ -69,12 +69,18 @@ type stackParameter struct {
 	Value string `xml:"ParameterValue"`
 }
 
+type stackTag struct {
+	Key   string
+	Value string
+}
+
 type stackDescription struct {
 	Id           string           `xml:"StackId"`
 	Name         string           `xml:"StackName"`
 	Status       string           `xml:"StackStatus"`
 	StatusReason string           `xml:"StackStatusReason"`
 	Parameters   []stackParameter `xml:"Parameters>member"`
+	Tags         []stackTag       `xml:"Tags>member"`
 }
 
 type DescribeStacksResponse struct {
