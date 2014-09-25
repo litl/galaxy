@@ -142,6 +142,7 @@ func (b *Backend) check() {
 
 	up := true
 	if c, e := net.DialTimeout("tcp", b.CheckAddr, b.dialTimeout); e == nil {
+		c.(*net.TCPConn).SetLinger(0)
 		c.Close()
 	} else {
 		log.Debug("Check error:", e)
@@ -234,6 +235,9 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 	select {
 	case <-clientClosed:
 		log.Debugf("Client %s/%s closed connection", cliConn.RemoteAddr(), cliConn.LocalAddr())
+		// the client closed first, so any more packets here are invalid, and
+		// we can SetLinger(0) to recycle the port faster.
+		bConn.TCPConn.SetLinger(0)
 		bConn.CloseRead()
 		waitFor = backendClosed
 	case <-backendClosed:
@@ -246,7 +250,7 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 }
 
 // This does the actual data transfer.
-// The broker only closes the Read side on error.
+// The broker only closes the Read side.
 func broker(dst, src net.Conn, srcClosed chan bool, written, errors *int64) {
 	_, err := io.Copy(dst, src)
 	if err != nil {
