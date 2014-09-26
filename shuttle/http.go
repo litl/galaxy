@@ -345,7 +345,7 @@ func (e *ErrorResponse) CheckResponse(pr *ProxyRequest) bool {
 
 func logProxyRequest(pr *ProxyRequest) bool {
 	// TODO: we may to be able to switch this off
-	if pr == nil {
+	if pr == nil || pr.Request == nil {
 		return true
 	}
 
@@ -354,13 +354,15 @@ func logProxyRequest(pr *ProxyRequest) bool {
 
 	duration := pr.FinishTime.Sub(pr.StartTime)
 
-	if pr.Request != nil {
-		id = pr.Request.Header.Get("X-Request-Id")
-		method = pr.Request.Method
+	id = pr.Request.Header.Get("X-Request-Id")
+	method = pr.Request.Method
+	url = pr.Request.Host + pr.Request.RequestURI
+	agent = pr.Request.UserAgent()
+	status = pr.Response.StatusCode
+
+	clientIP = pr.Request.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
 		clientIP = pr.Request.RemoteAddr
-		url = pr.Request.Host + pr.Request.RequestURI
-		agent = pr.Request.UserAgent()
-		status = pr.Response.StatusCode
 	}
 
 	if pr.Response != nil && pr.Response.Request != nil && pr.Response.Request.URL != nil {
