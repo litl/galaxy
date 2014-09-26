@@ -379,7 +379,7 @@ func (s *Service) connect(cliConn net.Conn) {
 	// Try the first backend given, but if that fails, cycle through them all
 	// to make a best effort to connect the client.
 	for _, b := range backends {
-		srvConn, err := net.DialTimeout("tcp", b.Addr, b.dialTimeout)
+		srvConn, err := s.dialer.Dial("tcp", b.Addr)
 		if err != nil {
 			log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, b.Name, err)
 			atomic.AddInt64(&b.Errors, 1)
