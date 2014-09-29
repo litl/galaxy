@@ -769,6 +769,7 @@ func main() {
 		cli.IntFlag{Name: "scale-down-delay", Usage: "minutes to wait for scaling down"},
 		cli.IntFlag{Name: "scale-up-cpu", Usage: "cpu threshold for scaling up"},
 		cli.IntFlag{Name: "scale-down-cpu", Usage: "cpu threshold for scaling down"},
+		cli.IntFlag{Name: "availability-zones", Usage: "number of availability zones to run a pool in"},
 	}
 
 	app := cli.NewApp()

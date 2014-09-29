@@ -180,7 +180,7 @@ func (a *asg) AddTag(key, value string, propagateAtLauch bool) {
 }
 
 type asgProp struct {
-	AvailabilityZones       fnGetAZs
+	AvailabilityZones       []string
 	Cooldown                int `json:",string"`
 	DesiredCapacity         int `json:",string"`
 	HealthCheckGracePeriod  int `json:",string"`
