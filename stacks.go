@@ -18,7 +18,7 @@ import (
 	"github.com/ryanuber/columnize"
 )
 
-// return --base, or try to find a base clodformation stack
+// return --base, or try to find a base cloudformation stack
 func getBase(c *cli.Context) string {
 	errNoBase := fmt.Errorf("could not identify a unique base stack")
 
@@ -526,7 +526,7 @@ func stackCreatePool(c *cli.Context) {
 		// make sure to add this to the ASG
 		asg.AddLoadBalancer(elbName)
 
-		elb.Properties.Subnets = azIDs
+		elb.Properties.Subnets = subnetIDs
 
 		elb.Properties.SecurityGroups = []string{
 			resources.SecurityGroups["webSG"],

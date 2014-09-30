@@ -44,7 +44,7 @@ var poolTmpl = []byte(`
 					}
 				],
 				"SecurityGroups": [],
-				"Subnets": []
+				"AvailabilityZones": []
 			},
 			"Type": "AWS::ElasticLoadBalancing::LoadBalancer"
 		},
