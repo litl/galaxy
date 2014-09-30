@@ -12,9 +12,7 @@ var poolTmpl = []byte(`
     "Resources": {
         "asg_": {
             "Properties": {
-                "AvailabilityZones": {
-                    "Fn::GetAZs": ""
-                },
+                "AvailabilityZones": [],
                 "Cooldown": "300",
 				"DesiredCapacity": "1",
                 "HealthCheckGracePeriod": "300",

@@ -131,7 +131,7 @@ func getInitOpts(c *cli.Context) *stack.GalaxyTmplParams {
 		region = promptValue("EC2 Region", "us-east-1")
 	}
 
-	azResp, err := stack.ListAvailabilityZones(region)
+	azResp, err := stack.DescribeAvailabilityZones(region)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -294,10 +294,7 @@ func stackUpdate(c *cli.Context) {
 	}
 
 	// this reads the Parameters supplied for our current stack for us
-	shared, err := stack.GetSharedResources(stackName)
-	if err != nil {
-		log.Fatalf("ERROR: %s", err)
-	}
+	shared := sharedResources(c, stackName)
 
 	// add any missing parameters to our
 	for key, val := range shared.Parameters {
@@ -418,6 +415,16 @@ func stackCreatePool(c *cli.Context) {
 	resources := sharedResources(c, baseStack)
 
 	desiredCap := c.Int("desired-size")
+	if desiredCap == 0 {
+		desiredCap = 1
+	}
+
+	numZones := c.Int("availability-zones")
+	if numZones == 0 {
+		// default to running one host per zone
+		numZones = desiredCap
+	}
+
 	minSize := c.Int("min-size")
 	maxSize := c.Int("max-size")
 	httpPort := c.Int("http-port")
@@ -476,12 +483,27 @@ func stackCreatePool(c *cli.Context) {
 	asg.AddTag("pool", poolName, true)
 	asg.AddTag("galaxy", "pool", true)
 
-	if desiredCap > 0 {
-		asg.Properties.DesiredCapacity = desiredCap
+	asg.Properties.DesiredCapacity = desiredCap
+
+	// Don't always run in all zones
+	subnets := resources.Subnets
+	if numZones <= len(subnets) {
+		subnets = subnets[:numZones]
+	} else {
+		log.Fatal("ERROR: cannot run in %d zones, only %d available.", numZones, len(subnets))
+	}
+
+	// break the subnets info into separate subnet and AZ slices for the template
+	subnetIDs := []string{}
+	azIDs := []string{}
+	for _, sn := range subnets {
+		subnetIDs = append(subnetIDs, sn.ID)
+		azIDs = append(azIDs, sn.AvailabilityZone)
 	}
 
 	asg.SetLaunchConfiguration(lcName)
-	asg.Properties.VPCZoneIdentifier = resources.ListSubnets()
+	asg.Properties.AvailabilityZones = azIDs
+	asg.Properties.VPCZoneIdentifier = subnetIDs
 	if maxSize > 0 {
 		asg.Properties.MaxSize = maxSize
 	}
@@ -504,7 +526,7 @@ func stackCreatePool(c *cli.Context) {
 		// make sure to add this to the ASG
 		asg.AddLoadBalancer(elbName)
 
-		elb.Properties.Subnets = resources.ListSubnets()
+		elb.Properties.Subnets = azIDs
 
 		elb.Properties.SecurityGroups = []string{
 			resources.SecurityGroups["webSG"],
@@ -645,6 +667,33 @@ func stackUpdatePool(c *cli.Context) {
 		asg.SetASGUpdatePolicy(1, 1, 5*time.Minute)
 	}
 
+	numZones := c.Int("availability-zones")
+	if numZones == 0 {
+		numZones = len(asg.Properties.VPCZoneIdentifier)
+	}
+
+	// start with the current settings
+	subnetIDs := []string{}
+	azIDs := []string{}
+
+	// only update the subnets/AZs if we changed the count
+	if len(asg.Properties.VPCZoneIdentifier) != numZones {
+		subnets := resources.Subnets
+		if numZones <= len(subnets) {
+			subnets = subnets[:numZones]
+		} else {
+			log.Fatal("ERROR: cannot run in %d zones, only %d available.", numZones, len(subnets))
+		}
+
+		for _, sn := range subnets {
+			subnetIDs = append(subnetIDs, sn.ID)
+			azIDs = append(azIDs, sn.AvailabilityZone)
+		}
+		asg.Properties.VPCZoneIdentifier = subnetIDs
+		asg.Properties.AvailabilityZones = azIDs
+
+	}
+
 	elb := pool.ELB()
 
 	sslCert := ""
@@ -671,6 +720,9 @@ func stackUpdatePool(c *cli.Context) {
 				l.InstancePort = httpPort
 			}
 		}
+
+		// always make sure the ELB is in the same subnets as the ASG
+		elb.Properties.Subnets = asg.Properties.VPCZoneIdentifier
 	}
 
 	lc := pool.LC()

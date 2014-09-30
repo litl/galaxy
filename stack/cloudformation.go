@@ -19,8 +19,6 @@ Most of this should probably get wrapped up in a goamz/cloudformations package,
 if someone wants to write out the entire API.
 
 TODO: this is going to need some DRY love
-TODO: Switched to goamz/goamz, there may be redundant functionality here that
-      we can eliminate. Optimally we'll have a full-featured goamz someday.
 TODO: regions are handled with global state, and ENV vars override cli options
 TODO: Use SQS instead of polling
 */
@@ -157,27 +155,43 @@ type DescribeAvailabilityZonesResponse struct {
 	AvailabilityZones []AvailabilityZoneInfo `xml:"availabilityZoneInfo>item"`
 }
 
+type Subnet struct {
+	ID                        string `xml:"subnetId"`
+	State                     string `xml:"state"`
+	VPCID                     string `xml:"vpcId"`
+	CIDRBlock                 string `xml:"cidrBlock"`
+	AvailableIPAddressesCount int    `xml:"availableIpAddressCount"`
+	AvailabilityZone          string `xml:"availabilityZone"`
+	DefaultForAZ              bool   `xml:"defaultForAz"`
+	MapPublicIPOnLaunch       bool   `xml:"mapPublicIpOnLaunch"`
+}
+
+type DescribeSubnetsResponse struct {
+	RequestId string   `xml:"requestId"`
+	Subnets   []Subnet `xml:"subnetSet>item"`
+}
+
 // Resources from the base stack that may need to be referenced from other
 // stacks
 type SharedResources struct {
-	Subnets        map[string]string
 	SecurityGroups map[string]string
 	Roles          map[string]string
 	Parameters     map[string]string
 	ServerCerts    map[string]string
+	Subnets        []Subnet
+	VPCID          string
 }
 
-// return a list of the subnet values
+// Return a list of the subnet values.
 func (s SharedResources) ListSubnets() []string {
 	subnets := []string{}
 	for _, val := range s.Subnets {
-		subnets = append(subnets, val)
+		subnets = append(subnets, val.ID)
 	}
 	return subnets
 }
 
 func getService(service, region string) (*aws.Service, error) {
-	// REGION env vars aren't used by the aws-cli, but check here just in case
 	if region == "" {
 		region = os.Getenv("AWS_DEFAULT_REGION")
 		if region != "" {
@@ -185,6 +199,7 @@ func getService(service, region string) (*aws.Service, error) {
 		}
 	}
 
+	// AWS_REGION isn't used by the aws-cli, but check here just in case
 	if region == "" {
 		region = os.Getenv("AWS_REGION")
 		if region != "" {
@@ -254,7 +269,58 @@ func GetPool(name string) (*Pool, error) {
 	return pool, nil
 }
 
-func ListAvailabilityZones(region string) (DescribeAvailabilityZonesResponse, error) {
+func GetStackVPC(stackName string) (string, error) {
+	stackResp, err := ListStackResources(stackName)
+	if err != nil {
+		return "", err
+	}
+
+	for _, res := range stackResp.Resources {
+		if res.Type == "AWS::EC2::VPC" {
+			return res.PhysicalId, nil
+		}
+	}
+
+	return "", fmt.Errorf("No VPC found")
+}
+
+func DescribeSubnets(vpcID, region string) (DescribeSubnetsResponse, error) {
+	dsnResp := DescribeSubnetsResponse{}
+
+	service, err := getService("ec2", region)
+	if err != nil {
+		return dsnResp, err
+	}
+
+	params := map[string]string{
+		"Action":  "DescribeSubnets",
+		"Version": "2014-02-01",
+	}
+
+	if vpcID != "" {
+		params["Filter.1.Name"] = "vpc-id"
+		params["Filter.1.Value.1"] = vpcID
+	}
+
+	resp, err := service.Query("GET", "/", params)
+	if err != nil {
+		return dsnResp, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err := service.BuildError(resp)
+		return dsnResp, err
+	}
+	defer resp.Body.Close()
+
+	err = xml.NewDecoder(resp.Body).Decode(&dsnResp)
+	if err != nil {
+		return dsnResp, err
+	}
+	return dsnResp, nil
+}
+
+func DescribeAvailabilityZones(region string) (DescribeAvailabilityZonesResponse, error) {
 	azResp := DescribeAvailabilityZonesResponse{}
 
 	service, err := getService("ec2", region)
@@ -595,12 +661,12 @@ func ListServerCertificates() (ListServerCertsResponse, error) {
 // cached to disk so that we don't need to lookup the base stack to build a
 // pool template.
 func GetSharedResources(stackName string) (SharedResources, error) {
-	shared := SharedResources{}
-	shared.SecurityGroups = make(map[string]string)
-	shared.Subnets = make(map[string]string)
-	shared.Roles = make(map[string]string)
-	shared.Parameters = make(map[string]string)
-	shared.ServerCerts = make(map[string]string)
+	shared := SharedResources{
+		SecurityGroups: make(map[string]string),
+		Roles:          make(map[string]string),
+		Parameters:     make(map[string]string),
+		ServerCerts:    make(map[string]string),
+	}
 
 	// we need to use DescribeStacks to get any parameters that were used in
 	// the base stack, such as KeyName
@@ -627,12 +693,19 @@ func GetSharedResources(stackName string) (SharedResources, error) {
 		switch resource.Type {
 		case "AWS::EC2::SecurityGroup":
 			shared.SecurityGroups[resource.LogicalId] = resource.PhysicalId
-		case "AWS::EC2::Subnet":
-			shared.Subnets[resource.LogicalId] = resource.PhysicalId
 		case "AWS::IAM::InstanceProfile":
 			shared.Roles[resource.LogicalId] = resource.PhysicalId
+		case "AWS::EC2::VPC":
+			shared.VPCID = resource.PhysicalId
 		}
 	}
+
+	// NOTE: using default AZ
+	snResp, err := DescribeSubnets(shared.VPCID, "")
+	if err != nil {
+		return shared, err
+	}
+	shared.Subnets = snResp.Subnets
 
 	// now we need to find any server certs we may have
 	certResp, err := ListServerCertificates()
@@ -822,7 +895,7 @@ func Delete(name string) (*DeleteStackResponse, error) {
 
 // Return a default template to create our base stack.
 func DefaultGalaxyTemplate() []byte {
-	azResp, err := ListAvailabilityZones("")
+	azResp, err := DescribeAvailabilityZones("")
 	if err != nil {
 		log.Warn(err)
 		return nil
