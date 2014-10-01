@@ -249,11 +249,12 @@ func (e *elb) AddListener(port int, proto string, instancePort int, instanceProt
 }
 
 type elbProp struct {
-	CrossZone      bool
-	Subnets        []string `json:",omitempty"`
-	SecurityGroups []string `json:",omitempty"`
-	HealthCheck    healthCheck
-	Listeners      []listener
+	CrossZone         bool
+	AvailabilityZones []string `json:",omitempty"`
+	Subnets           []string `json:",omitempty"`
+	SecurityGroups    []string `json:",omitempty"`
+	HealthCheck       healthCheck
+	Listeners         []listener
 }
 
 type healthCheck struct {
