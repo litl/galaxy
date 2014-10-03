@@ -14,6 +14,7 @@ type Metric struct {
 
 type TimeSeries struct {
 	values map[int64]float64
+	attr   map[string]interface{}
 }
 
 type TSCollection struct {
@@ -37,6 +38,7 @@ func (s Int64Slice) Swap(i, j int) {
 func NewTimeSeries() *TimeSeries {
 	return &TimeSeries{
 		values: make(map[int64]float64),
+		attr:   make(map[string]interface{}),
 	}
 }
 
@@ -99,14 +101,16 @@ func (t *TimeSeries) Fill(from, to, step int64, value float64) {
 	}
 }
 
-func (t *TimeSeries) Add(ts int64, value float64) {
+func (t *TimeSeries) Add(ts int64, value float64, attr map[string]interface{}) {
 	t.values[ts] = value
+	t.attr = attr
 }
 
 func (t *TimeSeries) AddAll(ts *TimeSeries) {
 	for _, metric := range ts.Metrics() {
 		t.values[metric.TS] = metric.Value
 	}
+	t.attr = ts.attr
 }
 
 func (t *TimeSeries) Remove(ts int64) {
@@ -154,6 +158,15 @@ func (t *TimeSeries) Metrics() []Metric {
 
 func (t *TimeSeries) Filter(from, to int64) []Metric {
 	return t.metrics(from, to)
+}
+
+func (t *TimeSeries) AttrNames() []string {
+	names := []string{}
+	for k, _ := range t.attr {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (t *TimeSeries) String() string {
