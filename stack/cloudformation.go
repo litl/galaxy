@@ -195,7 +195,7 @@ func getService(service, region string) (*aws.Service, error) {
 	if region == "" {
 		region = os.Getenv("AWS_DEFAULT_REGION")
 		if region != "" {
-			log.Printf("Using AWS_DEFAULT_REGION=%s", region)
+			log.Debugf("Using AWS_DEFAULT_REGION=%s", region)
 		}
 	}
 
@@ -203,7 +203,7 @@ func getService(service, region string) (*aws.Service, error) {
 	if region == "" {
 		region = os.Getenv("AWS_REGION")
 		if region != "" {
-			log.Printf("Using AWS_REGION=%s", region)
+			log.Debugf("Using AWS_REGION=%s", region)
 		}
 	}
 
