@@ -20,7 +20,7 @@ type CloudwatchStat struct {
 
 func loadCloudwatchStats(tscChan chan *TSCollection) {
 	defer wg.Done()
-	_, err := aws.EnvAuth()
+	_, err := aws.GetAuth("", "", "", time.Now().UTC())
 	if err != nil {
 		log.Debugf("%s. Skipping collection.", err)
 		return
@@ -116,7 +116,7 @@ func loadCloudwatchStats(tscChan chan *TSCollection) {
 func (c *CloudwatchStat) Load(prefix string, tsc *TSCollection, attr map[string]interface{}) error {
 	ts := NewTimeSeries()
 
-	auth, err := aws.EnvAuth()
+	auth, err := aws.GetAuth("", "", "", time.Now())
 	if err != nil {
 		return err
 	}
