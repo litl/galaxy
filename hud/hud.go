@@ -43,7 +43,7 @@ func (s *sliceVar) String() string {
 func main() {
 	flag.StringVar(&statsPrefix, "statsPrefix", "", "Global prefix for all stats")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
-	flag.StringVar(&env, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
+	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
 	flag.BoolVar(&debug, "debug", false, "Enables debug build")
 	flag.BoolVar(&version, "v", false, "display version info")
