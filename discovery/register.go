@@ -40,9 +40,14 @@ func registerAll(c *cli.Context, loggedOnce bool) {
 		return
 	}
 
+	fn := log.Debugf
+	if !loggedOnce {
+		fn = log.Printf
+	}
+
 	for _, registration := range registrations {
 		if !loggedOnce || time.Now().Unix()%60 < 10 {
-			log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(registration.ContainerName, "/"),
+			fn("Registered %s running as %s for %s%s", strings.TrimPrefix(registration.ContainerName, "/"),
 				registration.ContainerID[0:12], registration.Name, locationAt(registration))
 		}
 
