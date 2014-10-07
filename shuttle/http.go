@@ -41,9 +41,6 @@ func NewHostRouter() *HostRouter {
 func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	reqId := genId()
 	req.Header.Set("X-Request-Id", reqId)
-	defer func(start time.Time) {
-		log.Printf("id=%s total_duration=%s", reqId, time.Since(start))
-	}(time.Now())
 
 	var err error
 	host := req.Host
