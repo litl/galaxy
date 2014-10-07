@@ -2,11 +2,13 @@ package main
 
 import "testing"
 
+var noAttr map[string]interface{}
+
 func TestTimeSeriesAdd(t *testing.T) {
 	ts := NewTimeSeries()
 
-	ts.Add(1, 1)
-	ts.Add(2, 2)
+	ts.Add(1, 1, noAttr)
+	ts.Add(2, 2, noAttr)
 
 	metrics := ts.Metrics()
 	if len(metrics) != 2 {
@@ -25,8 +27,8 @@ func TestTimeSeriesAdd(t *testing.T) {
 func TestTimeSeriesAddDuplicate(t *testing.T) {
 	ts := NewTimeSeries()
 
-	ts.Add(1, 1)
-	ts.Add(1, 2)
+	ts.Add(1, 1, noAttr)
+	ts.Add(1, 2, noAttr)
 
 	metrics := ts.Metrics()
 	if len(metrics) != 1 {
@@ -41,11 +43,11 @@ func TestTimeSeriesAddDuplicate(t *testing.T) {
 func TestTimeSeriesFilter(t *testing.T) {
 	ts := NewTimeSeries()
 
-	ts.Add(1, 1)
-	ts.Add(2, 2)
-	ts.Add(3, 3)
-	ts.Add(4, 4)
-	ts.Add(5, 5)
+	ts.Add(1, 1, noAttr)
+	ts.Add(2, 2, noAttr)
+	ts.Add(3, 3, noAttr)
+	ts.Add(4, 4, noAttr)
+	ts.Add(5, 5, noAttr)
 
 	metrics := ts.Filter(2, 4)
 	if len(metrics) != 2 {
@@ -64,11 +66,11 @@ func TestTimeSeriesFilter(t *testing.T) {
 func TestTimeSeriesRemove(t *testing.T) {
 	ts := NewTimeSeries()
 
-	ts.Add(1, 1)
-	ts.Add(2, 2)
-	ts.Add(3, 3)
-	ts.Add(4, 4)
-	ts.Add(5, 5)
+	ts.Add(1, 1, noAttr)
+	ts.Add(2, 2, noAttr)
+	ts.Add(3, 3, noAttr)
+	ts.Add(4, 4, noAttr)
+	ts.Add(5, 5, noAttr)
 	ts.Remove(3)
 
 	metrics := ts.Filter(2, 4)
