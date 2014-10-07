@@ -9,20 +9,24 @@ import (
 	"sync"
 
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 )
 
 var (
-	statsPrefix  string
-	env          string
-	debug        bool
-	version      bool
-	buildVersion string
-	stats        *TSCollection
-	ironmqFlag   sliceVar
-	influxDbAddr string
-	httpClient   *http.Client
-	wg           sync.WaitGroup
+	statsPrefix     string
+	env             string
+	pool            string
+	redisHost       string
+	debug           bool
+	version         bool
+	buildVersion    string
+	stats           *TSCollection
+	ironmqFlag      sliceVar
+	influxDbAddr    string
+	httpClient      *http.Client
+	wg              sync.WaitGroup
+	serviceRegistry *registry.ServiceRegistry
 )
 
 type sliceVar []string
@@ -39,6 +43,8 @@ func (s *sliceVar) String() string {
 func main() {
 	flag.StringVar(&statsPrefix, "statsPrefix", "", "Global prefix for all stats")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
+	flag.StringVar(&env, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
+	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
 	flag.BoolVar(&debug, "debug", false, "Enables debug build")
 	flag.BoolVar(&version, "v", false, "display version info")
 
@@ -61,6 +67,16 @@ func main() {
 	if debug {
 		log.DefaultLogger.Level = log.DEBUG
 	}
+
+	serviceRegistry = registry.NewServiceRegistry(
+		env,
+		pool,
+		"",
+		registry.DefaultTTL,
+		"",
+	)
+
+	serviceRegistry.Connect(redisHost)
 
 	stats = NewTSCollection()
 	tscChan := make(chan *TSCollection, 100)

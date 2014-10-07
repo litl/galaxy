@@ -191,7 +191,7 @@ func (s SharedResources) ListSubnets() []string {
 	return subnets
 }
 
-func getService(service, region string) (*aws.Service, error) {
+func GetAWSRegion(region string) (*aws.Region, error) {
 	if region == "" {
 		region = os.Getenv("AWS_DEFAULT_REGION")
 		if region != "" {
@@ -211,8 +211,6 @@ func getService(service, region string) (*aws.Service, error) {
 		region = Region
 	}
 
-	var endpoint string
-
 	var reg aws.Region
 	for name, r := range aws.Regions {
 		if name == region {
@@ -223,7 +221,17 @@ func getService(service, region string) (*aws.Service, error) {
 	if reg.Name == "" {
 		return nil, fmt.Errorf("region %s not found", region)
 	}
+	return &reg, nil
+}
 
+func getService(service, region string) (*aws.Service, error) {
+
+	reg, err := GetAWSRegion(region)
+	if err != nil {
+		return nil, err
+	}
+
+	var endpoint string
 	switch service {
 	case "cf":
 		endpoint = reg.CloudFormationEndpoint
@@ -231,6 +239,8 @@ func getService(service, region string) (*aws.Service, error) {
 		endpoint = reg.EC2Endpoint
 	case "iam":
 		endpoint = reg.IAMEndpoint
+	case "rds":
+		endpoint = reg.RDSEndpoint.Endpoint
 	default:
 		return nil, fmt.Errorf("Service %s not implemented", service)
 	}

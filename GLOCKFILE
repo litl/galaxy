@@ -1,6 +1,5 @@
 github.com/BurntSushi/toml f87ce853111478914f0bcffa34d43a93643e6eda
 github.com/codegangsta/cli 8f0575f520013467eb175a5dd30158ed816eeda9
-github.com/crowdmob/goamz c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88
 github.com/dotcloud/docker 24c4c3e0e99ddb4d65200f2f7367883e47008898
 github.com/fatih/color 95b468b5f34882796c597b718955603a584a9bd4
 github.com/feyeleanor/raw 724aedf6e1a5d8971aafec384b6bde3d5608fba4
@@ -11,6 +10,7 @@ github.com/garyburd/redigo ed54f4ed86a815cf09870e4bd1a10a2ee39a4308
 github.com/goamz/goamz a1da1b724496ac803aabd4898e15e74535d68ee0
 github.com/gorilla/context a08edd30ad9e104612741163dc087a613829a23c
 github.com/gorilla/mux 270c42505a11c779b5a5aaecfa5ec717adac996e
+github.com/influxdb/influxdb d0ff3174f6fc34ba5781ca3f43613c7e0cb896bc
 github.com/iron-io/iron_go 06d89387946f88deeeaa067eef403ee79654edfd
 github.com/ryanuber/columnize fef4ee9c9ecfb000e86ca19ac9cea7d58200d5b6
 gopkg.in/check.v1 871360013c92e1c715c2de6d06b54899468a8a2d
