@@ -14,9 +14,14 @@ type IronMQStat struct {
 }
 
 func loadIronMQStats(tscChan chan *TSCollection) {
-	defer wg.Done()
+	log.Debug("Checking IronMQ...")
+	defer func() {
+		defer wg.Done()
+		log.Debugf("Done checking IronMQ")
+	}()
+
 	if len(ironmqFlag) == 0 {
-		log.Debugf("No ironmq credentials found. Skipping collection.")
+		log.Debugf("No ironmq credentials found. Skipping collection permanently.")
 		return
 	}
 

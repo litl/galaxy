@@ -22,9 +22,13 @@ type CloudwatchStat struct {
 	Component  string
 }
 
-func loadELBStats(auth aws.Auth, tscChan chan *TSCollection, done sync.WaitGroup) {
+func loadELBStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGroup) {
 
-	defer done.Done()
+	log.Debugf("Checking ELB...")
+	defer func() {
+		log.Debugf("Done checking ELB")
+		done.Done()
+	}()
 
 	names, err := stack.ListActive()
 	if err != nil {
@@ -107,9 +111,13 @@ func loadELBStats(auth aws.Auth, tscChan chan *TSCollection, done sync.WaitGroup
 	}
 }
 
-func loadRDSStats(auth aws.Auth, tscChan chan *TSCollection, done sync.WaitGroup) {
+func loadRDSStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGroup) {
 
-	defer done.Done()
+	log.Debugf("Checking RDS...")
+	defer func() {
+		log.Debugf("Done checking RDS")
+		done.Done()
+	}()
 
 	apps, err := serviceRegistry.ListApps()
 	if err != nil {
@@ -201,12 +209,12 @@ func loadCloudwatchStats(tscChan chan *TSCollection) {
 		return
 	}
 
+	pollWg := sync.WaitGroup{}
 	for {
-
-		pollWg := sync.WaitGroup{}
+		log.Debugf("Checking cloudwatch...")
 		pollWg.Add(2)
-		go loadELBStats(auth, tscChan, pollWg)
-		go loadRDSStats(auth, tscChan, pollWg)
+		go loadELBStats(auth, tscChan, &pollWg)
+		go loadRDSStats(auth, tscChan, &pollWg)
 		pollWg.Wait()
 		time.Sleep(60 * time.Second)
 	}

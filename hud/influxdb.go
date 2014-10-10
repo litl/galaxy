@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"github.com/litl/galaxy/log"
 	"net/url"
 	"strings"
 	"time"
@@ -42,22 +42,28 @@ func storeInfluxDB(tscChan chan *TSCollection) {
 		log.Fatalf("ERROR: %s", err)
 	}
 
-	err = client.Ping()
-	if err != nil {
-		log.Fatalf("ERROR: %s", err)
-	}
-
-	err = client.AuthenticateDatabaseUser(config.Database, config.Username, config.Password)
-	if err != nil {
-		log.Fatalf("ERROR: Unable to connect to influxdb: %s", err)
-	}
-
 	for {
+
+	RETRY:
+		err = client.Ping()
+		if err != nil {
+			log.Errorf("ERROR: %s", err)
+			time.Sleep(10 * time.Second)
+			goto RETRY
+
+		}
+
+		err = client.AuthenticateDatabaseUser(config.Database, config.Username, config.Password)
+		if err != nil {
+			log.Errorf("ERROR: Unable to connect to influxdb: %s", err)
+			time.Sleep(10 * time.Second)
+			goto RETRY
+		}
+
 		series := []*influxClient.Series{}
 
 		tsc := <-tscChan
 
-	RETRY:
 		for name, ts := range tsc.series {
 			columns := []string{"time", "value"}
 
@@ -94,8 +100,8 @@ func storeInfluxDB(tscChan chan *TSCollection) {
 				time.Sleep(10 * time.Second)
 				goto RETRY
 			}
-
 		}
+		log.Debugf("Stored %d records in influxdb", len(series))
 	}
 
 }
