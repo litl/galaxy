@@ -203,14 +203,15 @@ func loadRDSStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGrou
 
 func loadCloudwatchStats(tscChan chan *TSCollection) {
 	defer wg.Done()
-	auth, err := aws.GetAuth("", "", "", time.Now().UTC())
-	if err != nil {
-		log.Debugf("%s. Skipping collection.", err)
-		return
-	}
-
 	pollWg := sync.WaitGroup{}
 	for {
+		auth, err := aws.GetAuth("", "", "", time.Now().UTC())
+		if err != nil {
+			log.Debugf("%s. Skipping collection.", err)
+			time.Sleep(60 * time.Second)
+			continue
+		}
+
 		log.Debugf("Checking cloudwatch...")
 		pollWg.Add(2)
 		go loadELBStats(auth, tscChan, &pollWg)
