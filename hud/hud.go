@@ -80,12 +80,14 @@ func main() {
 
 	stats = NewTSCollection()
 	tscChan := make(chan *TSCollection, 100)
-	wg.Add(3)
+	wg.Add(4)
+
 	go storeInfluxDB(tscChan)
 
 	go loadCloudwatchStats(tscChan)
 	go loadIronMQStats(tscChan)
 
+	go StatsdListener(tscChan)
 	wg.Wait()
 
 }
