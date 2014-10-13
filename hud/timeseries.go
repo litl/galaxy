@@ -117,6 +117,14 @@ func (t *TimeSeries) Remove(ts int64) {
 	delete(t.values, ts)
 }
 
+func (t *TimeSeries) RemoveBefore(ts int64) {
+	for _, value := range t.Metrics() {
+		if value.TS < ts {
+			t.Remove(ts)
+		}
+	}
+}
+
 func (t *TimeSeries) metrics(from, to int64) []Metric {
 	ts := Int64Slice{}
 	for k, _ := range t.values {
