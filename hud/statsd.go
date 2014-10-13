@@ -16,7 +16,7 @@ var priorValue *TSCollection
 func StatsdListener(tscChan chan *TSCollection) {
 	defer wg.Done()
 	priorValue = NewTSCollection()
-	address, _ := net.ResolveUDPAddr("udp", ":8125")
+	address, _ := net.ResolveUDPAddr("udp", statsdAddr)
 	listener, err := net.ListenUDP("udp", address)
 	if err != nil {
 		log.Fatalf("ERROR: Error starting statsd listener: %s", err)
