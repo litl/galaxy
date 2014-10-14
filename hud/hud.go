@@ -10,6 +10,7 @@ import (
 
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
+	gs "github.com/litl/galaxy/stats"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -21,7 +22,7 @@ var (
 	debug           bool
 	version         bool
 	buildVersion    string
-	stats           *TSCollection
+	stats           *gs.TSCollection
 	ironmqFlag      sliceVar
 	influxDbAddr    string
 	statsdAddr      string
@@ -80,11 +81,18 @@ func main() {
 
 	serviceRegistry.Connect(redisHost)
 
-	stats = NewTSCollection()
-	tscChan := make(chan *TSCollection, 100)
+	stats = gs.NewTSCollection()
+	tscChan := make(chan *gs.TSCollection, 100)
 	wg.Add(4)
 
-	go storeInfluxDB(tscChan)
+	iw := &gs.InfluxDBWriter{
+		Addr:    influxDbAddr,
+		Env:     env,
+		Prefix:  statsPrefix,
+		Wg:      &wg,
+		TscChan: tscChan,
+	}
+	go iw.StoreInfluxDB()
 
 	go loadCloudwatchStats(tscChan)
 	go loadIronMQStats(tscChan)

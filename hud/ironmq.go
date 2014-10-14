@@ -8,12 +8,13 @@ import (
 	"github.com/iron-io/iron_go/mq"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/stack"
+	gs "github.com/litl/galaxy/stats"
 )
 
 type IronMQStat struct {
 }
 
-func loadIronMQStats(tscChan chan *TSCollection) {
+func loadIronMQStats(tscChan chan *gs.TSCollection) {
 	log.Debug("Checking IronMQ...")
 	defer func() {
 		defer wg.Done()
@@ -48,7 +49,7 @@ func loadIronMQStats(tscChan chan *TSCollection) {
 	}
 }
 
-func (s *IronMQStat) Load(tscChan chan *TSCollection, source string) error {
+func (s *IronMQStat) Load(tscChan chan *gs.TSCollection, source string) error {
 	for _, entry := range ironmqFlag {
 		projectEnv, projectId, token := s.splitFlagOption(entry)
 
@@ -64,7 +65,7 @@ func (s *IronMQStat) Load(tscChan chan *TSCollection, source string) error {
 
 		for _, element := range queues {
 
-			tsc := NewTSCollection()
+			tsc := gs.NewTSCollection()
 			now := time.Now().UTC()
 			info, err := element.Info()
 			if err != nil {

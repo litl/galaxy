@@ -1,23 +1,34 @@
-package main
+package stats
 
 import (
 	"github.com/litl/galaxy/log"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	influxClient "github.com/influxdb/influxdb/client"
 )
 
-func storeInfluxDB(tscChan chan *TSCollection) {
+type InfluxDBWriter struct {
+	Addr    string
+	Env     string
+	Prefix  string
+	Wg      *sync.WaitGroup
+	TscChan chan *TSCollection
+}
 
-	defer wg.Done()
+func (w *InfluxDBWriter) StoreInfluxDB() {
+
+	tscChan := w.TscChan
+
+	defer w.Wg.Done()
 
 	var client *influxClient.Client = nil
 
 	config := &influxClient.ClientConfig{}
 
-	url, err := url.Parse(influxDbAddr)
+	url, err := url.Parse(w.Addr)
 	if err != nil {
 		log.Fatalf("ERROR: %s", err)
 	}
@@ -70,9 +81,12 @@ func storeInfluxDB(tscChan chan *TSCollection) {
 			attrNames := ts.AttrNames()
 			columns = append(columns, attrNames...)
 
-			name = env + "." + name
-			if statsPrefix != "" {
-				name = statsPrefix + "." + name
+			if w.Env != "" {
+				name = w.Env + "." + name
+			}
+
+			if w.Prefix != "" {
+				name = w.Prefix + "." + name
 			}
 			serie := &influxClient.Series{
 				Name:    name,
@@ -103,5 +117,4 @@ func storeInfluxDB(tscChan chan *TSCollection) {
 		}
 		log.Debugf("Stored %d records in influxdb", len(series))
 	}
-
 }

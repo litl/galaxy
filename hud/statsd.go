@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/litl/galaxy/log"
+	gs "github.com/litl/galaxy/stats"
 	"net"
 	"regexp"
 	"strconv"
@@ -11,11 +12,11 @@ import (
 	"time"
 )
 
-var priorValue *TSCollection
+var priorValue *gs.TSCollection
 
-func StatsdListener(tscChan chan *TSCollection) {
+func StatsdListener(tscChan chan *gs.TSCollection) {
 	defer wg.Done()
-	priorValue = NewTSCollection()
+	priorValue = gs.NewTSCollection()
 	address, _ := net.ResolveUDPAddr("udp", statsdAddr)
 	listener, err := net.ListenUDP("udp", address)
 	if err != nil {
@@ -38,12 +39,12 @@ func StatsdListener(tscChan chan *TSCollection) {
 	}
 }
 
-func handleMessage(conn *net.UDPConn, remaddr net.Addr, buf *bytes.Buffer, tscChan chan *TSCollection) {
+func handleMessage(conn *net.UDPConn, remaddr net.Addr, buf *bytes.Buffer, tscChan chan *gs.TSCollection) {
 
 	var sanitizeRegexp = regexp.MustCompile("[^a-zA-Z0-9\\-_\\+\\.:\\|@]")
 	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_\\.]+):([\\-\\+]?[0-9\\.]+)\\|(c|ms|g)(\\|@([0-9\\.]+))?")
 	s := sanitizeRegexp.ReplaceAllString(buf.String(), "")
-	tsc := NewTSCollection()
+	tsc := gs.NewTSCollection()
 	ts := time.Now().UTC().Unix()
 	for _, item := range packetRegexp.FindAllStringSubmatch(s, -1) {
 		bucket := item[1]

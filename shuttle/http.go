@@ -6,11 +6,13 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/litl/galaxy/log"
+	gs "github.com/litl/galaxy/stats"
 )
 
 var (
@@ -52,8 +54,9 @@ func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	svc := Registry.GetVHostService(host)
-
 	if svc != nil && svc.httpProxy != nil {
+		req.Header.Set("X-Service", svc.Name)
+
 		// The vhost has a service registered, give it to the proxy
 		svc.ServeHTTP(w, req)
 		return
@@ -67,6 +70,7 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 	defer r.Unlock()
 
 	if Registry.VHostsLen() == 0 {
+		recordMetric("shuttle.http.BackendUnavailable", 1, map[string]interface{}{})
 		http.Error(w, "no backends available", http.StatusServiceUnavailable)
 		return
 	}
@@ -346,12 +350,13 @@ func logProxyRequest(pr *ProxyRequest) bool {
 		return true
 	}
 
-	var id, method, clientIP, url, backend, agent string
+	var id, method, clientIP, url, backend, agent, name string
 	var status int
 
 	duration := pr.FinishTime.Sub(pr.StartTime)
 
 	id = pr.Request.Header.Get("X-Request-Id")
+	name = pr.Request.Header.Get("X-Service")
 	method = pr.Request.Method
 	url = pr.Request.Host + pr.Request.RequestURI
 	agent = pr.Request.UserAgent()
@@ -371,5 +376,84 @@ func logProxyRequest(pr *ProxyRequest) bool {
 	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s status=%d duration=%s agent=%s, err=%s"
 
 	log.Printf(fmtStr, id, method, clientIP, url, backend, status, duration, agent, err)
+
+	recordRequestStats(name, url, agent, status, duration)
+
 	return true
+}
+
+func normalizePath(path string) string {
+	re, err := regexp.Compile(`[\d\%]{2,}`)
+	if err != nil {
+		log.Errorf("ERROR: Normalize regex failed to compile: %s", err)
+		return path
+	}
+
+	normalized := []string{}
+	parts := strings.Split(path, "/")
+	for _, part := range parts {
+		if re.MatchString(part) {
+			normalized = append(normalized, "#")
+			continue
+		}
+		normalized = append(normalized, part)
+	}
+	return strings.Join(normalized, "/")
+}
+
+func recordRequestStats(name, url, agent string, status int, duration time.Duration) {
+	if influxDbAddr == "" {
+		return
+	}
+
+	path := "/"
+	host := url
+	pathIndex := strings.Index(url, "/")
+	endPathIndex := strings.Index(url, "?")
+	if pathIndex != -1 {
+		host = url[:pathIndex]
+		if endPathIndex != -1 {
+			path = url[pathIndex:endPathIndex]
+		} else {
+			path = url[pathIndex:]
+		}
+	}
+	path = normalizePath(path)
+
+	attr := map[string]interface{}{
+		"host":    host,
+		"path":    path,
+		"agent":   agent,
+		"status":  status,
+		"service": name,
+	}
+
+	ts := gs.NewTSCollection()
+	now := time.Now().UTC().Unix()
+	ts.Get("shuttle.http.RequestCount").Add(now, 1, attr)
+	ts.Get("shuttle.http.Latency").Add(now, float64(duration.Nanoseconds()), attr)
+	if status >= 200 && status < 300 {
+		ts.Get("shuttle.http.HTTPCode2XX").Add(now, 1, attr)
+	}
+	if status >= 300 && status < 400 {
+		ts.Get("shuttle.http.HTTPCode3XX").Add(now, 1, attr)
+	}
+	if status >= 400 && status < 500 {
+		ts.Get("shuttle.http.HTTPCode4XX").Add(now, 1, attr)
+	}
+	if status >= 500 {
+		ts.Get("shuttle.http.HTTPCode5XX").Add(now, 1, attr)
+	}
+
+	tscChan <- ts
+
+}
+
+func recordMetric(name string, value float64, attr map[string]interface{}) {
+	if influxDbAddr == "" {
+		return
+	}
+	ts := gs.NewTSCollection()
+	ts.Get(name).Add(time.Now().UTC().Unix(), value, attr)
+	tscChan <- ts
 }

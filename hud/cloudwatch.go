@@ -11,6 +11,7 @@ import (
 	"github.com/goamz/goamz/rds"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/stack"
+	gs "github.com/litl/galaxy/stats"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -22,7 +23,7 @@ type CloudwatchStat struct {
 	Component  string
 }
 
-func loadELBStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGroup) {
+func loadELBStats(auth aws.Auth, tscChan chan *gs.TSCollection, done *sync.WaitGroup) {
 
 	log.Debugf("Checking ELB...")
 	defer func() {
@@ -68,7 +69,7 @@ func loadELBStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGrou
 			continue
 		}
 
-		stats = NewTSCollection()
+		stats = gs.NewTSCollection()
 		for _, metric := range []string{"RequestCount", "HTTPCode_Backend_2XX",
 			"HTTPCode_Backend_3XX", "HTTPCode_Backend_4XX",
 			"HTTPCode_Backend_5XX", "HTTPCode_ELB_4XX", "HTTPCode_ELB_5XX", "Latency",
@@ -111,7 +112,7 @@ func loadELBStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGrou
 	}
 }
 
-func loadRDSStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGroup) {
+func loadRDSStats(auth aws.Auth, tscChan chan *gs.TSCollection, done *sync.WaitGroup) {
 
 	log.Debugf("Checking RDS...")
 	defer func() {
@@ -165,7 +166,7 @@ func loadRDSStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGrou
 	}
 
 	for _, dbInstance := range instanceIds {
-		stats = NewTSCollection()
+		stats = gs.NewTSCollection()
 		for _, metric := range []string{"BinLogDiskUsage", "CPUUtilization",
 			"DatabaseConnections", "DiskQueueDepth", "FreeableMemory",
 			"FreeStorageSpace", "ReplicaLag", "SwapUsage", "ReadIOPS",
@@ -201,7 +202,7 @@ func loadRDSStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGrou
 	}
 }
 
-func loadCloudwatchStats(tscChan chan *TSCollection) {
+func loadCloudwatchStats(tscChan chan *gs.TSCollection) {
 	defer wg.Done()
 	pollWg := sync.WaitGroup{}
 	for {
@@ -221,8 +222,8 @@ func loadCloudwatchStats(tscChan chan *TSCollection) {
 	}
 }
 
-func (c *CloudwatchStat) Load(prefix string, tsc *TSCollection, attr map[string]interface{}) error {
-	ts := NewTimeSeries()
+func (c *CloudwatchStat) Load(prefix string, tsc *gs.TSCollection, attr map[string]interface{}) error {
+	ts := gs.NewTimeSeries()
 
 	auth, err := aws.GetAuth("", "", "", time.Now())
 	if err != nil {
