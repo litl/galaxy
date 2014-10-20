@@ -147,6 +147,33 @@ func NewService(cfg client.ServiceConfig) *Service {
 	return s
 }
 
+// Update only fields that apply to all backends and connections
+func (s *Service) UpdateDefaults(cfg client.ServiceConfig) error {
+	s.Lock()
+	defer s.Unlock()
+
+	if cfg.CheckInterval != 0 {
+		s.CheckInterval = cfg.CheckInterval
+	}
+	if cfg.Fall != 0 {
+		s.Fall = cfg.Fall
+	}
+	if cfg.Rise != 0 {
+		s.Rise = cfg.Rise
+	}
+	if cfg.ClientTimeout != 0 {
+		s.ClientTimeout = time.Duration(cfg.ClientTimeout) * time.Millisecond
+	}
+	if cfg.ServerTimeout != 0 {
+		s.ServerTimeout = time.Duration(cfg.ServerTimeout) * time.Millisecond
+	}
+	if cfg.DialTimeout != 0 {
+		s.DialTimeout = time.Duration(cfg.DialTimeout) * time.Millisecond
+	}
+
+	return nil
+}
+
 func (s *Service) Stats() ServiceStat {
 	s.Lock()
 	defer s.Unlock()

@@ -172,7 +172,7 @@ func (s *HTTPSuite) TestSimulAdd(c *C) {
 			//wait to start all at once
 			<-start
 			svcDef := bytes.NewReader(svcCfg.Marshal())
-			req, _ := http.NewRequest("PUT", s.httpSvr.URL+"/testService", svcDef)
+			req, _ := http.NewRequest("PUT", s.httpSvr.URL+"/TestService", svcDef)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				c.Fatal(err)
@@ -466,4 +466,67 @@ func (s *HTTPSuite) TestErrorPage(c *C) {
 
 	c.Assert(resp.StatusCode, Equals, 503)
 	c.Assert(resp.Header.Get("Last-Modified"), Equals, errServer.addr)
+}
+
+func (s *HTTPSuite) TestUpdateServiceDefaults(c *C) {
+	svcCfg := client.ServiceConfig{
+		Name: "TestService",
+		Addr: "127.0.0.1:9000",
+		Backends: []client.BackendConfig{
+			client.BackendConfig{
+				Name: "Backend1",
+				Addr: "127.0.0.1:9001",
+			},
+		},
+	}
+
+	svcDef := bytes.NewBuffer(svcCfg.Marshal())
+	req, _ := http.NewRequest("PUT", s.httpSvr.URL+"/TestService", svcDef)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	var services []client.ServiceConfig
+	err = json.Unmarshal(body, &services)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// Now update the Service in-place
+	svcCfg.ServerTimeout = 1234
+	svcDef.Reset()
+	svcDef.Write(svcCfg.Marshal())
+
+	req, _ = http.NewRequest("PUT", s.httpSvr.URL+"/TestService", svcDef)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	body, _ = ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	services = services[:0:0]
+	err = json.Unmarshal(body, &services)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// make sure we don't see a second value
+	found := false
+
+	for _, svc := range services {
+		if svc.Name == "TestService" {
+			if svc.ServerTimeout != svcCfg.ServerTimeout {
+				c.Fatal("Service not updated")
+			} else if found {
+				c.Fatal("Multiple Service Definitions")
+			}
+			found = true
+		}
+	}
 }
