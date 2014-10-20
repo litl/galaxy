@@ -180,6 +180,10 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		return ErrNoService
 	}
 
+	if err := service.UpdateDefaults(newCfg); err != nil {
+		return err
+	}
+
 	currentCfg := service.Config()
 
 	// Lots of looping here (including fetching the Config, but the cardinality

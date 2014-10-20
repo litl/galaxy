@@ -60,6 +60,14 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// don't let someone update the wrong service
+	if svcCfg.Name != vars["service"] {
+		errMsg := "Mismatched service name in API call"
+		log.Error(errMsg)
+		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+
 	invalidPorts := []string{
 		listenAddr[strings.Index(listenAddr, ":")+1:],
 		adminListenAddr[strings.Index(adminListenAddr, ":")+1:],
