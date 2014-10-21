@@ -148,6 +148,7 @@ type ServiceRegistry struct {
 func (s *ServiceRegistry) UpdateConfig(cfg client.Config) error {
 
 	// Set globals
+	//FIXME: we might need to unset something
 	if cfg.Balance != "" {
 		s.cfg.Balance = cfg.Balance
 	}
@@ -178,6 +179,7 @@ func (s *ServiceRegistry) UpdateConfig(cfg client.Config) error {
 	errors := &multiError{}
 
 	for _, svc := range cfg.Services {
+
 		for _, port := range invalidPorts {
 			if strings.HasSuffix(svc.Addr, port) {
 				// TODO: report conflicts between service listeners
@@ -234,20 +236,22 @@ func (s *ServiceRegistry) VHostsLen() int {
 
 // Add a new service to the Registry.
 // Do not replace an existing service.
-func (s *ServiceRegistry) AddService(cfg client.ServiceConfig) error {
+func (s *ServiceRegistry) AddService(svcCfg client.ServiceConfig) error {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Debug("Adding service:", cfg.Name)
-	if _, ok := s.svcs[cfg.Name]; ok {
-		log.Debug("Service already exists:", cfg.Name)
+	log.Debug("Adding service:", svcCfg.Name)
+	if _, ok := s.svcs[svcCfg.Name]; ok {
+		log.Debug("Service already exists:", svcCfg.Name)
 		return ErrDuplicateService
 	}
 
-	service := NewService(cfg)
+	setServiceDefaults(&svcCfg, s.cfg)
+
+	service := NewService(svcCfg)
 	s.svcs[service.Name] = service
 
-	for _, name := range cfg.VirtualHosts {
+	for _, name := range svcCfg.VirtualHosts {
 		vhost := s.vhosts[name]
 		if vhost == nil {
 			vhost = &VirtualHost{Name: name}
@@ -530,4 +534,29 @@ func (s *ServiceRegistry) Config() client.Config {
 
 func (s *ServiceRegistry) String() string {
 	return string(marshal(s.Config()))
+}
+
+// set any missing defaults on a Service
+func setServiceDefaults(svc *client.ServiceConfig, def client.Config) {
+	if svc.Balance == "" && def.Balance != "" {
+		svc.Balance = def.Balance
+	}
+	if svc.CheckInterval == 0 && def.CheckInterval != 0 {
+		svc.CheckInterval = def.CheckInterval
+	}
+	if svc.Fall == 0 && def.Fall != 0 {
+		svc.Fall = def.Fall
+	}
+	if svc.Rise == 0 && def.Rise != 0 {
+		svc.Rise = def.Rise
+	}
+	if svc.ClientTimeout == 0 && def.ClientTimeout != 0 {
+		svc.ClientTimeout = def.ClientTimeout
+	}
+	if svc.ServerTimeout == 0 && def.ServerTimeout != 0 {
+		svc.ServerTimeout = def.ServerTimeout
+	}
+	if svc.DialTimeout == 0 && def.DialTimeout != 0 {
+		svc.DialTimeout = def.DialTimeout
+	}
 }

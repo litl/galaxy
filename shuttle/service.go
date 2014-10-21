@@ -90,6 +90,7 @@ func NewService(cfg client.ServiceConfig) *Service {
 	s := &Service{
 		Name:          cfg.Name,
 		Addr:          cfg.Addr,
+		Balance:       cfg.Balance,
 		CheckInterval: cfg.CheckInterval,
 		Fall:          cfg.Fall,
 		Rise:          cfg.Rise,

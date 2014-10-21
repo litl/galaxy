@@ -78,6 +78,15 @@ func myTearDown(s *BasicSuite, t Tester) {
 	// get rid of the servers refs too!
 	s.servers = nil
 
+	// clear global defaults in Registry
+	Registry.cfg.Balance = ""
+	Registry.cfg.CheckInterval = 0
+	Registry.cfg.Fall = 0
+	Registry.cfg.Rise = 0
+	Registry.cfg.ClientTimeout = 0
+	Registry.cfg.ServerTimeout = 0
+	Registry.cfg.DialTimeout = 0
+
 	err := Registry.RemoveService(s.service.Name)
 	if err != nil {
 		t.Fatalf("could not remove service '%s': %s", s.service.Name, err)

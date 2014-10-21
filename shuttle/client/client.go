@@ -24,6 +24,15 @@ type Config struct {
 	Services      []ServiceConfig `json:"services"`
 }
 
+func (c *Config) Marshal() []byte {
+	js, _ := json.Marshal(c)
+	return js
+}
+
+func (c *Config) String() string {
+	return string(c.Marshal())
+}
+
 // The subset of fields we load and serialize for config.
 type BackendConfig struct {
 	Name      string `json:"name"`

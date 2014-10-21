@@ -68,6 +68,15 @@ func (s *HTTPSuite) TearDownTest(c *C) {
 
 	s.servers = s.servers[:0]
 
+	// clear global defaults in Registry
+	Registry.cfg.Balance = ""
+	Registry.cfg.CheckInterval = 0
+	Registry.cfg.Fall = 0
+	Registry.cfg.Rise = 0
+	Registry.cfg.ClientTimeout = 0
+	Registry.cfg.ServerTimeout = 0
+	Registry.cfg.DialTimeout = 0
+
 	for _, s := range s.backendServers {
 		s.Close()
 	}
@@ -486,6 +495,7 @@ func (s *HTTPSuite) TestUpdateServiceDefaults(c *C) {
 	if err != nil {
 		c.Fatal(err)
 	}
+	resp.Body.Close()
 
 	// Now update the Service in-place
 	svcCfg.ServerTimeout = 1234
@@ -520,4 +530,51 @@ func (s *HTTPSuite) TestUpdateServiceDefaults(c *C) {
 			found = true
 		}
 	}
+}
+
+// Set some global defaults, and check that a new service inherits them all
+func (s *HTTPSuite) TestGlobalDefaults(c *C) {
+	globalCfg := client.Config{
+		Balance:       "LC",
+		CheckInterval: 101,
+		Fall:          7,
+		Rise:          8,
+		ClientTimeout: 102,
+		ServerTimeout: 103,
+		DialTimeout:   104,
+	}
+
+	globalDef := bytes.NewBuffer(globalCfg.Marshal())
+	req, _ := http.NewRequest("PUT", s.httpSvr.URL+"/", globalDef)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+	resp.Body.Close()
+
+	svcCfg := client.ServiceConfig{
+		Name: "TestService",
+		Addr: "127.0.0.1:9000",
+	}
+
+	svcDef := bytes.NewBuffer(svcCfg.Marshal())
+	req, _ = http.NewRequest("PUT", s.httpSvr.URL+"/TestService", svcDef)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		c.Fatal(err)
+	}
+	resp.Body.Close()
+
+	config := Registry.Config()
+
+	c.Assert(len(config.Services), Equals, 1)
+	service := config.Services[0]
+
+	c.Assert(globalCfg.Balance, Equals, service.Balance)
+	c.Assert(globalCfg.CheckInterval, Equals, service.CheckInterval)
+	c.Assert(globalCfg.Fall, Equals, service.Fall)
+	c.Assert(globalCfg.Rise, Equals, service.Rise)
+	c.Assert(globalCfg.ClientTimeout, Equals, service.ClientTimeout)
+	c.Assert(globalCfg.ServerTimeout, Equals, service.ServerTimeout)
+	c.Assert(globalCfg.DialTimeout, Equals, service.DialTimeout)
 }
