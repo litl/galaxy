@@ -22,18 +22,16 @@ func loadConfig() {
 			continue
 		}
 
-		var svcs []client.ServiceConfig
-		err = json.Unmarshal(cfgData, &svcs)
+		var cfg client.Config
+		err = json.Unmarshal(cfgData, &cfg)
 		if err != nil {
 			log.Warnln("Config error:", err)
 			continue
 		}
 		log.Debug("Loaded config from:", cfgPath)
 
-		for _, svcCfg := range svcs {
-			if e := Registry.AddService(svcCfg); e != nil {
-				log.Printf("Unable to add service %s: error: %s", svcCfg.Name, e)
-			}
+		if err := Registry.UpdateConfig(cfg); err != nil {
+			log.Printf("Unable to load config: error: %s", err)
 		}
 	}
 }

@@ -12,6 +12,18 @@ var (
 	Status500s = []int{500, 501, 502, 503, 504, 505}
 )
 
+// Global config which applies to all Services
+type Config struct {
+	Balance       string          `json:"balance,omitempty"`
+	CheckInterval int             `json:"check_interval"`
+	Fall          int             `json:"fall"`
+	Rise          int             `json:"rise"`
+	ClientTimeout int             `json:"client_timeout"`
+	ServerTimeout int             `json:"server_timeout"`
+	DialTimeout   int             `json:"connect_timeout"`
+	Services      []ServiceConfig `json:"services"`
+}
+
 // The subset of fields we load and serialize for config.
 type BackendConfig struct {
 	Name      string `json:"name"`
@@ -33,7 +45,7 @@ func (b BackendConfig) Equal(other BackendConfig) bool {
 }
 
 func (b *BackendConfig) Marshal() []byte {
-	js, _ := json.Marshal(&b)
+	js, _ := json.Marshal(b)
 	return js
 }
 
@@ -100,7 +112,7 @@ func (s ServiceConfig) Equal(other ServiceConfig) bool {
 }
 
 func (b *ServiceConfig) Marshal() []byte {
-	js, _ := json.Marshal(&b)
+	js, _ := json.Marshal(b)
 	return js
 }
 

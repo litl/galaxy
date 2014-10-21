@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -20,7 +19,7 @@ func getConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func getStats(w http.ResponseWriter, r *http.Request) {
-	if len(Registry.Config()) == 0 {
+	if len(Registry.Config().Services) == 0 {
 		w.WriteHeader(503)
 	}
 	w.Write(marshal(Registry.Stats()))
@@ -36,6 +35,33 @@ func getService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write(marshal(serviceStats))
+}
+
+// Update the global config
+func postConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := client.Config{}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Errorln(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+
+	err = json.Unmarshal(body, &cfg)
+	if err != nil {
+		log.Errorln(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := Registry.UpdateConfig(cfg); err != nil {
+		log.Errorln(err)
+		// TODO: differentiate between ServerError and BadRequest
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 // Update a service and/or backends.
@@ -68,33 +94,17 @@ func postService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	invalidPorts := []string{
-		listenAddr[strings.Index(listenAddr, ":")+1:],
-		adminListenAddr[strings.Index(adminListenAddr, ":")+1:],
+	cfg := client.Config{
+		Services: []client.ServiceConfig{svcCfg},
 	}
 
-	for _, port := range invalidPorts {
-		if strings.HasSuffix(svcCfg.Addr, port) {
-			log.Errorf("Cannot use shuttle port: %s for %s service listener. Shuttle is using it.", port, svcCfg.Name)
-			http.Error(w, fmt.Sprintf("cannot use %s for listener port", port), http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Add a new service, or update an existing one.
-	if Registry.GetService(svcCfg.Name) == nil {
-		if e := Registry.AddService(svcCfg); e != nil {
-			log.Errorln(err)
-			http.Error(w, e.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else if e := Registry.UpdateService(svcCfg); e != nil {
-		log.Errorln("Unable to update service %s", svcCfg.Name)
-		http.Error(w, e.Error(), http.StatusInternalServerError)
+	err = Registry.UpdateConfig(cfg)
+	if err != nil {
+		log.Error(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	go writeStateConfig()
 	w.Write(marshal(Registry.Config()))
 }
 
@@ -173,7 +183,9 @@ func deleteBackend(w http.ResponseWriter, r *http.Request) {
 func addHandlers() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", getStats).Methods("GET")
+	r.HandleFunc("/", postConfig).Methods("PUT", "POST")
 	r.HandleFunc("/_config", getConfig).Methods("GET")
+	r.HandleFunc("/_stats", getStats).Methods("GET")
 	r.HandleFunc("/{service}", getService).Methods("GET")
 	r.HandleFunc("/{service}", postService).Methods("PUT", "POST")
 	r.HandleFunc("/{service}", deleteService).Methods("DELETE")

@@ -180,13 +180,13 @@ func (s *HTTPSuite) TestSimulAdd(c *C) {
 
 			body, _ := ioutil.ReadAll(resp.Body)
 
-			respCfg := []client.ServiceConfig{}
-			json.Unmarshal(body, &respCfg)
+			respCfg := client.Config{}
+			err = json.Unmarshal(body, &respCfg)
 
-			// We're only checking to ensure we have 1 service with the proper number of backens
-			c.Assert(len(respCfg), Equals, 1)
-			c.Assert(len(respCfg[0].Backends), Equals, 2)
-			c.Assert(len(respCfg[0].VirtualHosts), Equals, 1)
+			// We're only checking to ensure we have 1 service with the proper number of backends
+			c.Assert(len(respCfg.Services), Equals, 1)
+			c.Assert(len(respCfg.Services[0].Backends), Equals, 2)
+			c.Assert(len(respCfg.Services[0].VirtualHosts), Equals, 1)
 		}()
 	}
 
@@ -335,9 +335,9 @@ func (s *HTTPSuite) TestAddRemoveBackends(c *C) {
 	}
 
 	cfg := Registry.Config()
-	if !svcCfg.DeepEqual(cfg[0]) {
-		c.Errorf("we should have 1 service, we have %d", len(cfg))
-		c.Errorf("we should have 4 backends, we have %d", len(cfg[0].Backends))
+	if !svcCfg.DeepEqual(cfg.Services[0]) {
+		c.Errorf("we should have 1 service, we have %d", len(cfg.Services))
+		c.Errorf("we should have 4 backends, we have %d", len(cfg.Services[0].Backends))
 	}
 
 	svcCfg.Backends = svcCfg.Backends[:3]
@@ -347,9 +347,9 @@ func (s *HTTPSuite) TestAddRemoveBackends(c *C) {
 	}
 
 	cfg = Registry.Config()
-	if !svcCfg.DeepEqual(cfg[0]) {
-		c.Errorf("we should have 1 service, we have %d", len(cfg))
-		c.Errorf("we should have 3 backends, we have %d", len(cfg[0].Backends))
+	if !svcCfg.DeepEqual(cfg.Services[0]) {
+		c.Errorf("we should have 1 service, we have %d", len(cfg.Services))
+		c.Errorf("we should have 3 backends, we have %d", len(cfg.Services[0].Backends))
 	}
 
 }
@@ -380,9 +380,9 @@ func (s *HTTPSuite) TestHTTPAddRemoveBackends(c *C) {
 	}
 
 	cfg := Registry.Config()
-	if !svcCfg.DeepEqual(cfg[0]) {
-		c.Errorf("we should have 1 service, we have %d", len(cfg))
-		c.Errorf("we should have 4 backends, we have %d", len(cfg[0].Backends))
+	if !svcCfg.DeepEqual(cfg.Services[0]) {
+		c.Errorf("we should have 1 service, we have %d", len(cfg.Services))
+		c.Errorf("we should have 4 backends, we have %d", len(cfg.Services[0].Backends))
 	}
 
 	// remove a backend from the config and submit it again
@@ -405,16 +405,16 @@ func (s *HTTPSuite) TestHTTPAddRemoveBackends(c *C) {
 	}
 	defer resp.Body.Close()
 
-	cfg = []client.ServiceConfig{}
+	cfg = client.Config{}
 	body, _ := ioutil.ReadAll(resp.Body)
 	err = json.Unmarshal(body, &cfg)
 	if err != nil {
 		c.Fatal(err)
 	}
 
-	if !svcCfg.DeepEqual(cfg[0]) {
-		c.Errorf("we should have 1 service, we have %d", len(cfg))
-		c.Errorf("we should have 3 backends, we have %d", len(cfg[0].Backends))
+	if !svcCfg.DeepEqual(cfg.Services[0]) {
+		c.Errorf("we should have 1 service, we have %d", len(cfg.Services))
+		c.Errorf("we should have 3 backends, we have %d", len(cfg.Services[0].Backends))
 	}
 }
 
@@ -487,15 +487,6 @@ func (s *HTTPSuite) TestUpdateServiceDefaults(c *C) {
 		c.Fatal(err)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	var services []client.ServiceConfig
-	err = json.Unmarshal(body, &services)
-	if err != nil {
-		c.Fatal(err)
-	}
-
 	// Now update the Service in-place
 	svcCfg.ServerTimeout = 1234
 	svcDef.Reset()
@@ -507,11 +498,11 @@ func (s *HTTPSuite) TestUpdateServiceDefaults(c *C) {
 		c.Fatal(err)
 	}
 
-	body, _ = ioutil.ReadAll(resp.Body)
+	body, _ := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 
-	services = services[:0:0]
-	err = json.Unmarshal(body, &services)
+	config := client.Config{}
+	err = json.Unmarshal(body, &config)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -519,7 +510,7 @@ func (s *HTTPSuite) TestUpdateServiceDefaults(c *C) {
 	// make sure we don't see a second value
 	found := false
 
-	for _, svc := range services {
+	for _, svc := range config.Services {
 		if svc.Name == "TestService" {
 			if svc.ServerTimeout != svcCfg.ServerTimeout {
 				c.Fatal("Service not updated")
