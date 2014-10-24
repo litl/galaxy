@@ -13,7 +13,7 @@ import (
 	shuttle "github.com/litl/galaxy/shuttle/client"
 )
 
-func getShuttleConfig(c *cli.Context) ([]shuttle.ServiceConfig, error) {
+func getShuttleConfig(c *cli.Context) (*shuttle.Config, error) {
 
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/_config", c.GlobalString("shuttleAddr")), nil)
 	if err != nil {
@@ -31,8 +31,8 @@ func getShuttleConfig(c *cli.Context) ([]shuttle.ServiceConfig, error) {
 		return nil, err
 	}
 
-	var config []shuttle.ServiceConfig
-	err = json.Unmarshal(body, &config)
+	config := &shuttle.Config{}
+	err = json.Unmarshal(body, config)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func getShuttleConfig(c *cli.Context) ([]shuttle.ServiceConfig, error) {
 
 }
 func pruneShuttleBackends(c *cli.Context) {
-	configs, err := getShuttleConfig(c)
+	config, err := getShuttleConfig(c)
 	if err != nil {
 		log.Errorf("ERROR: Unable to get shuttle config: %s", err)
 		return
@@ -53,25 +53,25 @@ func pruneShuttleBackends(c *cli.Context) {
 		return
 	}
 
-	for _, config := range configs {
+	for _, service := range config.Services {
 
 		// Remove services that no longer exist
-		svcCfg, err := serviceRegistry.GetServiceConfig(config.Name)
+		svcCfg, err := serviceRegistry.GetServiceConfig(service.Name)
 		if err != nil {
-			log.Errorf("ERROR: Unable to get service config for %s: %s", config.Name, err)
+			log.Errorf("ERROR: Unable to get service config for %s: %s", service.Name, err)
 			return
 		}
 
 		if svcCfg == nil {
-			err := unregisterShuttleService(c, &config)
+			err := unregisterShuttleService(c, &service)
 			if err != nil {
-				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", config.Name, err)
+				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", service.Name, err)
 			}
-			log.Printf("Unregisterred shuttle service %s", config.Name)
+			log.Printf("Unregisterred shuttle service %s", service.Name)
 			continue
 		}
 
-		for _, backend := range config.Backends {
+		for _, backend := range service.Backends {
 			backendExists := false
 			for _, r := range registrations {
 				if backend.Name == r.ContainerID[0:12] {
@@ -81,7 +81,7 @@ func pruneShuttleBackends(c *cli.Context) {
 			}
 
 			if !backendExists {
-				err := unregisterShuttleBackend(c, config.Name, backend.Name)
+				err := unregisterShuttleBackend(c, service.Name, backend.Name)
 				if err != nil {
 					log.Errorf("ERROR: Unable to remove backend %s from shuttle: %s", backend.Name, err)
 				}

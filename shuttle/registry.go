@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/litl/galaxy/log"
@@ -17,6 +18,30 @@ var (
 	ErrDuplicateService = fmt.Errorf("service already exists")
 	ErrDuplicateBackend = fmt.Errorf("backend already exists")
 )
+
+type multiError struct {
+	errors []error
+}
+
+func (e *multiError) Add(err error) {
+	e.errors = append(e.errors, err)
+}
+
+func (e multiError) Len() int {
+	return len(e.errors)
+}
+
+func (e multiError) Error() string {
+	msgs := make([]string, len(e.errors))
+	for i, err := range e.errors {
+		msgs[i] = err.Error()
+	}
+	return strings.Join(msgs, ", ")
+}
+
+func (e multiError) String() string {
+	return e.Error()
+}
 
 type VirtualHost struct {
 	sync.Mutex
@@ -112,6 +137,77 @@ type ServiceRegistry struct {
 	svcs map[string]*Service
 	// Multiple services may respond from a single vhost
 	vhosts map[string]*VirtualHost
+
+	// Global config to apply to new services.
+	cfg client.Config
+}
+
+// Update the global config state, including services and backends.
+// This does not remove any Services, but will add or update any provided in
+// the config.
+func (s *ServiceRegistry) UpdateConfig(cfg client.Config) error {
+
+	// Set globals
+	//FIXME: we might need to unset something
+	if cfg.Balance != "" {
+		s.cfg.Balance = cfg.Balance
+	}
+	if cfg.CheckInterval != 0 {
+		s.cfg.CheckInterval = cfg.CheckInterval
+	}
+	if cfg.Fall != 0 {
+		s.cfg.Fall = cfg.Fall
+	}
+	if cfg.Rise != 0 {
+		s.cfg.Rise = cfg.Rise
+	}
+	if cfg.ClientTimeout != 0 {
+		s.cfg.ClientTimeout = cfg.ClientTimeout
+	}
+	if cfg.ServerTimeout != 0 {
+		s.cfg.ServerTimeout = cfg.ServerTimeout
+	}
+	if cfg.DialTimeout != 0 {
+		s.cfg.DialTimeout = cfg.DialTimeout
+	}
+
+	invalidPorts := []string{
+		listenAddr[strings.Index(listenAddr, ":")+1:],
+		adminListenAddr[strings.Index(adminListenAddr, ":")+1:],
+	}
+
+	errors := &multiError{}
+
+	for _, svc := range cfg.Services {
+
+		for _, port := range invalidPorts {
+			if strings.HasSuffix(svc.Addr, port) {
+				// TODO: report conflicts between service listeners
+				errors.Add(fmt.Errorf("Port conflict: %s port %s already bound by shuttle", svc.Name, port))
+				continue
+			}
+		}
+
+		// Add a new service, or update an existing one.
+		if Registry.GetService(svc.Name) == nil {
+			if err := Registry.AddService(svc); err != nil {
+				log.Errorln("Unablbe to add service %s: %s", svc.Name, err.Error())
+				errors.Add(err)
+				continue
+			}
+		} else if err := Registry.UpdateService(svc); err != nil {
+			log.Errorln("Unable to update service %s: %s", svc.Name, err.Error())
+			errors.Add(err)
+			continue
+		}
+	}
+
+	go writeStateConfig()
+
+	if errors.Len() == 0 {
+		return nil
+	}
+	return errors
 }
 
 // Return a service by name.
@@ -140,20 +236,22 @@ func (s *ServiceRegistry) VHostsLen() int {
 
 // Add a new service to the Registry.
 // Do not replace an existing service.
-func (s *ServiceRegistry) AddService(cfg client.ServiceConfig) error {
+func (s *ServiceRegistry) AddService(svcCfg client.ServiceConfig) error {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Debug("Adding service:", cfg.Name)
-	if _, ok := s.svcs[cfg.Name]; ok {
-		log.Debug("Service already exists:", cfg.Name)
+	log.Debug("Adding service:", svcCfg.Name)
+	if _, ok := s.svcs[svcCfg.Name]; ok {
+		log.Debug("Service already exists:", svcCfg.Name)
 		return ErrDuplicateService
 	}
 
-	service := NewService(cfg)
+	setServiceDefaults(&svcCfg, s.cfg)
+
+	service := NewService(svcCfg)
 	s.svcs[service.Name] = service
 
-	for _, name := range cfg.VirtualHosts {
+	for _, name := range svcCfg.VirtualHosts {
 		vhost := s.vhosts[name]
 		if vhost == nil {
 			vhost = &VirtualHost{Name: name}
@@ -419,18 +517,46 @@ func (s *ServiceRegistry) Stats() []ServiceStat {
 	return stats
 }
 
-func (s *ServiceRegistry) Config() []client.ServiceConfig {
+func (s *ServiceRegistry) Config() client.Config {
 	s.Lock()
 	defer s.Unlock()
 
-	var configs []client.ServiceConfig
+	// make sure the old ServiceConfigs are purged when we copy the slice
+	s.cfg.Services = nil
+
+	cfg := s.cfg
 	for _, service := range s.svcs {
-		configs = append(configs, service.Config())
+		cfg.Services = append(cfg.Services, service.Config())
 	}
 
-	return configs
+	return cfg
 }
 
 func (s *ServiceRegistry) String() string {
 	return string(marshal(s.Config()))
+}
+
+// set any missing defaults on a Service
+func setServiceDefaults(svc *client.ServiceConfig, def client.Config) {
+	if svc.Balance == "" && def.Balance != "" {
+		svc.Balance = def.Balance
+	}
+	if svc.CheckInterval == 0 && def.CheckInterval != 0 {
+		svc.CheckInterval = def.CheckInterval
+	}
+	if svc.Fall == 0 && def.Fall != 0 {
+		svc.Fall = def.Fall
+	}
+	if svc.Rise == 0 && def.Rise != 0 {
+		svc.Rise = def.Rise
+	}
+	if svc.ClientTimeout == 0 && def.ClientTimeout != 0 {
+		svc.ClientTimeout = def.ClientTimeout
+	}
+	if svc.ServerTimeout == 0 && def.ServerTimeout != 0 {
+		svc.ServerTimeout = def.ServerTimeout
+	}
+	if svc.DialTimeout == 0 && def.DialTimeout != 0 {
+		svc.DialTimeout = def.DialTimeout
+	}
 }
