@@ -468,7 +468,7 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *registry.Se
 	for key, value := range serviceConfig.Env() {
 		if key == "ENV" {
 			args = append(args, "-e")
-			args = append(args, strings.ToUpper(key)+"="+s.serviceRegistry.Env)
+			args = append(args, strings.ToUpper(key)+"="+env)
 			continue
 		}
 
@@ -545,7 +545,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *registry.ServiceConfig
 	var envVars []string
 	for key, value := range serviceConfig.Env() {
 		if key == "ENV" {
-			envVars = append(envVars, strings.ToUpper(key)+"="+s.serviceRegistry.Env)
+			envVars = append(envVars, strings.ToUpper(key)+"="+env)
 			continue
 		}
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
@@ -791,7 +791,7 @@ func (s *ServiceRuntime) RegisterAll(env string) ([]*registry.ServiceRegistratio
 				continue
 			}
 
-			registration, err := s.serviceRegistry.RegisterService(dockerContainer, &serviceConfig)
+			registration, err := s.serviceRegistry.RegisterService(env, dockerContainer, &serviceConfig)
 			if err != nil {
 				log.Printf("ERROR: Could not register %s: %s\n",
 					serviceConfig.Name, err)
@@ -807,7 +807,7 @@ func (s *ServiceRuntime) RegisterAll(env string) ([]*registry.ServiceRegistratio
 func (s *ServiceRuntime) UnRegisterAll(env string) ([]*docker.Container, error) {
 	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
-		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", s.serviceRegistry.Env,
+		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env,
 			s.serviceRegistry.Pool, err)
 	}
 
@@ -832,7 +832,7 @@ func (s *ServiceRuntime) UnRegisterAll(env string) ([]*docker.Container, error) 
 				continue
 			}
 
-			_, err = s.serviceRegistry.UnRegisterService(container, &serviceConfig)
+			_, err = s.serviceRegistry.UnRegisterService(env, container, &serviceConfig)
 			if err != nil {
 				log.Printf("ERROR: Could not unregister %s: %s\n",
 					serviceConfig.Name, err)
@@ -903,7 +903,7 @@ func (s *ServiceRuntime) RegisterEvents(env string, listener chan ContainerEvent
 							continue
 						}
 
-						registration, err := s.serviceRegistry.GetServiceRegistration(container, svcCfg)
+						registration, err := s.serviceRegistry.GetServiceRegistration(env, container, svcCfg)
 						if err != nil {
 							log.Printf("WARN: Could not find service registration for %s/%s: %s", svcCfg.Name, container.ID[:12], err)
 							continue

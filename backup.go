@@ -206,6 +206,6 @@ func restoreApp(bkup *appCfg, env string) error {
 		svcCfg.EnvSet(k, v)
 	}
 
-	_, err = serviceRegistry.SetServiceConfig(svcCfg)
+	_, err = serviceRegistry.SetServiceConfig(svcCfg, env)
 	return err
 }

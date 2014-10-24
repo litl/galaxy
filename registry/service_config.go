@@ -165,7 +165,7 @@ func (r *ServiceRegistry) GetServiceConfig(app, env string) (*ServiceConfig, err
 	return svcCfg, nil
 }
 
-func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
 
 	for k, v := range svcCfg.Env() {
 		if svcCfg.environmentVMap.Get(k) != v {
@@ -180,28 +180,28 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	}
 
 	//TODO: user MULTI/EXEC
-	err := r.SaveVMap(path.Join(r.Env, svcCfg.Name, "environment"),
+	err := r.SaveVMap(path.Join(env, svcCfg.Name, "environment"),
 		svcCfg.environmentVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.SaveVMap(path.Join(r.Env, svcCfg.Name, "version"),
+	err = r.SaveVMap(path.Join(env, svcCfg.Name, "version"),
 		svcCfg.versionVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.SaveVMap(path.Join(r.Env, svcCfg.Name, "ports"),
+	err = r.SaveVMap(path.Join(env, svcCfg.Name, "ports"),
 		svcCfg.portsVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.notifyChanged()
+	err = r.notifyChanged(env)
 	if err != nil {
 		return false, err
 	}
@@ -209,9 +209,9 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	return true, nil
 }
 
-func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
 	deletedOne := false
-	deleted, err := r.backend.Delete(path.Join(r.Env, svcCfg.Name))
+	deleted, err := r.backend.Delete(path.Join(env, svcCfg.Name))
 	if err != nil {
 		return false, err
 	}
@@ -219,7 +219,7 @@ func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig) (bool, erro
 	deletedOne = deletedOne || deleted == 1
 
 	for _, k := range []string{"environment", "version", "ports"} {
-		deleted, err = r.backend.Delete(path.Join(r.Env, svcCfg.Name, k))
+		deleted, err = r.backend.Delete(path.Join(env, svcCfg.Name, k))
 		if err != nil {
 			return false, err
 		}
@@ -227,7 +227,7 @@ func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig) (bool, erro
 	}
 
 	if deletedOne {
-		err = r.notifyChanged()
+		err = r.notifyChanged(env)
 		if err != nil {
 			return deletedOne, err
 		}

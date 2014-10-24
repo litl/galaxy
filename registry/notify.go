@@ -93,9 +93,9 @@ func (r *ServiceRegistry) NotifyRestart(app, env string) error {
 	return nil
 }
 
-func (r *ServiceRegistry) notifyChanged() error {
+func (r *ServiceRegistry) notifyChanged(env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", r.Env), "config")
+	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
 	if err != nil {
 		return err
 	}

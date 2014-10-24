@@ -7,7 +7,6 @@ import (
 
 func NewTestRegistry() (*ServiceRegistry, *MemoryBackend) {
 	r := &ServiceRegistry{
-		Env:  "dev",
 		Pool: "web",
 	}
 	b := NewMemoryBackend()
@@ -264,7 +263,7 @@ func TestCreatePoolAddMemberFailedl(t *testing.T) {
 		return 0, errors.New("something failed")
 	}
 
-	if created, err := r.CreatePool("web"); created || err == nil {
+	if created, err := r.CreatePool("web", "dev"); created || err == nil {
 		t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", "web", created, err, true, nil)
 	}
 }
@@ -432,7 +431,7 @@ func assertAppExists(t *testing.T, r *ServiceRegistry, app string) {
 }
 
 func assertPoolCreated(t *testing.T, r *ServiceRegistry, pool string) {
-	if created, err := r.CreatePool(pool); !created || err != nil {
+	if created, err := r.CreatePool(pool, "dev"); !created || err != nil {
 		t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", pool, created, err, true, nil)
 	}
 }

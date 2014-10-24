@@ -46,7 +46,6 @@ func init() {
 func initRegistry(c *cli.Context) {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		utils.GalaxyEnv(c),
 		utils.GalaxyPool(c),
 		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
@@ -123,7 +122,6 @@ func appList(c *cli.Context) {
 
 	for _, env := range envs {
 
-		serviceRegistry.Env = env
 		appList, err := serviceRegistry.ListApps(env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -244,7 +242,7 @@ func appDeploy(c *cli.Context) {
 		svcCfg.AddPort(k.Port(), k.Proto())
 	}
 
-	updated, err := serviceRegistry.SetServiceConfig(svcCfg)
+	updated, err := serviceRegistry.SetServiceConfig(svcCfg, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not store version: %s\n", err)
 		return
@@ -404,7 +402,7 @@ func configSet(c *cli.Context) {
 		return
 	}
 
-	updated, err = serviceRegistry.SetServiceConfig(svcCfg)
+	updated, err = serviceRegistry.SetServiceConfig(svcCfg, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to set config: %s.\n", err)
 		return
@@ -451,7 +449,7 @@ func configUnset(c *cli.Context) {
 		return
 	}
 
-	updated, err = serviceRegistry.SetServiceConfig(svcCfg)
+	updated, err = serviceRegistry.SetServiceConfig(svcCfg, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to unset config: %s.\n", err)
 		return
@@ -568,7 +566,7 @@ func poolCreate(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
 	initRegistry(c)
-	created, err := serviceRegistry.CreatePool(utils.GalaxyPool(c))
+	created, err := serviceRegistry.CreatePool(utils.GalaxyPool(c), utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not create pool: %s\n", err)
 		return
@@ -613,7 +611,6 @@ func poolList(c *cli.Context) {
 	columns := []string{"ENV | POOL | APPS "}
 
 	for _, env := range envs {
-		serviceRegistry.Env = env
 		pools, err := serviceRegistry.ListPools(env)
 		if err != nil {
 			log.Fatalf("ERROR: cannot list pools: %s\n", err)

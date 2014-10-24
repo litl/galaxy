@@ -48,7 +48,7 @@ func pruneShuttleBackends(c *cli.Context) {
 		return
 	}
 
-	registrations, err := serviceRegistry.ListRegistrations()
+	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -96,7 +96,7 @@ func pruneShuttleBackends(c *cli.Context) {
 
 func registerShuttle(c *cli.Context) {
 
-	registrations, err := serviceRegistry.ListRegistrations()
+	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -171,7 +171,7 @@ func registerShuttle(c *cli.Context) {
 
 func unregisterShuttle(c *cli.Context) {
 
-	registrations, err := serviceRegistry.ListRegistrations()
+	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return

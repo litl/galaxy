@@ -39,7 +39,6 @@ var (
 func initOrDie() {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		env,
 		pool,
 		"",
 		registry.DefaultTTL,
@@ -358,7 +357,7 @@ func main() {
 	}
 
 	initOrDie()
-	serviceRegistry.CreatePool(pool)
+	serviceRegistry.CreatePool(pool, env)
 
 	for app, ch := range workerChans {
 		wg.Add(1)

@@ -45,7 +45,7 @@ func status(c *cli.Context) {
 				continue
 			}
 
-			registered, err := serviceRegistry.GetServiceRegistration(dockerContainer, &serviceConfig)
+			registered, err := serviceRegistry.GetServiceRegistration(utils.GalaxyEnv(c), dockerContainer, &serviceConfig)
 			if err != nil {
 				log.Printf("ERROR: Unable to determine status of %s: %s\n",
 					serviceConfig.Name, err)

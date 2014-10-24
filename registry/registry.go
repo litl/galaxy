@@ -26,7 +26,6 @@ const (
 
 type ServiceRegistry struct {
 	backend      RegistryBackend
-	Env          string
 	Pool         string
 	HostIP       string
 	Hostname     string
@@ -43,9 +42,8 @@ type ConfigChange struct {
 	Error         error
 }
 
-func NewServiceRegistry(env, pool, hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
+func NewServiceRegistry(pool, hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
 	return &ServiceRegistry{
-		Env:         env,
 		Pool:        pool,
 		HostIP:      hostIp,
 		TTL:         ttl,
@@ -169,11 +167,11 @@ func (r *ServiceRegistry) UnassignApp(app, env string) (bool, error) {
 	return removed == 1, nil
 }
 
-func (r *ServiceRegistry) CreatePool(name string) (bool, error) {
+func (r *ServiceRegistry) CreatePool(name, env string) (bool, error) {
 	//FIXME: Create an associated auto-scaling groups tied to the
 	//pool
 
-	added, err := r.backend.AddMember(path.Join(r.Env, "pools", "*"), name)
+	added, err := r.backend.AddMember(path.Join(env, "pools", "*"), name)
 	if err != nil {
 		return false, err
 	}
@@ -229,9 +227,9 @@ func (r *ServiceRegistry) CreateApp(app, env string) (bool, error) {
 	}
 
 	emptyConfig := NewServiceConfig(app, "")
-	emptyConfig.environmentVMap.Set("ENV", r.Env)
+	emptyConfig.environmentVMap.Set("ENV", env)
 
-	return r.SetServiceConfig(emptyConfig)
+	return r.SetServiceConfig(emptyConfig, env)
 }
 
 func (r *ServiceRegistry) DeleteApp(app, env string) (bool, error) {
@@ -256,7 +254,7 @@ func (r *ServiceRegistry) DeleteApp(app, env string) (bool, error) {
 		return true, nil
 	}
 
-	return r.DeleteServiceConfig(svcCfg)
+	return r.DeleteServiceConfig(svcCfg, env)
 }
 
 func (r *ServiceRegistry) ListApps(env string) ([]ServiceConfig, error) {
