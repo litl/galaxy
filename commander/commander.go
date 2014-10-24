@@ -326,7 +326,6 @@ func main() {
 	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
-	flag.BoolVar(&loop, "loop", false, "Run continously")
 	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
 	flag.StringVar(&statsdHost, "statsdAddr", utils.GetEnv("GALAXY_STATSD_HOST", ""), "IP where containers can reach a statsd service. Defaults to docker0 IP:8125.")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
@@ -353,6 +352,17 @@ func main() {
 
 	if debug {
 		log.DefaultLogger.Level = log.DEBUG
+	}
+
+	if flag.NArg() < 1 {
+		fmt.Println("Need a command")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	switch flag.Args()[0] {
+	case "agent":
+		loop = true
 	}
 
 	initOrDie()
