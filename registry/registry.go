@@ -121,7 +121,7 @@ func (r *ServiceRegistry) AppExists(app, env string) (bool, error) {
 	return len(matches) > 0, nil
 }
 
-func (r *ServiceRegistry) ListAssignments(pool, env string) ([]string, error) {
+func (r *ServiceRegistry) ListAssignments(env, pool string) ([]string, error) {
 	return r.backend.Members(path.Join(env, "pools", pool))
 }
 
@@ -178,14 +178,14 @@ func (r *ServiceRegistry) CreatePool(name, env string) (bool, error) {
 	return added == 1, nil
 }
 
-func (r *ServiceRegistry) DeletePool(name, env string) (bool, error) {
+func (r *ServiceRegistry) DeletePool(pool, env string) (bool, error) {
 	//FIXME: Scan keys to make sure there are no deploye apps before
 	//deleting the pool.
 
 	//FIXME: Shutdown the associated auto-scaling groups tied to the
 	//pool
 
-	assignments, err := r.ListAssignments(name, env)
+	assignments, err := r.ListAssignments(env, pool)
 	if err != nil {
 		return false, err
 	}
@@ -194,7 +194,7 @@ func (r *ServiceRegistry) DeletePool(name, env string) (bool, error) {
 		return false, nil
 	}
 
-	removed, err := r.backend.RemoveMember(path.Join(env, "pools", "*"), name)
+	removed, err := r.backend.RemoveMember(path.Join(env, "pools", "*"), pool)
 	if err != nil {
 		return false, err
 	}
@@ -211,7 +211,7 @@ func (r *ServiceRegistry) ListPools(env string) (map[string][]string, error) {
 
 	for _, pool := range matches {
 
-		members, err := r.ListAssignments(pool, env)
+		members, err := r.ListAssignments(env, pool)
 		if err != nil {
 			return assignments, err
 		}

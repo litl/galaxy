@@ -24,13 +24,13 @@ func TestListAssignmentKeyFormat(t *testing.T) {
 		return []string{}, nil
 	}
 
-	r.ListAssignments("foo", "dev")
+	r.ListAssignments("dev", "foo")
 }
 
 func TestListAssignmentsEmpty(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	assignments, err := r.ListAssignments("foo", "dev")
+	assignments, err := r.ListAssignments("dev", "foo")
 	if err != nil {
 		t.Error(err)
 	}
@@ -53,7 +53,7 @@ func TestListAssignmentsNotEmpty(t *testing.T) {
 
 	var assignments []string
 	var err error
-	if assignments, err = r.ListAssignments("web", "dev"); len(assignments) != 2 || err != nil {
+	if assignments, err = r.ListAssignments("dev", "web"); len(assignments) != 2 || err != nil {
 		t.Fatalf("ListAssignments(%q) = %d, %v, want %d, %v", "web", len(assignments), err, 2, nil)
 	}
 
