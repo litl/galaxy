@@ -330,6 +330,17 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version info")
 
+	flag.Usage = func() {
+		println("Usage: commander [options] <command> [<args>]\n")
+		println("Available commands are:")
+		println("   agent           Runs commander agent")
+		println("   start           Starts one or more apps")
+		println("   stop            Stops one or more apps")
+		println("\nOptions:\n")
+		flag.PrintDefaults()
+
+	}
+
 	flag.Parse()
 
 	if version {
@@ -365,20 +376,47 @@ func main() {
 	switch flag.Args()[0] {
 	case "agent":
 		loop = true
-	case "start":
-		if flag.NArg() >= 2 {
-			apps = flag.Args()[1:]
+		agentFs := flag.NewFlagSet("agent", flag.ExitOnError)
+		agentFs.Usage = func() {
+			println("Usage: commander agent [options]\n")
+			println("    Runs commander continuously\n\n")
+			println("Options:\n\n")
+			agentFs.PrintDefaults()
 		}
+		agentFs.Parse(flag.Args()[1:])
+	case "start":
+
+		startFs := flag.NewFlagSet("start", flag.ExitOnError)
+		startFs.Usage = func() {
+			println("Usage: commander start [options] [<app>]*\n")
+			println("    Starts one or more apps. If no apps are specified, starts all apps.\n\n")
+			println("Options:\n\n")
+			startFs.PrintDefaults()
+		}
+		startFs.Parse(flag.Args()[1:])
+
+		apps = startFs.Args()
+
 		break
 	case "stop":
-		if flag.NArg() >= 2 {
-			apps = flag.Args()[1:]
-			for _, app := range apps {
-				err := serviceRuntime.StopAllMatching(app)
-				if err != nil {
-					log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
-				}
+		stopFs := flag.NewFlagSet("stop", flag.ExitOnError)
+		stopFs.Usage = func() {
+			println("Usage: commander stop [options] [<app>]*\n")
+			println("    Stops one or more apps. If no apps are specified, stops all apps.\n\n")
+			println("Options:\n\n")
+			stopFs.PrintDefaults()
+		}
+		stopFs.Parse(flag.Args()[1:])
+
+		apps = stopFs.Args()
+
+		for _, app := range apps {
+			err := serviceRuntime.StopAllMatching(app)
+			if err != nil {
+				log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
 			}
+		}
+		if len(apps) > 0 {
 			return
 		}
 
