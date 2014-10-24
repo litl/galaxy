@@ -24,6 +24,7 @@ var (
 	stats           *TSCollection
 	ironmqFlag      sliceVar
 	influxDbAddr    string
+	statsdAddr      string
 	httpClient      *http.Client
 	wg              sync.WaitGroup
 	serviceRegistry *registry.ServiceRegistry
@@ -50,6 +51,7 @@ func main() {
 
 	flag.Var(&ironmqFlag, "ironmq", "env:project_id:token")
 	flag.StringVar(&influxDbAddr, "influxdb-addr", "influxdb://admin:admin@localhost:8086/default", "Graphite host:port")
+	flag.StringVar(&statsdAddr, "statsdAddr", utils.GetEnv("GALAXY_STATSD_HOST", ":8125"), "defaults to :8125.")
 
 	flag.Parse()
 
@@ -80,12 +82,14 @@ func main() {
 
 	stats = NewTSCollection()
 	tscChan := make(chan *TSCollection, 100)
-	wg.Add(3)
+	wg.Add(4)
+
 	go storeInfluxDB(tscChan)
 
 	go loadCloudwatchStats(tscChan)
 	go loadIronMQStats(tscChan)
 
+	go StatsdListener(tscChan)
 	wg.Wait()
 
 }
