@@ -349,7 +349,20 @@ func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 	}
 
 	return nil
+}
 
+func (s *ServiceRuntime) StopAll(env string) error {
+
+	serviceConfigs, err := s.serviceRegistry.ListApps(env)
+	if err != nil {
+		return err
+	}
+
+	for _, serviceConfig := range serviceConfigs {
+		s.Stop(&serviceConfig)
+	}
+
+	return nil
 }
 
 func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {

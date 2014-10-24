@@ -18,7 +18,7 @@ import (
 
 var (
 	stopCutoff      int64
-	app             string
+	apps            []string
 	redisHost       string
 	env             string
 	pool            string
@@ -322,7 +322,6 @@ func monitorService(changedConfigs chan *registry.ConfigChange) {
 
 func main() {
 	flag.Int64Var(&stopCutoff, "cutoff", 10, "Seconds to wait before stopping old containers")
-	flag.StringVar(&app, "app", "", "App to start")
 	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
@@ -360,24 +359,49 @@ func main() {
 		os.Exit(1)
 	}
 
-	switch flag.Args()[0] {
-	case "agent":
-		loop = true
-	}
-
 	initOrDie()
 	serviceRegistry.CreatePool(pool, env)
 
+	switch flag.Args()[0] {
+	case "agent":
+		loop = true
+	case "start":
+		if flag.NArg() >= 2 {
+			apps = flag.Args()[1:]
+		}
+		break
+	case "stop":
+		if flag.NArg() >= 2 {
+			apps = flag.Args()[1:]
+			for _, app := range apps {
+				err := serviceRuntime.StopAllMatching(app)
+				if err != nil {
+					log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
+				}
+			}
+			return
+		}
+
+		err := serviceRuntime.StopAll(env)
+		if err != nil {
+			log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
+		}
+		return
+	}
+
+	log.Printf("Starting commander %s", buildVersion)
+	log.Printf("Using env = %s, pool = %s",
+		env, pool)
+
 	for app, ch := range workerChans {
-		wg.Add(1)
-		go restartContainers(app, ch)
-		ch <- "deploy"
+		if len(apps) == 0 || utils.StringInSlice(app, apps) {
+			wg.Add(1)
+			go restartContainers(app, ch)
+			ch <- "deploy"
+		}
 	}
 
 	if loop {
-		log.Printf("Starting commander %s", buildVersion)
-		log.Printf("Using env = %s, pool = %s",
-			env, pool)
 
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?

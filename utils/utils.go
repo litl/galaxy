@@ -2,12 +2,23 @@ package utils
 
 import (
 	"fmt"
+	"github.com/codegangsta/cli"
 	"strings"
 	"time"
-	"github.com/codegangsta/cli"
 
 	"os"
 )
+
+type SliceVar []string
+
+func (s *SliceVar) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+func (s *SliceVar) String() string {
+	return strings.Join(*s, ",")
+}
 
 const (
 	DefaultRedisHost = "127.0.0.1:6379"
