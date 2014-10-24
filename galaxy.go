@@ -269,7 +269,7 @@ func appRestart(c *cli.Context) {
 
 	app := ensureAppParam(c, "app:restart")
 
-	err := serviceRegistry.NotifyRestart(app)
+	err := serviceRegistry.NotifyRestart(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not restart %s: %s", app, err)
 		return
@@ -530,7 +530,7 @@ func poolAssign(c *cli.Context) {
 		return
 	}
 
-	created, err := serviceRegistry.AssignApp(app)
+	created, err := serviceRegistry.AssignApp(app, utils.GalaxyEnv(c))
 
 	if err != nil {
 		log.Fatalf("ERROR: Could not assign app: %s\n", err)
@@ -559,7 +559,7 @@ func poolUnassign(c *cli.Context) {
 		return
 	}
 
-	deleted, err := serviceRegistry.UnassignApp(app)
+	deleted, err := serviceRegistry.UnassignApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not unassign app: %s\n", err)
 		return

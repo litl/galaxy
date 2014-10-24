@@ -84,9 +84,9 @@ func (r *ServiceRegistry) restartApp(app string) {
 	}
 }
 
-func (r *ServiceRegistry) NotifyRestart(app string) error {
+func (r *ServiceRegistry) NotifyRestart(app, env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", r.Env), fmt.Sprintf("restart %s", app))
+	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
 	if err != nil {
 		return err
 	}

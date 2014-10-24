@@ -136,7 +136,7 @@ func (r *ServiceRegistry) ListAssignments(pool string) ([]string, error) {
 	return r.backend.Members(path.Join(r.Env, "pools", pool))
 }
 
-func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
+func (r *ServiceRegistry) AssignApp(app, env string) (bool, error) {
 	if exists, err := r.AppExists(app); !exists || err != nil {
 		return false, err
 	}
@@ -145,12 +145,12 @@ func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 		return false, errors.New(fmt.Sprintf("pool %s does not exist", r.Pool))
 	}
 
-	added, err := r.backend.AddMember(path.Join(r.Env, "pools", r.Pool), app)
+	added, err := r.backend.AddMember(path.Join(env, "pools", r.Pool), app)
 	if err != nil {
 		return false, err
 	}
 
-	err = r.NotifyRestart(app)
+	err = r.NotifyRestart(app, env)
 	if err != nil {
 		return added == 1, err
 	}
@@ -158,19 +158,19 @@ func (r *ServiceRegistry) AssignApp(app string) (bool, error) {
 	return added == 1, nil
 }
 
-func (r *ServiceRegistry) UnassignApp(app string) (bool, error) {
+func (r *ServiceRegistry) UnassignApp(app, env string) (bool, error) {
 	//FIXME: Scan keys to make sure there are no deploye apps before
 	//deleting the pool.
 
 	//FIXME: Shutdown the associated auto-scaling groups tied to the
 	//pool
 
-	removed, err := r.backend.RemoveMember(path.Join(r.Env, "pools", r.Pool), app)
+	removed, err := r.backend.RemoveMember(path.Join(env, "pools", r.Pool), app)
 	if removed == 0 || err != nil {
 		return false, err
 	}
 
-	err = r.NotifyRestart(app)
+	err = r.NotifyRestart(app, env)
 	if err != nil {
 		return removed == 1, err
 	}
