@@ -106,15 +106,6 @@ func (r *ServiceRegistry) CountInstances(app, env string) int {
 	return len(matches)
 }
 
-func (r *ServiceRegistry) EnvExists() (bool, error) {
-	// TODO: convert to SCAN
-	matches, err := r.backend.Keys(path.Join(r.Env, "*"))
-	if err != nil {
-		return false, err
-	}
-	return len(matches) > 0, nil
-}
-
 func (r *ServiceRegistry) PoolExists() (bool, error) {
 	pools, err := r.ListPools()
 	if err != nil {

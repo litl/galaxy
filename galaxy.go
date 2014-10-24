@@ -100,10 +100,6 @@ func countInstances(app, env string) int {
 	return serviceRegistry.CountInstances(app, env)
 }
 
-func envExists() (bool, error) {
-	return serviceRegistry.EnvExists()
-}
-
 func poolExists() (bool, error) {
 	return serviceRegistry.PoolExists()
 }
