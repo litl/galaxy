@@ -72,7 +72,7 @@ func ensureAppParam(c *cli.Context, command string) string {
 		log.Fatal("ERROR: app name missing")
 	}
 
-	exists, err := appExists(app)
+	exists, err := appExists(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: can't deteremine if %s exists: %s\n", app, err)
 	}
@@ -104,8 +104,8 @@ func poolExists() (bool, error) {
 	return serviceRegistry.PoolExists()
 }
 
-func appExists(app string) (bool, error) {
-	return serviceRegistry.AppExists(app)
+func appExists(app, env string) (bool, error) {
+	return serviceRegistry.AppExists(app, env)
 }
 
 func appList(c *cli.Context) {
@@ -128,7 +128,7 @@ func appList(c *cli.Context) {
 	for _, env := range envs {
 
 		serviceRegistry.Env = env
-		appList, err := serviceRegistry.ListApps()
+		appList, err := serviceRegistry.ListApps(env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 			return
@@ -168,7 +168,7 @@ func appCreate(c *cli.Context) {
 		return
 	}
 
-	created, err := serviceRegistry.CreateApp(app)
+	created, err := serviceRegistry.CreateApp(app, utils.GalaxyEnv(c))
 
 	if err != nil {
 		log.Fatalf("ERROR: Could not create app: %s\n", err)
@@ -192,7 +192,7 @@ func appDelete(c *cli.Context) {
 		return
 	}
 
-	deleted, err := serviceRegistry.DeleteApp(app)
+	deleted, err := serviceRegistry.DeleteApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not delete app: %s\n", err)
 		return
@@ -229,7 +229,7 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	svcCfg, err := serviceRegistry.GetServiceConfig(app)
+	svcCfg, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to deploy app: %s.\n", err)
 		return
@@ -284,7 +284,7 @@ func appRun(c *cli.Context) {
 		return
 	}
 
-	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+	serviceConfig, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to run command: %s.\n", err)
 		return
@@ -304,13 +304,13 @@ func appShell(c *cli.Context) {
 
 	app := ensureAppParam(c, "app:shell")
 
-	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+	serviceConfig, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to run command: %s.\n", err)
 		return
 	}
 
-	err = serviceRuntime.StartInteractive(serviceConfig)
+	err = serviceRuntime.StartInteractive(utils.GalaxyEnv(c), serviceConfig)
 	if err != nil {
 		log.Fatalf("ERROR: Could not start container: %s\n", err)
 		return
@@ -322,7 +322,7 @@ func configList(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config")
 
-	cfg, err := serviceRegistry.GetServiceConfig(app)
+	cfg, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to list config: %s.\n", err)
 		return
@@ -367,7 +367,7 @@ func configSet(c *cli.Context) {
 		return
 	}
 
-	svcCfg, err := serviceRegistry.GetServiceConfig(app)
+	svcCfg, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to set config: %s.\n", err)
 		return
@@ -431,7 +431,7 @@ func configUnset(c *cli.Context) {
 		return
 	}
 
-	svcCfg, err := serviceRegistry.GetServiceConfig(app)
+	svcCfg, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to unset config: %s.\n", err)
 		return
@@ -474,7 +474,7 @@ func configGet(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config:get")
 
-	cfg, err := serviceRegistry.GetServiceConfig(app)
+	cfg, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to get config: %s.\n", err)
 		return
@@ -682,7 +682,7 @@ func pgPsql(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "pg:psql")
 
-	serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+	serviceConfig, err := serviceRegistry.GetServiceConfig(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to run command: %s.\n", err)
 		return

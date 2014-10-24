@@ -24,7 +24,7 @@ func unregisterAll(c *cli.Context, signals chan os.Signal) {
 	// Block until a signal is received.
 	<-signals
 	unregisterShuttle(c)
-	serviceRuntime.UnRegisterAll()
+	serviceRuntime.UnRegisterAll(utils.GalaxyEnv(c))
 	os.Exit(0)
 }
 
@@ -34,7 +34,7 @@ func registerAll(c *cli.Context, loggedOnce bool) {
 		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 
-	registrations, err := serviceRuntime.RegisterAll()
+	registrations, err := serviceRuntime.RegisterAll(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to register containers: %s", err)
 		return
@@ -86,7 +86,7 @@ func register(c *cli.Context) {
 	}
 
 	containerEvents := make(chan runtime.ContainerEvent)
-	err := serviceRuntime.RegisterEvents(containerEvents)
+	err := serviceRuntime.RegisterEvents(utils.GalaxyEnv(c), containerEvents)
 	if err != nil {
 		log.Printf("ERROR: Unable to register docker event listener: %s", err)
 	}

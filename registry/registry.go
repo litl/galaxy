@@ -115,8 +115,8 @@ func (r *ServiceRegistry) PoolExists() (bool, error) {
 	return ok, nil
 }
 
-func (r *ServiceRegistry) AppExists(app string) (bool, error) {
-	matches, err := r.backend.Keys(path.Join(r.Env, app, "*"))
+func (r *ServiceRegistry) AppExists(app, env string) (bool, error) {
+	matches, err := r.backend.Keys(path.Join(env, app, "*"))
 	if err != nil {
 		return false, err
 	}
@@ -128,7 +128,7 @@ func (r *ServiceRegistry) ListAssignments(pool string) ([]string, error) {
 }
 
 func (r *ServiceRegistry) AssignApp(app, env string) (bool, error) {
-	if exists, err := r.AppExists(app); !exists || err != nil {
+	if exists, err := r.AppExists(app, env); !exists || err != nil {
 		return false, err
 	}
 
@@ -223,8 +223,8 @@ func (r *ServiceRegistry) ListPools() (map[string][]string, error) {
 	return assignments, nil
 }
 
-func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
-	if exists, err := r.AppExists(app); exists || err != nil {
+func (r *ServiceRegistry) CreateApp(app, env string) (bool, error) {
+	if exists, err := r.AppExists(app, env); exists || err != nil {
 		return false, err
 	}
 
@@ -234,7 +234,7 @@ func (r *ServiceRegistry) CreateApp(app string) (bool, error) {
 	return r.SetServiceConfig(emptyConfig)
 }
 
-func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
+func (r *ServiceRegistry) DeleteApp(app, env string) (bool, error) {
 
 	pools, err := r.ListPools()
 	if err != nil {
@@ -247,7 +247,7 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 		}
 	}
 
-	svcCfg, err := r.GetServiceConfig(app)
+	svcCfg, err := r.GetServiceConfig(app, env)
 	if err != nil {
 		return false, err
 	}
@@ -259,9 +259,9 @@ func (r *ServiceRegistry) DeleteApp(app string) (bool, error) {
 	return r.DeleteServiceConfig(svcCfg)
 }
 
-func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
+func (r *ServiceRegistry) ListApps(env string) ([]ServiceConfig, error) {
 	// TODO: convert to scan
-	apps, err := r.backend.Keys(path.Join(r.Env, "*", "environment"))
+	apps, err := r.backend.Keys(path.Join(env, "*", "environment"))
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,7 @@ func (r *ServiceRegistry) ListApps() ([]ServiceConfig, error) {
 			continue
 		}
 
-		cfg, err := r.GetServiceConfig(parts[1])
+		cfg, err := r.GetServiceConfig(parts[1], env)
 		if err != nil {
 			return nil, err
 		}

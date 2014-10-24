@@ -140,24 +140,24 @@ func (s *ServiceConfig) nextID() int64 {
 	return s.ID() + 1
 }
 
-func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
-	exists, err := r.AppExists(app)
+func (r *ServiceRegistry) GetServiceConfig(app, env string) (*ServiceConfig, error) {
+	exists, err := r.AppExists(app, env)
 	if err != nil || !exists {
 		return nil, err
 	}
 
 	svcCfg := NewServiceConfig(path.Base(app), "")
 
-	err = r.LoadVMap(path.Join(r.Env, app, "environment"), svcCfg.environmentVMap)
+	err = r.LoadVMap(path.Join(env, app, "environment"), svcCfg.environmentVMap)
 	if err != nil {
 		return nil, err
 	}
-	err = r.LoadVMap(path.Join(r.Env, app, "version"), svcCfg.versionVMap)
+	err = r.LoadVMap(path.Join(env, app, "version"), svcCfg.versionVMap)
 	if err != nil {
 		return nil, err
 	}
 
-	err = r.LoadVMap(path.Join(r.Env, app, "ports"), svcCfg.portsVMap)
+	err = r.LoadVMap(path.Join(env, app, "ports"), svcCfg.portsVMap)
 	if err != nil {
 		return nil, err
 	}

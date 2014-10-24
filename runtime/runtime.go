@@ -337,9 +337,9 @@ func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.Service
 	return nil
 }
 
-func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
+func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
 		return err
 	}
@@ -453,7 +453,7 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 	return container, err
 }
 
-func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) error {
+func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *registry.ServiceConfig) error {
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
@@ -483,7 +483,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	args = append(args, "--dns")
 	args = append(args, s.shuttleHost)
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
 		return err
 	}
@@ -528,7 +528,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	return err
 }
 
-func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) Start(env string, serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 
 	imgIdRef := serviceConfig.Version()
@@ -551,7 +551,7 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
 		return nil, err
 	}
@@ -642,12 +642,12 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 
 }
 
-func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (bool, *docker.Container, error) {
+func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *registry.ServiceConfig) (bool, *docker.Container, error) {
 	container, err := s.ensureDockerClient().InspectContainer(serviceConfig.ContainerName())
 	_, ok := err.(*docker.NoSuchContainer)
 	// Expected container is not actually running. Skip it and leave old ones.
 	if (err != nil && ok) || container == nil {
-		container, err := s.Start(serviceConfig)
+		container, err := s.Start(env, serviceConfig)
 		return true, container, err
 	}
 
@@ -683,7 +683,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 	if imageDiffers || configDiffers || notRunning {
 
-		container, err := s.Start(serviceConfig)
+		container, err := s.Start(env, serviceConfig)
 		return true, container, err
 	}
 
@@ -760,7 +760,7 @@ func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Imag
 
 }
 
-func (s *ServiceRuntime) RegisterAll() ([]*registry.ServiceRegistration, error) {
+func (s *ServiceRuntime) RegisterAll(env string) ([]*registry.ServiceRegistration, error) {
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
 		All: false,
 	})
@@ -768,7 +768,7 @@ func (s *ServiceRuntime) RegisterAll() ([]*registry.ServiceRegistration, error) 
 		return nil, err
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
 		return nil, err
 	}
@@ -804,8 +804,8 @@ func (s *ServiceRuntime) RegisterAll() ([]*registry.ServiceRegistration, error) 
 
 }
 
-func (s *ServiceRuntime) UnRegisterAll() ([]*docker.Container, error) {
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+func (s *ServiceRuntime) UnRegisterAll(env string) ([]*docker.Container, error) {
+	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
 		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", s.serviceRegistry.Env,
 			s.serviceRegistry.Pool, err)
@@ -846,7 +846,7 @@ func (s *ServiceRuntime) UnRegisterAll() ([]*docker.Container, error) {
 	return removed, nil
 }
 
-func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
+func (s *ServiceRuntime) RegisterEvents(env string, listener chan ContainerEvent) error {
 	go func() {
 		c := make(chan *docker.APIEvents)
 
@@ -893,7 +893,7 @@ func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
 					if strings.Contains(container.Name, "_") {
 						parts := strings.Split(strings.TrimPrefix(container.Name, "/"), "_")
 						service := parts[0]
-						svcCfg, err := s.serviceRegistry.GetServiceConfig(service)
+						svcCfg, err := s.serviceRegistry.GetServiceConfig(env, service)
 						if err != nil {
 							log.Printf("WARN: Could not find service config for %s", service)
 							continue

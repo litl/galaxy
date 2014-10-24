@@ -42,7 +42,7 @@ func appBackup(c *cli.Context) {
 	toBackup := c.Args()
 
 	if len(toBackup) == 0 {
-		appList, err := serviceRegistry.ListApps()
+		appList, err := serviceRegistry.ListApps(env)
 		if err != nil {
 			log.Fatalf("ERROR: %s\n", err)
 		}
@@ -54,7 +54,7 @@ func appBackup(c *cli.Context) {
 
 	errCount := 0
 	for _, app := range toBackup {
-		data, err := getAppBackup(app)
+		data, err := getAppBackup(app, env)
 		if err != nil {
 			// log errors and continue
 			log.Errorf("ERROR: %s [%s]", err, app)
@@ -85,8 +85,8 @@ func appBackup(c *cli.Context) {
 	os.Stdout.Write(j)
 }
 
-func getAppBackup(app string) (*appCfg, error) {
-	svcCfg, err := serviceRegistry.GetServiceConfig(app)
+func getAppBackup(app, env string) (*appCfg, error) {
+	svcCfg, err := serviceRegistry.GetServiceConfig(app, env)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func appRestore(c *cli.Context) {
 	if !c.Bool("force") {
 		needForce := false
 		for _, bkup := range toRestore {
-			exists, err := serviceRegistry.AppExists(bkup.Name)
+			exists, err := serviceRegistry.AppExists(bkup.Name, utils.GalaxyEnv(c))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -174,7 +174,7 @@ func appRestore(c *cli.Context) {
 
 	loggedErr := false
 	for _, bkup := range toRestore {
-		if err := restoreApp(bkup); err != nil {
+		if err := restoreApp(bkup, utils.GalaxyEnv(c)); err != nil {
 			log.Errorf("%s", err)
 			loggedErr = true
 		}
@@ -186,10 +186,10 @@ func appRestore(c *cli.Context) {
 	}
 }
 
-func restoreApp(bkup *appCfg) error {
+func restoreApp(bkup *appCfg, env string) error {
 	fmt.Println("restoring", bkup.Name)
 
-	svcCfg, err := serviceRegistry.GetServiceConfig(bkup.Name)
+	svcCfg, err := serviceRegistry.GetServiceConfig(bkup.Name, env)
 	if err != nil {
 		return err
 	}

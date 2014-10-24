@@ -13,10 +13,10 @@ func (r *ServiceRegistry) CheckForChangesNow() {
 	r.pollCh <- true
 }
 
-func (r *ServiceRegistry) checkForChanges() {
+func (r *ServiceRegistry) checkForChanges(env string) {
 	lastVersion := make(map[string]int64)
 	for {
-		serviceConfigs, err := r.ListApps()
+		serviceConfigs, err := r.ListApps(env)
 		if err != nil {
 			restartChan <- &ConfigChange{
 				Error: err,
@@ -34,7 +34,7 @@ func (r *ServiceRegistry) checkForChanges() {
 
 	for {
 		<-r.pollCh
-		serviceConfigs, err := r.ListApps()
+		serviceConfigs, err := r.ListApps(env)
 		if err != nil {
 			restartChan <- &ConfigChange{
 				Error: err,
@@ -69,8 +69,8 @@ func (r *ServiceRegistry) checkForChangePeriodically(stop chan struct{}) {
 	}
 }
 
-func (r *ServiceRegistry) restartApp(app string) {
-	serviceConfig, err := r.GetServiceConfig(app)
+func (r *ServiceRegistry) restartApp(app, env string) {
+	serviceConfig, err := r.GetServiceConfig(app, env)
 	if err != nil {
 		restartChan <- &ConfigChange{
 			Error: err,
@@ -102,9 +102,9 @@ func (r *ServiceRegistry) notifyChanged() error {
 	return nil
 }
 
-func (r *ServiceRegistry) subscribeChanges() {
+func (r *ServiceRegistry) subscribeChanges(env string) {
 
-	msgs := r.backend.Subscribe(fmt.Sprintf("galaxy-%s", r.Env))
+	msgs := r.backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
 	for {
 
 		msg := <-msgs
@@ -113,17 +113,17 @@ func (r *ServiceRegistry) subscribeChanges() {
 		} else if strings.HasPrefix(msg, "restart") {
 			parts := strings.Split(msg, " ")
 			app := parts[1]
-			r.restartApp(app)
+			r.restartApp(app, env)
 		} else {
 			log.Printf("Ignoring notification: %s\n", msg)
 		}
 	}
 }
 
-func (r *ServiceRegistry) Watch(stop chan struct{}) chan *ConfigChange {
+func (r *ServiceRegistry) Watch(env string, stop chan struct{}) chan *ConfigChange {
 	restartChan = make(chan *ConfigChange, 10)
-	go r.checkForChanges()
+	go r.checkForChanges(env)
 	go r.checkForChangePeriodically(stop)
-	go r.subscribeChanges()
+	go r.subscribeChanges(env)
 	return restartChan
 }

@@ -77,13 +77,13 @@ func TestAppExistsKeyFormat(t *testing.T) {
 		return []string{}, nil
 	}
 
-	r.AppExists("foo")
+	r.AppExists("foo", "dev")
 }
 
 func TestAppNotExists(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if exists, err := r.AppExists("foo"); exists || err != nil {
+	if exists, err := r.AppExists("foo", "dev"); exists || err != nil {
 		t.Errorf("AppExists(%q) = %t, %v, want %t, %v",
 			"foo", exists, err, false, nil)
 	}
@@ -323,7 +323,7 @@ func TestCreateAppAlreadyExists(t *testing.T) {
 
 	assertAppCreated(t, r, "app")
 
-	if created, err := r.CreateApp("app"); created || err != nil {
+	if created, err := r.CreateApp("app", "dev"); created || err != nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
 			created, err,
 			false, nil)
@@ -337,7 +337,7 @@ func TestCreateAppError(t *testing.T) {
 		return []string{}, errors.New("something failed")
 	}
 
-	if created, err := r.CreateApp("foo"); created || err == nil {
+	if created, err := r.CreateApp("foo", "dev"); created || err == nil {
 		t.Fatalf("CreateApp() = %t, %v, want %t, %v",
 			created, err,
 			false, errors.New("something failed"))
@@ -350,7 +350,7 @@ func TestDeleteApp(t *testing.T) {
 	assertAppCreated(t, r, "app")
 	assertAppExists(t, r, "app")
 
-	if deleted, err := r.DeleteApp("app"); !deleted || err != nil {
+	if deleted, err := r.DeleteApp("app", "dev"); !deleted || err != nil {
 		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "app", deleted, err,
 			true, nil)
 	}
@@ -368,7 +368,7 @@ func TestDeleteAppStillAssigned(t *testing.T) {
 			true, nil)
 	}
 
-	if deleted, err := r.DeleteApp("app"); deleted || err == nil {
+	if deleted, err := r.DeleteApp("app", "dev"); deleted || err == nil {
 		t.Fatalf("DeleteApp(%q) = %t, %v, want %t, %v", "app", deleted, err,
 			false, errors.New("app is assigned to pool web"))
 	}
@@ -377,7 +377,7 @@ func TestDeleteAppStillAssigned(t *testing.T) {
 func TestListApps(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
+	if apps, err := r.ListApps("dev"); len(apps) > 0 || err != nil {
 		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
 			0, nil)
 	}
@@ -386,7 +386,7 @@ func TestListApps(t *testing.T) {
 		assertAppCreated(t, r, k)
 	}
 
-	if apps, err := r.ListApps(); len(apps) != 2 || err != nil {
+	if apps, err := r.ListApps("dev"); len(apps) != 2 || err != nil {
 		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
 			2, nil)
 	}
@@ -397,7 +397,7 @@ func TestListAppsIgnoreSpecialKeys(t *testing.T) {
 
 	b.maps["dev/hosts/environment"] = make(map[string]string)
 
-	if apps, err := r.ListApps(); len(apps) > 0 || err != nil {
+	if apps, err := r.ListApps("dev"); len(apps) > 0 || err != nil {
 		t.Fatalf("ListApps() = %d, %v, want %d, %v", len(apps), err,
 			0, nil)
 	}
@@ -417,7 +417,7 @@ func TestListEnvs(t *testing.T) {
 }
 
 func assertAppCreated(t *testing.T, r *ServiceRegistry, app string) {
-	if created, err := r.CreateApp(app); !created || err != nil {
+	if created, err := r.CreateApp(app, "dev"); !created || err != nil {
 		t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", app,
 			created, err,
 			true, nil)
@@ -425,7 +425,7 @@ func assertAppCreated(t *testing.T, r *ServiceRegistry, app string) {
 }
 
 func assertAppExists(t *testing.T, r *ServiceRegistry, app string) {
-	if exists, err := r.AppExists(app); !exists || err != nil {
+	if exists, err := r.AppExists(app, "dev"); !exists || err != nil {
 		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", app, exists, err,
 			true, nil)
 	}

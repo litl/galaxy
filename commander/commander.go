@@ -56,7 +56,7 @@ func initOrDie() {
 
 	workerChans = make(map[string]chan string)
 	for _, app := range apps {
-		serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+		serviceConfig, err := serviceRegistry.GetServiceConfig(app, env)
 		if err != nil {
 			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s\n", env, pool, err)
 		}
@@ -103,7 +103,7 @@ func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
 }
 
 func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
-	started, container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
+	started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
 	if err != nil {
 		log.Errorf("ERROR: Could not start container for %s: %s", serviceConfig.Version(), err)
 		return
@@ -162,7 +162,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+			serviceConfig, err := serviceRegistry.GetServiceConfig(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
@@ -206,7 +206,7 @@ func restartContainers(app string, cmdChan chan string) {
 			logOnce = false
 		case <-ticker.C:
 
-			serviceConfig, err := serviceRegistry.GetServiceConfig(app)
+			serviceConfig, err := serviceRegistry.GetServiceConfig(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				continue
@@ -242,7 +242,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			started, container, err := serviceRuntime.StartIfNotRunning(serviceConfig)
+			started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
 			if err != nil {
 				log.Errorf("ERROR: Could not start containers: %s", err)
 				continue
@@ -374,7 +374,7 @@ func main() {
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
-		restartChan := serviceRegistry.Watch(cancelChan)
+		restartChan := serviceRegistry.Watch(env, cancelChan)
 		monitorService(restartChan)
 	}
 
