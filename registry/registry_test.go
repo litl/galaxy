@@ -25,13 +25,13 @@ func TestListAssignmentKeyFormat(t *testing.T) {
 		return []string{}, nil
 	}
 
-	r.ListAssignments("foo")
+	r.ListAssignments("foo", "dev")
 }
 
 func TestListAssignmentsEmpty(t *testing.T) {
 	r, _ := NewTestRegistry()
 
-	assignments, err := r.ListAssignments("foo")
+	assignments, err := r.ListAssignments("foo", "dev")
 	if err != nil {
 		t.Error(err)
 	}
@@ -54,7 +54,7 @@ func TestListAssignmentsNotEmpty(t *testing.T) {
 
 	var assignments []string
 	var err error
-	if assignments, err = r.ListAssignments("web"); len(assignments) != 2 || err != nil {
+	if assignments, err = r.ListAssignments("web", "dev"); len(assignments) != 2 || err != nil {
 		t.Fatalf("ListAssignments(%q) = %d, %v, want %d, %v", "web", len(assignments), err, 2, nil)
 	}
 
@@ -274,11 +274,11 @@ func TestDeletePool(t *testing.T) {
 
 	assertPoolCreated(t, r, "web")
 
-	if exists, err := r.PoolExists(); !exists || err != nil {
+	if exists, err := r.PoolExists("dev"); !exists || err != nil {
 		t.Errorf("PoolExists()) = %t, %v, want %t, %v", exists, err, true, nil)
 	}
 
-	if deleted, err := r.DeletePool("web"); !deleted || err != nil {
+	if deleted, err := r.DeletePool("web", "dev"); !deleted || err != nil {
 		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "web", deleted, err, true, nil)
 	}
 }
@@ -295,7 +295,7 @@ func TestDeletePoolHasAssignments(t *testing.T) {
 	}
 
 	// Should fail.  Can't delete a pool if apps are assigned
-	if deleted, err := r.DeletePool("web"); deleted || err != nil {
+	if deleted, err := r.DeletePool("web", "dev"); deleted || err != nil {
 		t.Errorf("DeletePool(%q) = %t, %v, want %t, %v", "web", deleted, err, false, nil)
 	}
 }
@@ -307,7 +307,7 @@ func TestListPools(t *testing.T) {
 		assertPoolCreated(t, r, pool)
 	}
 
-	if pools, err := r.ListPools(); len(pools) == 0 || err != nil {
+	if pools, err := r.ListPools("dev"); len(pools) == 0 || err != nil {
 		t.Errorf("ListPools() = %d, %v, want %d, %v", len(pools), err, 2, nil)
 	}
 }

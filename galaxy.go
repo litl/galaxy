@@ -100,10 +100,6 @@ func countInstances(app, env string) int {
 	return serviceRegistry.CountInstances(app, env)
 }
 
-func poolExists() (bool, error) {
-	return serviceRegistry.PoolExists()
-}
-
 func appExists(app, env string) (bool, error) {
 	return serviceRegistry.AppExists(app, env)
 }
@@ -515,7 +511,7 @@ func poolAssign(c *cli.Context) {
 		return
 	}
 
-	exists, err := serviceRegistry.PoolExists()
+	exists, err := serviceRegistry.PoolExists(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not assign app: %s\n", err)
 		return
@@ -618,7 +614,7 @@ func poolList(c *cli.Context) {
 
 	for _, env := range envs {
 		serviceRegistry.Env = env
-		pools, err := serviceRegistry.ListPools()
+		pools, err := serviceRegistry.ListPools(env)
 		if err != nil {
 			log.Fatalf("ERROR: cannot list pools: %s\n", err)
 			return
@@ -648,7 +644,7 @@ func poolDelete(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
 	initRegistry(c)
-	created, err := serviceRegistry.DeletePool(utils.GalaxyPool(c))
+	created, err := serviceRegistry.DeletePool(utils.GalaxyPool(c), utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not delete pool: %s\n", err)
 		return

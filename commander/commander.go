@@ -49,7 +49,7 @@ func initOrDie() {
 	serviceRegistry.Connect(redisHost)
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
-	apps, err := serviceRegistry.ListAssignments(pool)
+	apps, err := serviceRegistry.ListAssignments(pool, env)
 	if err != nil {
 		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 	}
@@ -126,7 +126,7 @@ func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
 }
 
 func appAssigned(app string) (bool, error) {
-	assignments, err := serviceRegistry.ListAssignments(pool)
+	assignments, err := serviceRegistry.ListAssignments(pool, env)
 	if err != nil {
 		return false, err
 	}
