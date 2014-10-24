@@ -46,7 +46,6 @@ func init() {
 func initRegistry(c *cli.Context) {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		utils.GalaxyPool(c),
 		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),
@@ -509,7 +508,7 @@ func poolAssign(c *cli.Context) {
 		return
 	}
 
-	exists, err := serviceRegistry.PoolExists(utils.GalaxyEnv(c))
+	exists, err := serviceRegistry.PoolExists(utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not assign app: %s\n", err)
 		return
@@ -520,7 +519,7 @@ func poolAssign(c *cli.Context) {
 		return
 	}
 
-	created, err := serviceRegistry.AssignApp(app, utils.GalaxyEnv(c))
+	created, err := serviceRegistry.AssignApp(app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 
 	if err != nil {
 		log.Fatalf("ERROR: Could not assign app: %s\n", err)
@@ -549,7 +548,7 @@ func poolUnassign(c *cli.Context) {
 		return
 	}
 
-	deleted, err := serviceRegistry.UnassignApp(app, utils.GalaxyEnv(c))
+	deleted, err := serviceRegistry.UnassignApp(app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not unassign app: %s\n", err)
 		return

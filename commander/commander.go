@@ -39,7 +39,6 @@ var (
 func initOrDie() {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		pool,
 		"",
 		registry.DefaultTTL,
 		"",

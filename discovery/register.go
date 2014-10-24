@@ -24,7 +24,7 @@ func unregisterAll(c *cli.Context, signals chan os.Signal) {
 	// Block until a signal is received.
 	<-signals
 	unregisterShuttle(c)
-	serviceRuntime.UnRegisterAll(utils.GalaxyEnv(c))
+	serviceRuntime.UnRegisterAll(utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	os.Exit(0)
 }
 
@@ -34,7 +34,7 @@ func registerAll(c *cli.Context, loggedOnce bool) {
 		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
 	}, " | "))
 
-	registrations, err := serviceRuntime.RegisterAll(utils.GalaxyEnv(c))
+	registrations, err := serviceRuntime.RegisterAll(utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to register containers: %s", err)
 		return
@@ -86,7 +86,7 @@ func register(c *cli.Context) {
 	}
 
 	containerEvents := make(chan runtime.ContainerEvent)
-	err := serviceRuntime.RegisterEvents(utils.GalaxyEnv(c), containerEvents)
+	err := serviceRuntime.RegisterEvents(utils.GalaxyEnv(c), utils.GalaxyPool(c), containerEvents)
 	if err != nil {
 		log.Printf("ERROR: Unable to register docker event listener: %s", err)
 	}
@@ -97,7 +97,7 @@ func register(c *cli.Context) {
 		case ce := <-containerEvents:
 			switch ce.Status {
 			case "start":
-				reg, err := serviceRegistry.RegisterService(utils.GalaxyEnv(c), ce.Container, ce.ServiceConfig)
+				reg, err := serviceRegistry.RegisterService(utils.GalaxyEnv(c), utils.GalaxyPool(c), ce.Container, ce.ServiceConfig)
 				if err != nil {
 					log.Errorf("ERROR: Unable to register container: %s", err)
 					continue
@@ -107,7 +107,7 @@ func register(c *cli.Context) {
 					reg.ContainerID[0:12], reg.Name, locationAt(reg))
 				registerShuttle(c)
 			case "die", "stop":
-				reg, err := serviceRegistry.UnRegisterService(utils.GalaxyEnv(c), ce.Container, ce.ServiceConfig)
+				reg, err := serviceRegistry.UnRegisterService(utils.GalaxyEnv(c), utils.GalaxyPool(c), ce.Container, ce.ServiceConfig)
 				if err != nil {
 					log.Errorf("ERROR: Unable to unregister container: %s", err)
 					continue

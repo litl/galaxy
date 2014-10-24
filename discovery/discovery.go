@@ -42,7 +42,6 @@ func initOrDie(c *cli.Context) {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-		utils.GalaxyPool(c),
 		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),

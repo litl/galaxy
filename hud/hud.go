@@ -71,7 +71,6 @@ func main() {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-		pool,
 		"",
 		registry.DefaultTTL,
 		"",

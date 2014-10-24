@@ -760,7 +760,7 @@ func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Imag
 
 }
 
-func (s *ServiceRuntime) RegisterAll(env string) ([]*registry.ServiceRegistration, error) {
+func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegistration, error) {
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
 		All: false,
 	})
@@ -791,7 +791,7 @@ func (s *ServiceRuntime) RegisterAll(env string) ([]*registry.ServiceRegistratio
 				continue
 			}
 
-			registration, err := s.serviceRegistry.RegisterService(env, dockerContainer, &serviceConfig)
+			registration, err := s.serviceRegistry.RegisterService(env, pool, dockerContainer, &serviceConfig)
 			if err != nil {
 				log.Printf("ERROR: Could not register %s: %s\n",
 					serviceConfig.Name, err)
@@ -804,11 +804,11 @@ func (s *ServiceRuntime) RegisterAll(env string) ([]*registry.ServiceRegistratio
 
 }
 
-func (s *ServiceRuntime) UnRegisterAll(env string) ([]*docker.Container, error) {
+func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, error) {
 	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
 		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env,
-			s.serviceRegistry.Pool, err)
+			pool, err)
 	}
 
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
@@ -832,7 +832,7 @@ func (s *ServiceRuntime) UnRegisterAll(env string) ([]*docker.Container, error) 
 				continue
 			}
 
-			_, err = s.serviceRegistry.UnRegisterService(env, container, &serviceConfig)
+			_, err = s.serviceRegistry.UnRegisterService(env, pool, container, &serviceConfig)
 			if err != nil {
 				log.Printf("ERROR: Could not unregister %s: %s\n",
 					serviceConfig.Name, err)
@@ -846,7 +846,7 @@ func (s *ServiceRuntime) UnRegisterAll(env string) ([]*docker.Container, error) 
 	return removed, nil
 }
 
-func (s *ServiceRuntime) RegisterEvents(env string, listener chan ContainerEvent) error {
+func (s *ServiceRuntime) RegisterEvents(env, pool string, listener chan ContainerEvent) error {
 	go func() {
 		c := make(chan *docker.APIEvents)
 
@@ -903,7 +903,7 @@ func (s *ServiceRuntime) RegisterEvents(env string, listener chan ContainerEvent
 							continue
 						}
 
-						registration, err := s.serviceRegistry.GetServiceRegistration(env, container, svcCfg)
+						registration, err := s.serviceRegistry.GetServiceRegistration(env, pool, container, svcCfg)
 						if err != nil {
 							log.Printf("WARN: Could not find service registration for %s/%s: %s", svcCfg.Name, container.ID[:12], err)
 							continue
