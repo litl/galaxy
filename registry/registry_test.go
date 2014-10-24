@@ -105,7 +105,7 @@ func TestCountInstancesKeyFormat(t *testing.T) {
 		return []string{}, nil
 	}
 
-	r.CountInstances("foo")
+	r.CountInstances("foo", "dev")
 }
 
 func TestCountInstancesOne(t *testing.T) {
@@ -118,7 +118,7 @@ func TestCountInstancesOne(t *testing.T) {
 		return []string{"dev/web/hosts/me/foo"}, nil
 	}
 
-	got := r.CountInstances("foo")
+	got := r.CountInstances("foo", "dev")
 	if got != 1 {
 		t.Errorf("CountInstances(%q) = %v, want %v", "foo", got, 1)
 	}

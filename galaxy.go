@@ -96,8 +96,8 @@ func ensurePoolArg(c *cli.Context) {
 	}
 }
 
-func countInstances(app string) int {
-	return serviceRegistry.CountInstances(app)
+func countInstances(app, env string) int {
+	return serviceRegistry.CountInstances(app, env)
 }
 
 func envExists() (bool, error) {
@@ -142,7 +142,7 @@ func appList(c *cli.Context) {
 			name := app.Name
 			port := app.EnvGet("GALAXY_PORT")
 			versionDeployed := app.Version()
-			registered := serviceRegistry.CountInstances(name)
+			registered := serviceRegistry.CountInstances(name, env)
 
 			columns = append(columns, strings.Join([]string{
 				env,
