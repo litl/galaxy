@@ -331,28 +331,13 @@ func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) 
 
 func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 
-	appNames := []string{}
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+	containers, err := s.MangedContainers()
 	if err != nil {
 		return err
 	}
 
 	for _, c := range containers {
-		container, err := s.ensureDockerClient().InspectContainer(c.ID)
-		if err != nil {
-			log.Printf("ERROR: Unable to inspect container: %s\n", c.ID)
-			continue
-		}
-		name := s.EnvFor(container)["GALAXY_APP"]
-		if name != "" && !utils.StringInSlice(name, appNames) {
-			appNames = append(appNames, name)
-		}
-	}
-
-	for _, name := range appNames {
-		s.StopAllButLatestService(name, stopCutoff)
+		s.StopAllButLatestService(s.EnvFor(c)["GALAXY_APP"], stopCutoff)
 	}
 
 	return nil
@@ -360,13 +345,13 @@ func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 
 func (s *ServiceRuntime) StopAll(env string) error {
 
-	serviceConfigs, err := s.serviceRegistry.ListApps(env)
+	containers, err := s.MangedContainers()
 	if err != nil {
 		return err
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		s.Stop(&serviceConfig)
+	for _, c := range containers {
+		s.stopContainer(c)
 	}
 
 	return nil
@@ -505,21 +490,6 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *registry.Se
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
 
-	serviceConfigs, err := s.serviceRegistry.ListApps(env)
-	if err != nil {
-		return err
-	}
-
-	for _, config := range serviceConfigs {
-		port := config.Env()["GALAXY_PORT"]
-		if port == "" {
-			continue
-		}
-
-		args = append(args, "-e")
-		args = append(args, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":"+port)
-	}
-
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
 		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
@@ -571,22 +541,6 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *registry.ServiceConfig
 			continue
 		}
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
-	}
-
-	serviceConfigs, err := s.serviceRegistry.ListApps(env)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, config := range serviceConfigs {
-		port := config.Env()["GALAXY_PORT"]
-
-		if port == "" {
-			continue
-		}
-
-		envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":"+port)
-
 	}
 
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
@@ -964,4 +918,27 @@ func (s *ServiceRuntime) EnvFor(container *docker.Container) map[string]string {
 		env[k] = v
 	}
 	return env
+}
+
+func (s *ServiceRuntime) MangedContainers() ([]*docker.Container, error) {
+	apps := []*docker.Container{}
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
+	if err != nil {
+		return apps, err
+	}
+
+	for _, c := range containers {
+		container, err := s.ensureDockerClient().InspectContainer(c.ID)
+		if err != nil {
+			log.Printf("ERROR: Unable to inspect container: %s\n", c.ID)
+			continue
+		}
+		name := s.EnvFor(container)["GALAXY_APP"]
+		if name != "" {
+			apps = append(apps, container)
+		}
+	}
+	return apps, nil
 }
