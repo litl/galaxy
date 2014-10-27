@@ -97,7 +97,7 @@ func register(c *cli.Context) {
 		case ce := <-containerEvents:
 			switch ce.Status {
 			case "start":
-				reg, err := serviceRegistry.RegisterService(utils.GalaxyEnv(c), utils.GalaxyPool(c), ce.Container, ce.ServiceConfig)
+				reg, err := serviceRegistry.RegisterService(utils.GalaxyEnv(c), utils.GalaxyPool(c), ce.Container)
 				if err != nil {
 					log.Errorf("ERROR: Unable to register container: %s", err)
 					continue
@@ -107,7 +107,7 @@ func register(c *cli.Context) {
 					reg.ContainerID[0:12], reg.Name, locationAt(reg))
 				registerShuttle(c)
 			case "die", "stop":
-				reg, err := serviceRegistry.UnRegisterService(utils.GalaxyEnv(c), utils.GalaxyPool(c), ce.Container, ce.ServiceConfig)
+				reg, err := serviceRegistry.UnRegisterService(utils.GalaxyEnv(c), utils.GalaxyPool(c), ce.Container)
 				if err != nil {
 					log.Errorf("ERROR: Unable to unregister container: %s", err)
 					continue

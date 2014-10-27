@@ -50,14 +50,19 @@ func (s *ServiceRegistration) InternalAddr() string {
 	return s.addr(s.InternalIP, s.InternalPort)
 }
 
-func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
-	registrationPath := path.Join(env, pool, "hosts", r.HostIP, serviceConfig.Name)
+func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
+	environment := r.EnvFor(container)
+
+	name := environment["GALAXY_APP"]
+	if name == "" {
+		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
+	}
+
+	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name)
 
 	serviceRegistration := r.newServiceRegistration(container)
-	serviceRegistration.Name = serviceConfig.Name
-	serviceRegistration.ImageId = serviceConfig.VersionID()
-
-	environment := serviceConfig.Env()
+	serviceRegistration.Name = name
+	serviceRegistration.ImageId = container.Config.Image
 
 	vhosts := environment["VIRTUAL_HOST"]
 	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
@@ -82,7 +87,7 @@ func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Co
 
 	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
 
-	serviceRegistration.Port = serviceConfig.Env()["GALAXY_PORT"]
+	serviceRegistration.Port = environment["GALAXY_PORT"]
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
@@ -104,13 +109,24 @@ func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Co
 	return serviceRegistration, nil
 }
 
-func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
+func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
 
-	registrationPath := path.Join(env, pool, "hosts", r.HostIP, serviceConfig.Name)
+	environment := r.EnvFor(container)
 
-	registration, err := r.GetServiceRegistration(env, pool, container, serviceConfig)
+	name := environment["GALAXY_APP"]
+	if name == "" {
+		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
+	}
+
+	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name)
+
+	registration, err := r.GetServiceRegistration(env, pool, container)
 	if err != nil {
 		return registration, err
+	}
+
+	if registration.ContainerID != container.ID {
+		return nil, nil
 	}
 
 	_, err = r.backend.Delete(registrationPath)
@@ -121,9 +137,16 @@ func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.
 	return registration, nil
 }
 
-func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *docker.Container, serviceConfig *ServiceConfig) (*ServiceRegistration, error) {
+func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
 
-	regPath := path.Join(env, pool, "hosts", r.HostIP, serviceConfig.Name)
+	environment := r.EnvFor(container)
+
+	name := environment["GALAXY_APP"]
+	if name == "" {
+		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
+	}
+
+	regPath := path.Join(env, pool, "hosts", r.HostIP, name)
 
 	existingRegistration := ServiceRegistration{
 		Path: regPath,
@@ -152,9 +175,9 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *do
 	return nil, nil
 }
 
-func (r *ServiceRegistry) IsRegistered(env, pool string, container *docker.Container, serviceConfig *ServiceConfig) (bool, error) {
+func (r *ServiceRegistry) IsRegistered(env, pool string, container *docker.Container) (bool, error) {
 
-	reg, err := r.GetServiceRegistration(env, pool, container, serviceConfig)
+	reg, err := r.GetServiceRegistration(env, pool, container)
 	return reg != nil, err
 }
 
@@ -189,4 +212,15 @@ func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, 
 	}
 
 	return regList, nil
+}
+
+func (s *ServiceRegistry) EnvFor(container *docker.Container) map[string]string {
+	env := map[string]string{}
+	for _, item := range container.Config.Env {
+		sep := strings.Index(item, "=")
+		k := item[0:sep]
+		v := item[sep+1:]
+		env[k] = v
+	}
+	return env
 }
