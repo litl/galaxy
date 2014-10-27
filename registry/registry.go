@@ -35,12 +35,6 @@ type ServiceRegistry struct {
 	redisHost    string
 }
 
-type ConfigChange struct {
-	ServiceConfig *ServiceConfig
-	Restart       bool
-	Error         error
-}
-
 func NewServiceRegistry(hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
 	return &ServiceRegistry{
 		HostIP:      hostIp,

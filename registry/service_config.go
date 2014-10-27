@@ -140,6 +140,10 @@ func (s *ServiceConfig) nextID() int64 {
 	return s.ID() + 1
 }
 
+func (r *ServiceRegistry) Get(app, env string) (*ServiceConfig, error) {
+	return r.GetServiceConfig(app, env)
+}
+
 func (r *ServiceRegistry) GetServiceConfig(app, env string) (*ServiceConfig, error) {
 	exists, err := r.AppExists(app, env)
 	if err != nil || !exists {

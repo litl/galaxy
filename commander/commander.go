@@ -10,6 +10,7 @@ import (
 	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -31,6 +32,7 @@ var (
 	buildVersion    string
 	serviceConfigs  []*registry.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
+	configStore     config.ConfigStore
 	serviceRuntime  *runtime.ServiceRuntime
 	workerChans     map[string]chan string
 	wg              sync.WaitGroup
@@ -45,16 +47,18 @@ func initOrDie() {
 	)
 
 	serviceRegistry.Connect(redisHost)
+	configStore = interface{}(serviceRegistry).(config.ConfigStore)
+
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
-	apps, err := serviceRegistry.ListAssignments(env, pool)
+	apps, err := configStore.ListAssignments(env, pool)
 	if err != nil {
 		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", env, pool, err)
 	}
 
 	workerChans = make(map[string]chan string)
 	for _, app := range apps {
-		serviceConfig, err := serviceRegistry.GetServiceConfig(app, env)
+		serviceConfig, err := configStore.Get(app, env)
 		if err != nil {
 			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s\n", env, pool, err)
 		}
@@ -124,7 +128,7 @@ func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
 }
 
 func appAssigned(app string) (bool, error) {
-	assignments, err := serviceRegistry.ListAssignments(env, pool)
+	assignments, err := configStore.ListAssignments(env, pool)
 	if err != nil {
 		return false, err
 	}
@@ -160,7 +164,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			serviceConfig, err := serviceRegistry.GetServiceConfig(app, env)
+			serviceConfig, err := configStore.Get(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
@@ -204,7 +208,7 @@ func restartContainers(app string, cmdChan chan string) {
 			logOnce = false
 		case <-ticker.C:
 
-			serviceConfig, err := serviceRegistry.GetServiceConfig(app, env)
+			serviceConfig, err := configStore.Get(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				continue
@@ -371,7 +375,6 @@ func main() {
 	}
 
 	initOrDie()
-	serviceRegistry.CreatePool(pool, env)
 
 	switch flag.Args()[0] {
 	case "agent":
@@ -444,7 +447,7 @@ func main() {
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
-		restartChan := serviceRegistry.Watch(env, cancelChan)
+		restartChan := configStore.Watch(env, cancelChan)
 		monitorService(restartChan)
 	}
 

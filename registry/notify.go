@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type ConfigChange struct {
+	ServiceConfig *ServiceConfig
+	Restart       bool
+	Error         error
+}
+
 var restartChan chan *ConfigChange
 
 func (r *ServiceRegistry) CheckForChangesNow() {
