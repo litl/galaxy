@@ -331,13 +331,28 @@ func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) 
 
 func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 
-	serviceConfigs, err := s.serviceRegistry.ListApps(env)
+	appNames := []string{}
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
 	if err != nil {
 		return err
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		s.StopAllButLatestService(serviceConfig.Name, stopCutoff)
+	for _, c := range containers {
+		container, err := s.ensureDockerClient().InspectContainer(c.ID)
+		if err != nil {
+			log.Printf("ERROR: Unable to inspect container: %s\n", c.ID)
+			continue
+		}
+		name := s.EnvFor(container)["GALAXY_APP"]
+		if name != "" && !utils.StringInSlice(name, appNames) {
+			appNames = append(appNames, name)
+		}
+	}
+
+	for _, name := range appNames {
+		s.StopAllButLatestService(name, stopCutoff)
 	}
 
 	return nil
