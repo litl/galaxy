@@ -295,9 +295,7 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *registry.Servic
 	return nil
 }
 
-func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.ServiceConfig, stopCutoff int64) error {
-	latestName := serviceConfig.ContainerName()
-
+func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) error {
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
 		All: false,
 	})
@@ -305,33 +303,27 @@ func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.Service
 		return err
 	}
 
-	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
-	_, ok := err.(*docker.NoSuchContainer)
-	// Expected container is not actually running. Skip it and leave old ones.
-	if err != nil && ok {
-		return nil
+	var toStop []*docker.Container
+	var latestContainer *docker.Container
+	for _, apiContainer := range containers {
+		container, err := s.ensureDockerClient().InspectContainer(apiContainer.ID)
+		if err != nil {
+			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
+			continue
+		}
+		if s.EnvFor(container)["GALAXY_APP"] == name {
+			if latestContainer == nil || container.Created.After(latestContainer.Created) {
+				latestContainer = container
+			}
+			toStop = append(toStop, container)
+		}
 	}
 
-	for _, container := range containers {
-
-		// We name all galaxy managed containers
-		if len(container.Names) == 0 {
-			continue
-		}
-
-		// Container name does match one that would be started w/ this service config
-		if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
-			continue
-		}
+	for _, container := range toStop {
 
 		if container.ID != latestContainer.ID &&
-			container.Created < (time.Now().Unix()-stopCutoff) {
-			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-			if err != nil {
-				log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
-				continue
-			}
-			s.stopContainer(dockerContainer)
+			container.Created.Unix() < (time.Now().Unix()-stopCutoff) {
+			s.stopContainer(container)
 		}
 	}
 	return nil
@@ -345,7 +337,7 @@ func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 	}
 
 	for _, serviceConfig := range serviceConfigs {
-		s.StopAllButLatestService(&serviceConfig, stopCutoff)
+		s.StopAllButLatestService(serviceConfig.Name, stopCutoff)
 	}
 
 	return nil
@@ -946,4 +938,15 @@ func (s *ServiceRuntime) RegisterEvents(env, pool string, listener chan Containe
 		}
 	}()
 	return nil
+}
+
+func (s *ServiceRuntime) EnvFor(container *docker.Container) map[string]string {
+	env := map[string]string{}
+	for _, item := range container.Config.Env {
+		sep := strings.Index(item, "=")
+		k := item[0:sep]
+		v := item[sep+1:]
+		env[k] = v
+	}
+	return env
 }
