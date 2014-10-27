@@ -495,6 +495,8 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *registry.Se
 	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	args = append(args, "--dns")
 	args = append(args, s.shuttleHost)
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
 
 	serviceConfigs, err := s.serviceRegistry.ListApps(env)
 	if err != nil {
@@ -582,6 +584,8 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *registry.ServiceConfig
 
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
+
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
 		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
