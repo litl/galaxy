@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/codegangsta/cli"
+	gconfig "github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -42,7 +42,7 @@ func appBackup(c *cli.Context) {
 	toBackup := c.Args()
 
 	if len(toBackup) == 0 {
-		appList, err := serviceRegistry.ListApps(env)
+		appList, err := configStore.ListApps(env)
 		if err != nil {
 			log.Fatalf("ERROR: %s\n", err)
 		}
@@ -86,7 +86,7 @@ func appBackup(c *cli.Context) {
 }
 
 func getAppBackup(app, env string) (*appCfg, error) {
-	svcCfg, err := serviceRegistry.GetServiceConfig(app, env)
+	svcCfg, err := configStore.GetServiceConfig(app, env)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func appRestore(c *cli.Context) {
 	if !c.Bool("force") {
 		needForce := false
 		for _, bkup := range toRestore {
-			exists, err := serviceRegistry.AppExists(bkup.Name, utils.GalaxyEnv(c))
+			exists, err := configStore.AppExists(bkup.Name, utils.GalaxyEnv(c))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -189,13 +189,13 @@ func appRestore(c *cli.Context) {
 func restoreApp(bkup *appCfg, env string) error {
 	fmt.Println("restoring", bkup.Name)
 
-	svcCfg, err := serviceRegistry.GetServiceConfig(bkup.Name, env)
+	svcCfg, err := configStore.GetServiceConfig(bkup.Name, env)
 	if err != nil {
 		return err
 	}
 
 	if svcCfg == nil {
-		svcCfg = registry.NewServiceConfig(bkup.Name, bkup.Version)
+		svcCfg = gconfig.NewServiceConfig(bkup.Name, bkup.Version)
 	}
 
 	for port, net := range bkup.Ports {
@@ -206,6 +206,6 @@ func restoreApp(bkup *appCfg, env string) error {
 		svcCfg.EnvSet(k, v)
 	}
 
-	_, err = serviceRegistry.SetServiceConfig(svcCfg, env)
+	_, err = configStore.SetServiceConfig(svcCfg, env)
 	return err
 }

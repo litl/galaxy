@@ -30,9 +30,9 @@ var (
 	runOnce         bool
 	version         bool
 	buildVersion    string
-	serviceConfigs  []*registry.ServiceConfig
+	serviceConfigs  []*config.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
-	configStore     config.ConfigStore
+	configStore     *config.ConfigStore
 	serviceRuntime  *runtime.ServiceRuntime
 	workerChans     map[string]chan string
 	wg              sync.WaitGroup
@@ -45,9 +45,14 @@ func initOrDie() {
 		registry.DefaultTTL,
 		"",
 	)
-
 	serviceRegistry.Connect(redisHost)
-	configStore = interface{}(serviceRegistry).(config.ConfigStore)
+
+	configStore = config.NewConfigStore(
+		"",
+		registry.DefaultTTL,
+		"",
+	)
+	configStore.Connect(redisHost)
 
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
@@ -67,7 +72,7 @@ func initOrDie() {
 	}
 }
 
-func pullImageAsync(serviceConfig registry.ServiceConfig, errChan chan error) {
+func pullImageAsync(serviceConfig config.ServiceConfig, errChan chan error) {
 	// err logged via pullImage
 	_, err := pullImage(&serviceConfig)
 	if err != nil {
@@ -77,7 +82,7 @@ func pullImageAsync(serviceConfig registry.ServiceConfig, errChan chan error) {
 	errChan <- nil
 }
 
-func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
+func pullImage(serviceConfig *config.ServiceConfig) (*docker.Image, error) {
 
 	image, err := serviceRuntime.InspectImage(serviceConfig.Version())
 	if image != nil && image.ID == serviceConfig.VersionID() || serviceConfig.VersionID() == "" {
@@ -104,7 +109,7 @@ func pullImage(serviceConfig *registry.ServiceConfig) (*docker.Image, error) {
 	return image, nil
 }
 
-func startService(serviceConfig *registry.ServiceConfig, logStatus bool) {
+func startService(serviceConfig *config.ServiceConfig, logStatus bool) {
 	started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
 	if err != nil {
 		log.Errorf("ERROR: Could not start container for %s: %s", serviceConfig.Version(), err)
@@ -269,11 +274,11 @@ func restartContainers(app string, cmdChan chan string) {
 	}
 }
 
-func monitorService(changedConfigs chan *registry.ConfigChange) {
+func monitorService(changedConfigs chan *config.ConfigChange) {
 
 	for {
 
-		var changedConfig *registry.ConfigChange
+		var changedConfig *config.ConfigChange
 		select {
 
 		case changedConfig = <-changedConfigs:

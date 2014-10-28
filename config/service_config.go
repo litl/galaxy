@@ -1,4 +1,4 @@
-package registry
+package config
 
 import (
 	"path"
@@ -140,11 +140,11 @@ func (s *ServiceConfig) nextID() int64 {
 	return s.ID() + 1
 }
 
-func (r *ServiceRegistry) Get(app, env string) (*ServiceConfig, error) {
+func (r *ConfigStore) Get(app, env string) (*ServiceConfig, error) {
 	return r.GetServiceConfig(app, env)
 }
 
-func (r *ServiceRegistry) GetServiceConfig(app, env string) (*ServiceConfig, error) {
+func (r *ConfigStore) GetServiceConfig(app, env string) (*ServiceConfig, error) {
 	exists, err := r.AppExists(app, env)
 	if err != nil || !exists {
 		return nil, err
@@ -169,7 +169,7 @@ func (r *ServiceRegistry) GetServiceConfig(app, env string) (*ServiceConfig, err
 	return svcCfg, nil
 }
 
-func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
+func (r *ConfigStore) SetServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
 
 	for k, v := range svcCfg.Env() {
 		if svcCfg.environmentVMap.Get(k) != v {
@@ -213,7 +213,7 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig, env string) (b
 	return true, nil
 }
 
-func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
+func (r *ConfigStore) DeleteServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
 	deletedOne := false
 	deleted, err := r.backend.Delete(path.Join(env, svcCfg.Name))
 	if err != nil {

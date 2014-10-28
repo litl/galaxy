@@ -1,13 +1,13 @@
 package registry
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -84,216 +84,217 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	return &serviceRegistration
 }
 
-// TODO: log or return error?
-func (r *ServiceRegistry) CountInstances(app, env string) int {
-	// TODO: convert to SCAN
-	// TODO: Should this just sum hosts? (this counts all services on all hosts)
-	matches, err := r.backend.Keys(path.Join(env, "*", "hosts", "*", app))
-	if err != nil {
-		log.Printf("ERROR: could not count instances - %s\n", err)
-	}
-
-	return len(matches)
+type ServiceRegistration struct {
+	Name          string            `json:"NAME,omitempty"`
+	ExternalIP    string            `json:"EXTERNAL_IP,omitempty"`
+	ExternalPort  string            `json:"EXTERNAL_PORT,omitempty"`
+	InternalIP    string            `json:"INTERNAL_IP,omitempty"`
+	InternalPort  string            `json:"INTERNAL_PORT,omitempty"`
+	ContainerID   string            `json:"CONTAINER_ID"`
+	ContainerName string            `json:"CONTAINER_NAME"`
+	Image         string            `json:"IMAGE,omitempty"`
+	ImageId       string            `json:"IMAGE_ID,omitempty"`
+	StartedAt     time.Time         `json:"STARTED_AT"`
+	Expires       time.Time         `json:"-"`
+	Path          string            `json:"-"`
+	VirtualHosts  []string          `json:"VIRTUAL_HOSTS"`
+	Port          string            `json:"PORT"`
+	ErrorPages    map[string]string `json:"ERROR_PAGES,omitempty"`
 }
 
-func (r *ServiceRegistry) PoolExists(env, pool string) (bool, error) {
-	pools, err := r.ListPools(env)
-	if err != nil {
-		return false, err
-	}
-	_, ok := pools[pool]
-	return ok, nil
+func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
+	return s.ExternalIP == other.ExternalIP &&
+		s.ExternalPort == other.ExternalPort &&
+		s.InternalIP == other.InternalIP &&
+		s.InternalPort == other.InternalPort
 }
 
-func (r *ServiceRegistry) AppExists(app, env string) (bool, error) {
-	matches, err := r.backend.Keys(path.Join(env, app, "*"))
-	if err != nil {
-		return false, err
+func (s *ServiceRegistration) addr(ip, port string) string {
+	if ip != "" && port != "" {
+		return fmt.Sprint(ip, ":", port)
 	}
-	return len(matches) > 0, nil
+	return ""
+
+}
+func (s *ServiceRegistration) ExternalAddr() string {
+	return s.addr(s.ExternalIP, s.ExternalPort)
 }
 
-func (r *ServiceRegistry) ListAssignments(env, pool string) ([]string, error) {
-	return r.backend.Members(path.Join(env, "pools", pool))
+func (s *ServiceRegistration) InternalAddr() string {
+	return s.addr(s.InternalIP, s.InternalPort)
 }
 
-func (r *ServiceRegistry) AssignApp(app, env, pool string) (bool, error) {
-	if exists, err := r.AppExists(app, env); !exists || err != nil {
-		return false, err
+func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
+	environment := r.EnvFor(container)
+
+	name := environment["GALAXY_APP"]
+	if name == "" {
+		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	if exists, err := r.PoolExists(env, pool); !exists || err != nil {
-		return false, errors.New(fmt.Sprintf("pool %s does not exist", pool))
-	}
+	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name)
 
-	added, err := r.backend.AddMember(path.Join(env, "pools", pool), app)
-	if err != nil {
-		return false, err
-	}
+	serviceRegistration := r.newServiceRegistration(container)
+	serviceRegistration.Name = name
+	serviceRegistration.ImageId = container.Config.Image
 
-	err = r.NotifyRestart(app, env)
-	if err != nil {
-		return added == 1, err
-	}
+	vhosts := environment["VIRTUAL_HOST"]
+	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
 
-	return added == 1, nil
-}
+	errorPages := make(map[string]string)
 
-func (r *ServiceRegistry) UnassignApp(app, env, pool string) (bool, error) {
-	//FIXME: Scan keys to make sure there are no deploye apps before
-	//deleting the pool.
-
-	//FIXME: Shutdown the associated auto-scaling groups tied to the
-	//pool
-
-	removed, err := r.backend.RemoveMember(path.Join(env, "pools", pool), app)
-	if removed == 0 || err != nil {
-		return false, err
-	}
-
-	err = r.NotifyRestart(app, env)
-	if err != nil {
-		return removed == 1, err
-	}
-
-	return removed == 1, nil
-}
-
-func (r *ServiceRegistry) CreatePool(name, env string) (bool, error) {
-	//FIXME: Create an associated auto-scaling groups tied to the
-	//pool
-
-	added, err := r.backend.AddMember(path.Join(env, "pools", "*"), name)
-	if err != nil {
-		return false, err
-	}
-	return added == 1, nil
-}
-
-func (r *ServiceRegistry) DeletePool(pool, env string) (bool, error) {
-	//FIXME: Scan keys to make sure there are no deploye apps before
-	//deleting the pool.
-
-	//FIXME: Shutdown the associated auto-scaling groups tied to the
-	//pool
-
-	assignments, err := r.ListAssignments(env, pool)
-	if err != nil {
-		return false, err
-	}
-
-	if len(assignments) > 0 {
-		return false, nil
-	}
-
-	removed, err := r.backend.RemoveMember(path.Join(env, "pools", "*"), pool)
-	if err != nil {
-		return false, err
-	}
-	return removed == 1, nil
-}
-
-func (r *ServiceRegistry) ListPools(env string) (map[string][]string, error) {
-	assignments := make(map[string][]string)
-
-	matches, err := r.backend.Members(path.Join(env, "pools", "*"))
-	if err != nil {
-		return assignments, err
-	}
-
-	for _, pool := range matches {
-
-		members, err := r.ListAssignments(env, pool)
-		if err != nil {
-			return assignments, err
+	// scan environment variables for the VIRTUAL_HOST_%d pattern
+	// but save the original variable and url.
+	for vhostCode, url := range environment {
+		code := 0
+		n, err := fmt.Sscanf(vhostCode, "VIRTUAL_HOST_%d", &code)
+		if err != nil || n == 0 {
+			continue
 		}
-		assignments[pool] = members
+
+		errorPages[vhostCode] = url
 	}
 
-	return assignments, nil
-}
-
-func (r *ServiceRegistry) CreateApp(app, env string) (bool, error) {
-	if exists, err := r.AppExists(app, env); exists || err != nil {
-		return false, err
+	if len(errorPages) > 0 {
+		serviceRegistration.ErrorPages = errorPages
 	}
 
-	emptyConfig := NewServiceConfig(app, "")
-	emptyConfig.environmentVMap.Set("ENV", env)
+	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
 
-	return r.SetServiceConfig(emptyConfig, env)
-}
+	serviceRegistration.Port = environment["GALAXY_PORT"]
 
-func (r *ServiceRegistry) DeleteApp(app, env string) (bool, error) {
-
-	pools, err := r.ListPools(env)
-	if err != nil {
-		return false, err
-	}
-
-	for pool, assignments := range pools {
-		if utils.StringInSlice(app, assignments) {
-			return false, errors.New(fmt.Sprintf("app is assigned to pool %s", pool))
-		}
-	}
-
-	svcCfg, err := r.GetServiceConfig(app, env)
-	if err != nil {
-		return false, err
-	}
-
-	if svcCfg == nil {
-		return true, nil
-	}
-
-	return r.DeleteServiceConfig(svcCfg, env)
-}
-
-func (r *ServiceRegistry) ListApps(env string) ([]ServiceConfig, error) {
-	// TODO: convert to scan
-	apps, err := r.backend.Keys(path.Join(env, "*", "environment"))
+	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: is it OK to error out early?
-	var appList []ServiceConfig
-	for _, app := range apps {
-		parts := strings.Split(app, "/")
+	// TODO: use a compare-and-swap SCRIPT
+	_, err = r.backend.Set(registrationPath, "location", string(jsonReg))
+	if err != nil {
+		return nil, err
+	}
 
-		// app entries should be 3 parts, /env/pool/app
-		if len(parts) != 3 {
-			continue
-		}
+	_, err = r.backend.Expire(registrationPath, r.TTL)
+	if err != nil {
+		return nil, err
+	}
+	serviceRegistration.Expires = time.Now().UTC().Add(time.Duration(r.TTL) * time.Second)
 
-		// we don't want host keys
-		if parts[1] == "hosts" {
-			continue
-		}
+	return serviceRegistration, nil
+}
 
-		cfg, err := r.GetServiceConfig(parts[1], env)
+func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
+
+	environment := r.EnvFor(container)
+
+	name := environment["GALAXY_APP"]
+	if name == "" {
+		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
+	}
+
+	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name)
+
+	registration, err := r.GetServiceRegistration(env, pool, container)
+	if err != nil {
+		return registration, err
+	}
+
+	if registration.ContainerID != container.ID {
+		return nil, nil
+	}
+
+	_, err = r.backend.Delete(registrationPath)
+	if err != nil {
+		return registration, err
+	}
+
+	return registration, nil
+}
+
+func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
+
+	environment := r.EnvFor(container)
+
+	name := environment["GALAXY_APP"]
+	if name == "" {
+		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
+	}
+
+	regPath := path.Join(env, pool, "hosts", r.HostIP, name)
+
+	existingRegistration := ServiceRegistration{
+		Path: regPath,
+	}
+
+	location, err := r.backend.Get(regPath, "location")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if location != "" {
+		err = json.Unmarshal([]byte(location), &existingRegistration)
 		if err != nil {
 			return nil, err
 		}
 
-		appList = append(appList, *cfg)
+		expires, err := r.backend.Ttl(regPath)
+		if err != nil {
+			return nil, err
+		}
+		existingRegistration.Expires = time.Now().UTC().Add(time.Duration(expires) * time.Second)
+		return &existingRegistration, nil
 	}
 
-	return appList, nil
+	return nil, nil
 }
 
-func (r *ServiceRegistry) ListEnvs() ([]string, error) {
-	envs := []string{}
-	apps, err := r.backend.Keys(path.Join("*", "*", "environment"))
+func (r *ServiceRegistry) IsRegistered(env, pool string, container *docker.Container) (bool, error) {
+
+	reg, err := r.GetServiceRegistration(env, pool, container)
+	return reg != nil, err
+}
+
+// TODO: get all ServiceRegistrations
+func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, error) {
+
+	// TODO: convert to scan
+	keys, err := r.backend.Keys(path.Join(env, "*", "hosts", "*", "*"))
 	if err != nil {
 		return nil, err
 	}
 
-	for _, app := range apps {
-		parts := strings.Split(app, "/")
-		if !utils.StringInSlice(parts[0], envs) {
-			envs = append(envs, parts[0])
+	var regList []ServiceRegistration
+	for _, key := range keys {
+
+		val, err := r.backend.Get(key, "location")
+		if err != nil {
+			return nil, err
 		}
+
+		svcReg := ServiceRegistration{
+			Name: path.Base(key),
+		}
+		err = json.Unmarshal([]byte(val), &svcReg)
+		if err != nil {
+			return nil, err
+		}
+
+		svcReg.Path = key
+
+		regList = append(regList, svcReg)
 	}
-	return envs, nil
+
+	return regList, nil
+}
+
+func (s *ServiceRegistry) EnvFor(container *docker.Container) map[string]string {
+	env := map[string]string{}
+	for _, item := range container.Config.Env {
+		sep := strings.Index(item, "=")
+		k := item[0:sep]
+		v := item[sep+1:]
+		env[k] = v
+	}
+	return env
 }

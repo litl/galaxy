@@ -1,6 +1,8 @@
-package registry
+package config
 
 import (
+	"log"
+	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
@@ -125,6 +127,91 @@ func (r *RedisBackend) Members(key string) ([]string, error) {
 	}
 
 	return redis.Strings(conn.Do("SMEMBERS", key))
+}
+
+func (r *RedisBackend) Notify(key, value string) (int, error) {
+	conn := r.redisPool.Get()
+	defer conn.Close()
+
+	if conn.Err() != nil {
+		conn.Close()
+		r.Reconnect()
+		return 0, conn.Err()
+	}
+
+	return redis.Int(conn.Do("PUBLISH", key, value))
+}
+
+func (r *RedisBackend) subscribeChannel(key string, msgs chan string) {
+	var wg sync.WaitGroup
+
+	newPubSubPool := func() redis.Pool {
+		return redis.Pool{
+			MaxIdle:     1,
+			IdleTimeout: 0,
+			Dial: func() (redis.Conn, error) {
+				c, err := redis.Dial("tcp", r.RedisHost)
+				if err != nil {
+					return nil, err
+				}
+				return c, err
+			},
+			// test every connection for now
+			TestOnBorrow: func(c redis.Conn, t time.Time) error {
+				_, err := c.Do("PING")
+				if err != nil {
+					defer c.Close()
+				}
+				return err
+			},
+		}
+	}
+
+	redisPool := newPubSubPool()
+	for {
+
+		conn := redisPool.Get()
+		defer conn.Close()
+		if conn.Err() != nil {
+			conn.Close()
+			redisPool.Close()
+			log.Printf("ERROR: %v\n", conn.Err())
+			time.Sleep(5 * time.Second)
+			redisPool = newPubSubPool()
+			continue
+		}
+
+		wg.Add(2)
+		psc := redis.PubSubConn{Conn: conn}
+		go func() {
+			defer wg.Done()
+			for {
+				switch n := psc.Receive().(type) {
+				case redis.Message:
+					msg := string(n.Data)
+					msgs <- msg
+				case error:
+					psc.Close()
+					redisPool.Close()
+					log.Printf("ERROR: %v\n", n)
+					return
+				}
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			psc.Subscribe(key)
+			log.Printf("Monitoring for config changes on channel: %s\n", key)
+		}()
+		wg.Wait()
+	}
+}
+
+func (r *RedisBackend) Subscribe(key string) chan string {
+	msgs := make(chan string)
+	go r.subscribeChannel(key, msgs)
+	return msgs
 }
 
 func (r *RedisBackend) Set(key, field string, value string) (string, error) {

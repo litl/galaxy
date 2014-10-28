@@ -57,7 +57,7 @@ func pruneShuttleBackends(c *cli.Context) {
 	for _, service := range config.Services {
 
 		// Remove services that no longer exist
-		svcCfg, err := serviceRegistry.GetServiceConfig(service.Name, utils.GalaxyEnv(c))
+		svcCfg, err := configStore.GetServiceConfig(service.Name, utils.GalaxyEnv(c))
 		if err != nil {
 			log.Errorf("ERROR: Unable to get service config for %s: %s", service.Name, err)
 			return
