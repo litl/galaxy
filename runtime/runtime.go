@@ -13,6 +13,7 @@ import (
 
 	auth "github.com/dotcloud/docker/registry"
 	docker "github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
@@ -31,7 +32,6 @@ type ServiceRuntime struct {
 type ContainerEvent struct {
 	Status              string
 	Container           *docker.Container
-	ServiceConfig       *registry.ServiceConfig
 	ServiceRegistration *registry.ServiceRegistration
 }
 
@@ -211,7 +211,7 @@ func (s *ServiceRuntime) StopAllMatching(name string) error {
 
 }
 
-func (s *ServiceRuntime) Stop(serviceConfig *registry.ServiceConfig) error {
+func (s *ServiceRuntime) Stop(serviceConfig *config.ServiceConfig) error {
 	latestName := serviceConfig.ContainerName()
 	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
 	_, ok := err.(*docker.NoSuchContainer)
@@ -245,13 +245,14 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	}
 	log.Printf("Stopped %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
 
-	return s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+	return nil
+	/*	return s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 		ID:            container.ID,
 		RemoveVolumes: true,
-	})
+	})*/
 }
 
-func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *registry.ServiceConfig) error {
+func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.ServiceConfig) error {
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
 		All: false,
 	})
@@ -295,9 +296,7 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *registry.Servic
 	return nil
 }
 
-func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.ServiceConfig, stopCutoff int64) error {
-	latestName := serviceConfig.ContainerName()
-
+func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) error {
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
 		All: false,
 	})
@@ -305,51 +304,58 @@ func (s *ServiceRuntime) StopAllButLatestService(serviceConfig *registry.Service
 		return err
 	}
 
-	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
-	_, ok := err.(*docker.NoSuchContainer)
-	// Expected container is not actually running. Skip it and leave old ones.
-	if err != nil && ok {
-		return nil
+	var toStop []*docker.Container
+	var latestContainer *docker.Container
+	for _, apiContainer := range containers {
+		container, err := s.ensureDockerClient().InspectContainer(apiContainer.ID)
+		if err != nil {
+			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
+			continue
+		}
+		if s.EnvFor(container)["GALAXY_APP"] == name {
+			if latestContainer == nil || container.Created.After(latestContainer.Created) {
+				latestContainer = container
+			}
+			toStop = append(toStop, container)
+		}
 	}
 
-	for _, container := range containers {
-
-		// We name all galaxy managed containers
-		if len(container.Names) == 0 {
-			continue
-		}
-
-		// Container name does match one that would be started w/ this service config
-		if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
-			continue
-		}
+	for _, container := range toStop {
 
 		if container.ID != latestContainer.ID &&
-			container.Created < (time.Now().Unix()-stopCutoff) {
-			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-			if err != nil {
-				log.Printf("ERROR: Unable to stop container: %s\n", container.ID)
-				continue
-			}
-			s.stopContainer(dockerContainer)
+			container.Created.Unix() < (time.Now().Unix()-stopCutoff) {
+			s.stopContainer(container)
 		}
 	}
 	return nil
 }
 
-func (s *ServiceRuntime) StopAllButLatest(stopCutoff int64) error {
+func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return err
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		s.StopAllButLatestService(&serviceConfig, stopCutoff)
+	for _, c := range containers {
+		s.StopAllButLatestService(s.EnvFor(c)["GALAXY_APP"], stopCutoff)
 	}
 
 	return nil
+}
 
+func (s *ServiceRuntime) StopAll(env string) error {
+
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return err
+	}
+
+	for _, c := range containers {
+		s.stopContainer(c)
+	}
+
+	return nil
 }
 
 func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
@@ -367,7 +373,7 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 }
 
-func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd []string) (*docker.Container, error) {
+func (s *ServiceRuntime) RunCommand(serviceConfig *config.ServiceConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
@@ -453,7 +459,7 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *registry.ServiceConfig, cmd [
 	return container, err
 }
 
-func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig) error {
+func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.ServiceConfig) error {
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
@@ -468,7 +474,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	for key, value := range serviceConfig.Env() {
 		if key == "ENV" {
 			args = append(args, "-e")
-			args = append(args, strings.ToUpper(key)+"="+s.serviceRegistry.Env)
+			args = append(args, strings.ToUpper(key)+"="+env)
 			continue
 		}
 
@@ -482,21 +488,8 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	args = append(args, "--dns")
 	args = append(args, s.shuttleHost)
-
-	serviceConfigs, err := s.serviceRegistry.ListApps()
-	if err != nil {
-		return err
-	}
-
-	for _, config := range serviceConfigs {
-		port := config.Env()["GALAXY_PORT"]
-		if port == "" {
-			continue
-		}
-
-		args = append(args, "-e")
-		args = append(args, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":"+port)
-	}
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
 
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
@@ -528,7 +521,7 @@ func (s *ServiceRuntime) StartInteractive(serviceConfig *registry.ServiceConfig)
 	return err
 }
 
-func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) Start(env string, serviceConfig *config.ServiceConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 
 	imgIdRef := serviceConfig.Version()
@@ -545,30 +538,16 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 	var envVars []string
 	for key, value := range serviceConfig.Env() {
 		if key == "ENV" {
-			envVars = append(envVars, strings.ToUpper(key)+"="+s.serviceRegistry.Env)
+			envVars = append(envVars, strings.ToUpper(key)+"="+env)
 			continue
 		}
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
-	serviceConfigs, err := s.serviceRegistry.ListApps()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, config := range serviceConfigs {
-		port := config.Env()["GALAXY_PORT"]
-
-		if port == "" {
-			continue
-		}
-
-		envVars = append(envVars, strings.ToUpper(config.Name)+"_ADDR="+s.shuttleHost+":"+port)
-
-	}
-
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
+
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
 		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
@@ -642,12 +621,12 @@ func (s *ServiceRuntime) Start(serviceConfig *registry.ServiceConfig) (*docker.C
 
 }
 
-func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig) (bool, *docker.Container, error) {
+func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.ServiceConfig) (bool, *docker.Container, error) {
 	container, err := s.ensureDockerClient().InspectContainer(serviceConfig.ContainerName())
 	_, ok := err.(*docker.NoSuchContainer)
 	// Expected container is not actually running. Skip it and leave old ones.
 	if (err != nil && ok) || container == nil {
-		container, err := s.Start(serviceConfig)
+		container, err := s.Start(env, serviceConfig)
 		return true, container, err
 	}
 
@@ -683,7 +662,7 @@ func (s *ServiceRuntime) StartIfNotRunning(serviceConfig *registry.ServiceConfig
 
 	if imageDiffers || configDiffers || notRunning {
 
-		container, err := s.Start(serviceConfig)
+		container, err := s.Start(env, serviceConfig)
 		return true, container, err
 	}
 
@@ -760,93 +739,53 @@ func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Imag
 
 }
 
-func (s *ServiceRuntime) RegisterAll() ([]*registry.ServiceRegistration, error) {
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	serviceConfigs, err := s.serviceRegistry.ListApps()
-	if err != nil {
-		return nil, err
-	}
-
+func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegistration, error) {
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return nil, err
 	}
 
 	registrations := []*registry.ServiceRegistration{}
-	for _, serviceConfig := range serviceConfigs {
-		for _, container := range containers {
-			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
 
-			if err != nil {
-				log.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
-				continue
-			}
-
-			if !serviceConfig.IsContainerVersion(strings.TrimPrefix(dockerContainer.Name, "/")) {
-				continue
-			}
-
-			registration, err := s.serviceRegistry.RegisterService(dockerContainer, &serviceConfig)
-			if err != nil {
-				log.Printf("ERROR: Could not register %s: %s\n",
-					serviceConfig.Name, err)
-				continue
-			}
-			registrations = append(registrations, registration)
+	for _, container := range containers {
+		name := s.EnvFor(container)["GALAXY_APP"]
+		registration, err := s.serviceRegistry.RegisterService(env, pool, container)
+		if err != nil {
+			log.Printf("ERROR: Could not register %s: %s\n", name, err)
+			continue
 		}
+		registrations = append(registrations, registration)
 	}
+
 	return registrations, nil
 
 }
 
-func (s *ServiceRuntime) UnRegisterAll() ([]*docker.Container, error) {
-	serviceConfigs, err := s.serviceRegistry.ListApps()
-	if err != nil {
-		log.Errorf("ERROR: Could not retrieve service configs for /%s/%s: %s\n", s.serviceRegistry.Env,
-			s.serviceRegistry.Pool, err)
-	}
+func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, error) {
 
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return nil, err
 	}
 
 	removed := []*docker.Container{}
 
-	for _, serviceConfig := range serviceConfigs {
-		for _, container := range containers {
-			container, err := s.ensureDockerClient().InspectContainer(container.ID)
-			if err != nil {
-				log.Printf("ERROR: Unable to inspect container %s: %s. Skipping.\n", container.ID, err)
-				continue
-			}
-
-			if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Name, "/")) {
-				continue
-			}
-
-			_, err = s.serviceRegistry.UnRegisterService(container, &serviceConfig)
-			if err != nil {
-				log.Printf("ERROR: Could not unregister %s: %s\n",
-					serviceConfig.Name, err)
-				return removed, err
-			}
-
-			removed = append(removed, container)
-			log.Printf("Unregistered %s as %s", container.ID[0:12], serviceConfig.Name)
+	for _, container := range containers {
+		name := s.EnvFor(container)["GALAXY_APP"]
+		_, err = s.serviceRegistry.UnRegisterService(env, pool, container)
+		if err != nil {
+			log.Printf("ERROR: Could not unregister %s: %s\n", name, err)
+			return removed, err
 		}
+
+		removed = append(removed, container)
+		log.Printf("Unregistered %s as %s", container.ID[0:12], name)
 	}
+
 	return removed, nil
 }
 
-func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
+func (s *ServiceRuntime) RegisterEvents(env, pool string, listener chan ContainerEvent) error {
 	go func() {
 		c := make(chan *docker.APIEvents)
 
@@ -881,7 +820,7 @@ func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
 				if e.Status == "start" || e.Status == "stop" || e.Status == "die" {
 					container, err := s.InspectContainer(e.ID)
 					if err != nil {
-						log.Printf("ERROR: %s", err)
+						log.Printf("ERROR: Error inspecting container: %s", err)
 						continue
 					}
 
@@ -890,22 +829,11 @@ func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
 						continue
 					}
 
-					if strings.Contains(container.Name, "_") {
-						parts := strings.Split(strings.TrimPrefix(container.Name, "/"), "_")
-						service := parts[0]
-						svcCfg, err := s.serviceRegistry.GetServiceConfig(service)
+					name := s.EnvFor(container)["GALAXY_APP"]
+					if name != "" {
+						registration, err := s.serviceRegistry.GetServiceRegistration(env, pool, container)
 						if err != nil {
-							log.Printf("WARN: Could not find service config for %s", service)
-							continue
-						}
-
-						if svcCfg == nil {
-							continue
-						}
-
-						registration, err := s.serviceRegistry.GetServiceRegistration(container, svcCfg)
-						if err != nil {
-							log.Printf("WARN: Could not find service registration for %s/%s: %s", svcCfg.Name, container.ID[:12], err)
+							log.Printf("WARN: Could not find service registration for %s/%s: %s", name, container.ID[:12], err)
 							continue
 						}
 
@@ -916,7 +844,6 @@ func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
 						listener <- ContainerEvent{
 							Status:              e.Status,
 							Container:           container,
-							ServiceConfig:       svcCfg,
 							ServiceRegistration: registration,
 						}
 					}
@@ -929,4 +856,38 @@ func (s *ServiceRuntime) RegisterEvents(listener chan ContainerEvent) error {
 		}
 	}()
 	return nil
+}
+
+func (s *ServiceRuntime) EnvFor(container *docker.Container) map[string]string {
+	env := map[string]string{}
+	for _, item := range container.Config.Env {
+		sep := strings.Index(item, "=")
+		k := item[0:sep]
+		v := item[sep+1:]
+		env[k] = v
+	}
+	return env
+}
+
+func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
+	apps := []*docker.Container{}
+	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+		All: false,
+	})
+	if err != nil {
+		return apps, err
+	}
+
+	for _, c := range containers {
+		container, err := s.ensureDockerClient().InspectContainer(c.ID)
+		if err != nil {
+			log.Printf("ERROR: Unable to inspect container: %s\n", c.ID)
+			continue
+		}
+		name := s.EnvFor(container)["GALAXY_APP"]
+		if name != "" {
+			apps = append(apps, container)
+		}
+	}
+	return apps, nil
 }

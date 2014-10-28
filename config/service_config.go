@@ -1,4 +1,4 @@
-package registry
+package config
 
 import (
 	"path"
@@ -140,24 +140,28 @@ func (s *ServiceConfig) nextID() int64 {
 	return s.ID() + 1
 }
 
-func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
-	exists, err := r.AppExists(app)
+func (r *ConfigStore) Get(app, env string) (*ServiceConfig, error) {
+	return r.GetServiceConfig(app, env)
+}
+
+func (r *ConfigStore) GetServiceConfig(app, env string) (*ServiceConfig, error) {
+	exists, err := r.AppExists(app, env)
 	if err != nil || !exists {
 		return nil, err
 	}
 
 	svcCfg := NewServiceConfig(path.Base(app), "")
 
-	err = r.LoadVMap(path.Join(r.Env, app, "environment"), svcCfg.environmentVMap)
+	err = r.LoadVMap(path.Join(env, app, "environment"), svcCfg.environmentVMap)
 	if err != nil {
 		return nil, err
 	}
-	err = r.LoadVMap(path.Join(r.Env, app, "version"), svcCfg.versionVMap)
+	err = r.LoadVMap(path.Join(env, app, "version"), svcCfg.versionVMap)
 	if err != nil {
 		return nil, err
 	}
 
-	err = r.LoadVMap(path.Join(r.Env, app, "ports"), svcCfg.portsVMap)
+	err = r.LoadVMap(path.Join(env, app, "ports"), svcCfg.portsVMap)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +169,7 @@ func (r *ServiceRegistry) GetServiceConfig(app string) (*ServiceConfig, error) {
 	return svcCfg, nil
 }
 
-func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+func (r *ConfigStore) SetServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
 
 	for k, v := range svcCfg.Env() {
 		if svcCfg.environmentVMap.Get(k) != v {
@@ -180,28 +184,28 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	}
 
 	//TODO: user MULTI/EXEC
-	err := r.SaveVMap(path.Join(r.Env, svcCfg.Name, "environment"),
+	err := r.SaveVMap(path.Join(env, svcCfg.Name, "environment"),
 		svcCfg.environmentVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.SaveVMap(path.Join(r.Env, svcCfg.Name, "version"),
+	err = r.SaveVMap(path.Join(env, svcCfg.Name, "version"),
 		svcCfg.versionVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.SaveVMap(path.Join(r.Env, svcCfg.Name, "ports"),
+	err = r.SaveVMap(path.Join(env, svcCfg.Name, "ports"),
 		svcCfg.portsVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.notifyChanged()
+	err = r.notifyChanged(env)
 	if err != nil {
 		return false, err
 	}
@@ -209,9 +213,9 @@ func (r *ServiceRegistry) SetServiceConfig(svcCfg *ServiceConfig) (bool, error) 
 	return true, nil
 }
 
-func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig) (bool, error) {
+func (r *ConfigStore) DeleteServiceConfig(svcCfg *ServiceConfig, env string) (bool, error) {
 	deletedOne := false
-	deleted, err := r.backend.Delete(path.Join(r.Env, svcCfg.Name))
+	deleted, err := r.backend.Delete(path.Join(env, svcCfg.Name))
 	if err != nil {
 		return false, err
 	}
@@ -219,7 +223,7 @@ func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig) (bool, erro
 	deletedOne = deletedOne || deleted == 1
 
 	for _, k := range []string{"environment", "version", "ports"} {
-		deleted, err = r.backend.Delete(path.Join(r.Env, svcCfg.Name, k))
+		deleted, err = r.backend.Delete(path.Join(env, svcCfg.Name, k))
 		if err != nil {
 			return false, err
 		}
@@ -227,7 +231,7 @@ func (r *ServiceRegistry) DeleteServiceConfig(svcCfg *ServiceConfig) (bool, erro
 	}
 
 	if deletedOne {
-		err = r.notifyChanged()
+		err = r.notifyChanged(env)
 		if err != nil {
 			return deletedOne, err
 		}

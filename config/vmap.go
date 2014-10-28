@@ -1,4 +1,4 @@
-package registry
+package config
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"github.com/litl/galaxy/utils"
 )
 
-func (r *ServiceRegistry) LoadVMap(key string, dest *utils.VersionedMap) error {
+func (r *ConfigStore) LoadVMap(key string, dest *utils.VersionedMap) error {
 	serialized, err := r.backend.GetAll(key)
 	if err != nil {
 		return err
@@ -16,7 +16,7 @@ func (r *ServiceRegistry) LoadVMap(key string, dest *utils.VersionedMap) error {
 	return nil
 }
 
-func (r *ServiceRegistry) SaveVMap(key string, vmap *utils.VersionedMap) error {
+func (r *ConfigStore) SaveVMap(key string, vmap *utils.VersionedMap) error {
 
 	serialized := vmap.MarshalMap()
 	if len(serialized) == 0 {
@@ -37,7 +37,7 @@ func (r *ServiceRegistry) SaveVMap(key string, vmap *utils.VersionedMap) error {
 	return nil
 }
 
-func (r *ServiceRegistry) GcVMap(key string, vmap *utils.VersionedMap) error {
+func (r *ConfigStore) GcVMap(key string, vmap *utils.VersionedMap) error {
 	serialized := vmap.MarshalExpiredMap(5)
 	if len(serialized) > 0 {
 		keys := []string{}

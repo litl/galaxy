@@ -11,6 +11,7 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/litl/galaxy/log"
 	shuttle "github.com/litl/galaxy/shuttle/client"
+	"github.com/litl/galaxy/utils"
 )
 
 func getShuttleConfig(c *cli.Context) (*shuttle.Config, error) {
@@ -47,7 +48,7 @@ func pruneShuttleBackends(c *cli.Context) {
 		return
 	}
 
-	registrations, err := serviceRegistry.ListRegistrations()
+	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -56,7 +57,7 @@ func pruneShuttleBackends(c *cli.Context) {
 	for _, service := range config.Services {
 
 		// Remove services that no longer exist
-		svcCfg, err := serviceRegistry.GetServiceConfig(service.Name)
+		svcCfg, err := configStore.GetServiceConfig(service.Name, utils.GalaxyEnv(c))
 		if err != nil {
 			log.Errorf("ERROR: Unable to get service config for %s: %s", service.Name, err)
 			return
@@ -95,7 +96,7 @@ func pruneShuttleBackends(c *cli.Context) {
 
 func registerShuttle(c *cli.Context) {
 
-	registrations, err := serviceRegistry.ListRegistrations()
+	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -170,7 +171,7 @@ func registerShuttle(c *cli.Context) {
 
 func unregisterShuttle(c *cli.Context) {
 
-	registrations, err := serviceRegistry.ListRegistrations()
+	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return

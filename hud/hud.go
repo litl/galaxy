@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
@@ -28,6 +29,7 @@ var (
 	httpClient      *http.Client
 	wg              sync.WaitGroup
 	serviceRegistry *registry.ServiceRegistry
+	configStore     *config.ConfigStore
 )
 
 type sliceVar []string
@@ -71,14 +73,20 @@ func main() {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-		env,
-		pool,
 		"",
 		registry.DefaultTTL,
 		"",
 	)
 
 	serviceRegistry.Connect(redisHost)
+
+	configStore = config.NewConfigStore(
+		"",
+		registry.DefaultTTL,
+		"",
+	)
+
+	configStore.Connect(redisHost)
 
 	stats = NewTSCollection()
 	tscChan := make(chan *TSCollection, 100)
