@@ -11,7 +11,7 @@ deps:
 
 commander:
 	echo "Building commander"
-	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/commander
+	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/cmd/commander
 
 shuttle:
 	echo "Building shuttle"
@@ -52,7 +52,7 @@ dist-init:
 dist-build: dist-init
 	echo "Compiling $$GOOS/$$GOARCH"
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/galaxy github.com/litl/galaxy
-	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/commander
+	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/cmd/commander
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/shuttle github.com/litl/galaxy/shuttle
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/discovery github.com/litl/galaxy/discovery
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/hud github.com/litl/galaxy/hud
