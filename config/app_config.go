@@ -2,7 +2,6 @@ package config
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/litl/galaxy/utils"
 )
@@ -112,27 +111,6 @@ func (s *AppConfig) ID() int64 {
 
 func (s *AppConfig) ContainerName() string {
 	return s.Name + "_" + strconv.FormatInt(s.ID(), 10)
-}
-
-// IsContainerVersion takes a container name and return true if
-// is is a container name that could be returned from this
-// AppConfig
-func (s *AppConfig) IsContainerVersion(name string) bool {
-	if !strings.Contains(name, "_") {
-		return false
-	}
-
-	parts := strings.Split(name, "_")
-	name, version := parts[0], parts[1]
-	if name != s.Name {
-		return false
-	}
-
-	_, err := strconv.ParseUint(version, 10, 64)
-	if err != nil {
-		return false
-	}
-	return true
 }
 
 func (s *AppConfig) nextID() int64 {

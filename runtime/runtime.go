@@ -267,8 +267,13 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfi
 			continue
 		}
 
+		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
+		if err != nil {
+			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
+			continue
+		}
 		// Container name does match one that would be started w/ this service config
-		if !serviceConfig.IsContainerVersion(strings.TrimPrefix(container.Names[0], "/")) {
+		if s.EnvFor(dockerContainer)["GALAXY_APP"] != serviceConfig.Name {
 			continue
 		}
 
@@ -285,11 +290,6 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfi
 		}
 
 		if image.ID != serviceConfig.VersionID() && serviceConfig.VersionID() != "" {
-			dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-			if err != nil {
-				log.Errorf("ERROR: Unable to stop container: %s", container.ID)
-				continue
-			}
 			s.stopContainer(dockerContainer)
 		}
 	}
@@ -634,10 +634,7 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.App
 		return false, nil, err
 	}
 
-	containerName := strings.TrimPrefix(container.Name, "/")
-
-	// check if container is the right version
-	if !serviceConfig.IsContainerVersion(containerName) {
+	if s.EnvFor(container)["GALAXY_APP"] != serviceConfig.Name {
 		return false, container, nil
 	}
 
@@ -647,7 +644,6 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.App
 	}
 
 	imageDiffers := image.ID != container.Image
-	configDiffers := containerName != serviceConfig.ContainerName()
 	notRunning := !container.State.Running
 
 	// If their is a stopped container, remove it so we start a new one instead.
@@ -660,7 +656,7 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.App
 		}
 	}
 
-	if imageDiffers || configDiffers || notRunning {
+	if imageDiffers || notRunning {
 
 		container, err := s.Start(env, serviceConfig)
 		return true, container, err
