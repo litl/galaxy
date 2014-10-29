@@ -6,7 +6,6 @@ import (
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/runtime"
 	"github.com/ryanuber/columnize"
-	"strconv"
 	"strings"
 )
 
@@ -22,7 +21,7 @@ func AppList(configStore *config.ConfigStore, env string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | VERSION | PORT | REGISTERED"}
+	columns := []string{"ENV | NAME | VERSION | PORT "}
 
 	for _, env := range envs {
 
@@ -35,14 +34,12 @@ func AppList(configStore *config.ConfigStore, env string) error {
 			name := app.Name
 			port := app.EnvGet("GALAXY_PORT")
 			versionDeployed := app.Version()
-			registered := configStore.CountInstances(name, env)
 
 			columns = append(columns, strings.Join([]string{
 				env,
 				name,
 				versionDeployed,
 				port,
-				strconv.Itoa(registered),
 			}, " | "))
 		}
 	}

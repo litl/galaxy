@@ -53,18 +53,6 @@ func (r *ConfigStore) Connect(redisHost string) {
 	r.backend.Connect()
 }
 
-// TODO: log or return error?
-func (r *ConfigStore) CountInstances(app, env string) int {
-	// TODO: convert to SCAN
-	// TODO: Should this just sum hosts? (this counts all services on all hosts)
-	matches, err := r.backend.Keys(path.Join(env, "*", "hosts", "*", app))
-	if err != nil {
-		log.Printf("ERROR: could not count instances - %s\n", err)
-	}
-
-	return len(matches)
-}
-
 func (r *ConfigStore) PoolExists(env, pool string) (bool, error) {
 	pools, err := r.ListPools(env)
 	if err != nil {

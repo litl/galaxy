@@ -92,35 +92,6 @@ func TestAppExists(t *testing.T) {
 	assertAppExists(t, r, "app")
 }
 
-func TestCountInstancesKeyFormat(t *testing.T) {
-	r, b := NewTestRegistry()
-
-	b.KeysFunc = func(key string) ([]string, error) {
-		if key != "dev/*/hosts/*/foo" {
-			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
-		}
-		return []string{}, nil
-	}
-
-	r.CountInstances("foo", "dev")
-}
-
-func TestCountInstancesOne(t *testing.T) {
-	r, b := NewTestRegistry()
-
-	b.KeysFunc = func(key string) ([]string, error) {
-		if key != "dev/*/hosts/*/foo" {
-			t.Errorf("CountInstances(%q) wrong key, want %s", key, "dev/web/hosts/*/foo")
-		}
-		return []string{"dev/web/hosts/me/foo"}, nil
-	}
-
-	got := r.CountInstances("foo", "dev")
-	if got != 1 {
-		t.Errorf("CountInstances(%q) = %v, want %v", "foo", got, 1)
-	}
-}
-
 func TestAssignAppNotExists(t *testing.T) {
 	r, _ := NewTestRegistry()
 

@@ -110,10 +110,6 @@ func ensurePoolArg(c *cli.Context) {
 	}
 }
 
-func countInstances(app, env string) int {
-	return configStore.CountInstances(app, env)
-}
-
 func appExists(app, env string) (bool, error) {
 	return configStore.AppExists(app, env)
 }
