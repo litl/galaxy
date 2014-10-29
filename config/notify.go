@@ -76,7 +76,7 @@ func (r *ConfigStore) checkForChangePeriodically(stop chan struct{}) {
 }
 
 func (r *ConfigStore) restartApp(app, env string) {
-	serviceConfig, err := r.GetServiceConfig(app, env)
+	serviceConfig, err := r.GetApp(app, env)
 	if err != nil {
 		restartChan <- &ConfigChange{
 			Error: err,
@@ -99,7 +99,7 @@ func (r *ConfigStore) NotifyRestart(app, env string) error {
 	return nil
 }
 
-func (r *ConfigStore) notifyChanged(env string) error {
+func (r *ConfigStore) NotifyEnvChanged(env string) error {
 	// TODO: received count ignored, use it somehow?
 	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
 	if err != nil {

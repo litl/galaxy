@@ -65,7 +65,7 @@ func initOrDie() {
 
 	workerChans = make(map[string]chan string)
 	for _, app := range apps {
-		serviceConfig, err := configStore.Get(app, env)
+		serviceConfig, err := configStore.GetApp(app, env)
 		if err != nil {
 			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s", env, pool, err)
 		}
@@ -171,7 +171,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			serviceConfig, err := configStore.Get(app, env)
+			serviceConfig, err := configStore.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
@@ -215,7 +215,7 @@ func restartContainers(app string, cmdChan chan string) {
 			logOnce = false
 		case <-ticker.C:
 
-			serviceConfig, err := configStore.Get(app, env)
+			serviceConfig, err := configStore.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				continue

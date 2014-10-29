@@ -86,7 +86,7 @@ func appBackup(c *cli.Context) {
 }
 
 func getAppBackup(app, env string) (*appCfg, error) {
-	svcCfg, err := configStore.GetServiceConfig(app, env)
+	svcCfg, err := configStore.GetApp(app, env)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func appRestore(c *cli.Context) {
 func restoreApp(bkup *appCfg, env string) error {
 	fmt.Println("restoring", bkup.Name)
 
-	svcCfg, err := configStore.GetServiceConfig(bkup.Name, env)
+	svcCfg, err := configStore.GetApp(bkup.Name, env)
 	if err != nil {
 		return err
 	}
@@ -206,6 +206,6 @@ func restoreApp(bkup *appCfg, env string) error {
 		svcCfg.EnvSet(k, v)
 	}
 
-	_, err = configStore.SetServiceConfig(svcCfg, env)
+	_, err = configStore.UpdateApp(svcCfg, env)
 	return err
 }

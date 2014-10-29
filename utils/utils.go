@@ -89,6 +89,16 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
+func RemoveStringInSlice(a string, list []string) []string {
+	r := []string{}
+	for _, v := range list {
+		if v != a {
+			r = append(r, v)
+		}
+	}
+	return r
+}
+
 func GetEnv(name, defaultValue string) string {
 	if os.Getenv(name) == "" {
 		return defaultValue

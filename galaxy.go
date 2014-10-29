@@ -221,7 +221,7 @@ func configList(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config")
 
-	cfg, err := configStore.GetServiceConfig(app, utils.GalaxyEnv(c))
+	cfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to list config: %s.", err)
 		return
@@ -266,7 +266,7 @@ func configSet(c *cli.Context) {
 		return
 	}
 
-	svcCfg, err := configStore.GetServiceConfig(app, utils.GalaxyEnv(c))
+	svcCfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to set config: %s.", err)
 		return
@@ -307,7 +307,7 @@ func configSet(c *cli.Context) {
 		return
 	}
 
-	updated, err = configStore.SetServiceConfig(svcCfg, utils.GalaxyEnv(c))
+	updated, err = configStore.UpdateApp(svcCfg, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to set config: %s.", err)
 		return
@@ -330,7 +330,7 @@ func configUnset(c *cli.Context) {
 		return
 	}
 
-	svcCfg, err := configStore.GetServiceConfig(app, utils.GalaxyEnv(c))
+	svcCfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to unset config: %s.", err)
 		return
@@ -354,7 +354,7 @@ func configUnset(c *cli.Context) {
 		return
 	}
 
-	updated, err = configStore.SetServiceConfig(svcCfg, utils.GalaxyEnv(c))
+	updated, err = configStore.UpdateApp(svcCfg, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Errorf("ERROR: Unable to unset config: %s.", err)
 		return
@@ -373,7 +373,7 @@ func configGet(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config:get")
 
-	cfg, err := configStore.GetServiceConfig(app, utils.GalaxyEnv(c))
+	cfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to get config: %s.", err)
 		return
@@ -580,7 +580,7 @@ func pgPsql(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "pg:psql")
 
-	serviceConfig, err := configStore.GetServiceConfig(app, utils.GalaxyEnv(c))
+	serviceConfig, err := configStore.GetApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to run command: %s.", err)
 		return

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/litl/galaxy/utils"
 	"regexp"
 	"strings"
 )
@@ -11,7 +12,23 @@ type Value struct {
 }
 
 type MemoryBackend struct {
-	maps map[string]map[string]string
+	maps        map[string]map[string]string
+	apps        map[string][]ServiceConfig // env -> []app
+	assignments map[string][]string
+
+	AppExistsFunc       func(app, env string) (bool, error)
+	CreateAppFunc       func(app, env string) (bool, error)
+	GetAppFunc          func(app, env string) (*ServiceConfig, error)
+	UpdateAppFunc       func(svcCfg *ServiceConfig, env string) (bool, error)
+	DeleteAppFunc       func(svcCfg *ServiceConfig, env string) (bool, error)
+	ListAppFunc         func(env string) ([]ServiceConfig, error)
+	AssignAppFunc       func(app, env, pool string) (bool, error)
+	UnassignAppFunc     func(app, env, pool string) (bool, error)
+	ListAssignmentsFunc func(env, pool string) ([]string, error)
+	CreatePoolFunc      func(env, pool string) (bool, error)
+	DeletePoolFunc      func(env, pool string) (bool, error)
+	ListPoolsFunc       func(env string) ([]string, error)
+	ListEnvsFunc        func() ([]string, error)
 
 	MembersFunc      func(key string) ([]string, error)
 	KeysFunc         func(key string) ([]string, error)
@@ -23,8 +40,149 @@ type MemoryBackend struct {
 
 func NewMemoryBackend() *MemoryBackend {
 	return &MemoryBackend{
-		maps: make(map[string]map[string]string),
+		maps:        make(map[string]map[string]string),
+		apps:        make(map[string][]ServiceConfig),
+		assignments: make(map[string][]string),
 	}
+}
+
+func (r *MemoryBackend) AppExists(app, env string) (bool, error) {
+	if r.AppExistsFunc != nil {
+		return r.AppExistsFunc(app, env)
+	}
+
+	for _, s := range r.apps[env] {
+		if s.Name == app {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *MemoryBackend) CreateApp(app, env string) (bool, error) {
+
+	if r.CreateAppFunc != nil {
+		return r.CreateAppFunc(app, env)
+	}
+
+	if exists, err := r.AppExists(app, env); !exists && err == nil {
+		r.apps[env] = append(r.apps[env], ServiceConfig{
+			Name: app,
+		})
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (r *MemoryBackend) ListApps(env string) ([]ServiceConfig, error) {
+	return r.apps[env], nil
+}
+
+func (r *MemoryBackend) GetApp(app, env string) (*ServiceConfig, error) {
+	if r.GetAppFunc != nil {
+		return r.GetAppFunc(app, env)
+	}
+	return nil, nil
+}
+
+func (r *MemoryBackend) UpdateApp(svcCfg *ServiceConfig, env string) (bool, error) {
+	if r.UpdateAppFunc != nil {
+		return r.UpdateAppFunc(svcCfg, env)
+	}
+	return false, nil
+}
+
+func (r *MemoryBackend) DeleteApp(svcCfg *ServiceConfig, env string) (bool, error) {
+	if r.DeleteAppFunc != nil {
+		return r.DeleteAppFunc(svcCfg, env)
+	}
+	return false, nil
+}
+
+func (r *MemoryBackend) AssignApp(app, env, pool string) (bool, error) {
+	if r.AssignAppFunc != nil {
+		return r.AssignAppFunc(app, env, pool)
+	}
+
+	key := env + "/" + pool
+	if !utils.StringInSlice(app, r.assignments[key]) {
+		r.assignments[key] = append(r.assignments[key], app)
+	}
+
+	return true, nil
+}
+
+func (r *MemoryBackend) UnassignApp(app, env, pool string) (bool, error) {
+	if r.UnassignAppFunc != nil {
+		return r.UnassignAppFunc(app, env, pool)
+	}
+
+	key := env + "/" + pool
+	if !utils.StringInSlice(app, r.assignments[key]) {
+		return false, nil
+	}
+	r.assignments[key] = utils.RemoveStringInSlice(app, r.assignments[key])
+
+	return true, nil
+}
+
+func (r *MemoryBackend) ListAssignments(env, pool string) ([]string, error) {
+	if r.ListAssignmentsFunc != nil {
+		return r.ListAssignmentsFunc(env, pool)
+	}
+
+	key := env + "/" + pool
+	return r.assignments[key], nil
+}
+
+func (r *MemoryBackend) CreatePool(env, pool string) (bool, error) {
+	if r.CreatePoolFunc != nil {
+		return r.CreatePoolFunc(env, pool)
+	}
+
+	key := env + "/" + pool
+	r.assignments[key] = []string{}
+	return true, nil
+}
+
+func (r *MemoryBackend) DeletePool(env, pool string) (bool, error) {
+	if r.DeletePoolFunc != nil {
+		return r.DeletePoolFunc(env, pool)
+	}
+
+	key := env + "/" + pool
+	delete(r.assignments, key)
+	return true, nil
+}
+
+func (r *MemoryBackend) ListPools(env string) ([]string, error) {
+	if r.ListPoolsFunc != nil {
+		return r.ListPools(env)
+	}
+
+	p := []string{}
+	for k, _ := range r.assignments {
+		parts := strings.Split(k, "/")
+		p = append(p, parts[1])
+	}
+	return p, nil
+}
+
+func (r *MemoryBackend) ListEnvs() ([]string, error) {
+	if r.ListEnvsFunc != nil {
+		return r.ListEnvsFunc()
+	}
+
+	p := []string{}
+	for k, _ := range r.assignments {
+		parts := strings.Split(k, "/")
+		env := parts[0]
+		if !utils.StringInSlice(env, p) {
+			p = append(p, parts[0])
+		}
+	}
+	return p, nil
 }
 
 func (r *MemoryBackend) Connect() {

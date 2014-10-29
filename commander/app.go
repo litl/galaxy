@@ -95,7 +95,7 @@ func AppDeploy(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceR
 		return fmt.Errorf("unable to pull %s. Has it been released yet?", version)
 	}
 
-	svcCfg, err := configStore.GetServiceConfig(app, env)
+	svcCfg, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to deploy app: %s.", err)
 	}
@@ -112,7 +112,7 @@ func AppDeploy(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceR
 		svcCfg.AddPort(k.Port(), k.Proto())
 	}
 
-	updated, err := configStore.SetServiceConfig(svcCfg, env)
+	updated, err := configStore.UpdateApp(svcCfg, env)
 	if err != nil {
 		return fmt.Errorf("could not store version: %s", err)
 	}
@@ -132,7 +132,7 @@ func AppRestart(configStore *config.ConfigStore, app, env string) error {
 }
 
 func AppRun(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceRuntime, app, env string, args []string) error {
-	serviceConfig, err := configStore.GetServiceConfig(app, env)
+	serviceConfig, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to run command: %s.", err)
 
@@ -146,7 +146,7 @@ func AppRun(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceRunt
 }
 
 func AppShell(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceRuntime, app, env string) error {
-	serviceConfig, err := configStore.GetServiceConfig(app, env)
+	serviceConfig, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to run command: %s.", err)
 	}

@@ -1,16 +1,24 @@
 package config
 
 type ConfigBackend interface {
-	// Sets
-	AddMember(key, value string) (int, error)
-	RemoveMember(key, value string) (int, error)
-	Members(key string) ([]string, error)
+	// Apps
+	AppExists(app, env string) (bool, error)
+	CreateApp(app, env string) (bool, error)
+	ListApps(env string) ([]ServiceConfig, error)
+	GetApp(app, env string) (*ServiceConfig, error)
+	UpdateApp(svcCfg *ServiceConfig, env string) (bool, error)
+	DeleteApp(svcCfg *ServiceConfig, env string) (bool, error)
 
-	// Keys
-	Keys(key string) ([]string, error)
-	Delete(key string) (int, error)
-	Expire(key string, ttl uint64) (int, error)
-	Ttl(key string) (int, error)
+	// Pools
+	AssignApp(app, env, pool string) (bool, error)
+	UnassignApp(app, env, pool string) (bool, error)
+	ListAssignments(env, pool string) ([]string, error)
+	CreatePool(env, pool string) (bool, error)
+	DeletePool(env, pool string) (bool, error)
+	ListPools(env string) ([]string, error)
+
+	// Envs
+	ListEnvs() ([]string, error)
 
 	//Pub/Sub
 	Subscribe(key string) chan string
@@ -18,11 +26,4 @@ type ConfigBackend interface {
 
 	Connect()
 	Reconnect()
-
-	// Maps
-	Set(key, field string, value string) (string, error)
-	Get(key, field string) (string, error)
-	GetAll(key string) (map[string]string, error)
-	SetMulti(key string, values map[string]string) (string, error)
-	DeleteMulti(key string, fields ...string) (int, error)
 }
