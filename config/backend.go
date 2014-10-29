@@ -1,6 +1,6 @@
 package config
 
-type ConfigBackend interface {
+type Backend interface {
 	// Apps
 	AppExists(app, env string) (bool, error)
 	CreateApp(app, env string) (bool, error)

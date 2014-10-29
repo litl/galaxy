@@ -21,7 +21,7 @@ const (
 )
 
 type ConfigStore struct {
-	backend      ConfigBackend
+	backend      Backend
 	HostIP       string
 	Hostname     string
 	TTL          uint64
