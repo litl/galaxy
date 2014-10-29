@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	golog "log"
 	"os"
 	"strings"
 	"sync"
@@ -388,9 +389,11 @@ func main() {
 	}
 
 	initOrDie()
+	log.DefaultLogger.SetFlags(0)
 
 	switch flag.Args()[0] {
 	case "agent":
+		log.DefaultLogger.SetFlags(golog.LstdFlags)
 		loop = true
 		agentFs := flag.NewFlagSet("agent", flag.ExitOnError)
 		agentFs.Usage = func() {
