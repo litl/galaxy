@@ -5,7 +5,6 @@ import (
 
 	"github.com/codegangsta/cli"
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -15,7 +14,6 @@ import (
 var (
 	client          *docker.Client
 	serviceRegistry *registry.ServiceRegistry
-	configStore     *config.Store
 	serviceRuntime  *runtime.ServiceRuntime
 	outputBuffer    *utils.OutputBuffer
 	buildVersion    string
@@ -50,14 +48,6 @@ func initOrDie(c *cli.Context) {
 	)
 
 	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
-
-	configStore = config.NewStore(
-		c.GlobalString("hostIp"),
-		uint64(c.Int("ttl")),
-		c.GlobalString("sshAddr"),
-	)
-
-	configStore.Connect(utils.GalaxyRedisHost(c))
 
 	serviceRuntime = runtime.NewServiceRuntime(
 		serviceRegistry,
