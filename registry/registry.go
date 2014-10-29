@@ -132,7 +132,7 @@ func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Co
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name)
+	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name, container.ID[0:12])
 
 	serviceRegistration := r.newServiceRegistration(container)
 	serviceRegistration.Name = name
@@ -192,7 +192,7 @@ func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name)
+	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name, container.ID[0:12])
 
 	registration, err := r.GetServiceRegistration(env, pool, container)
 	if err != nil {
@@ -220,7 +220,7 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *do
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	regPath := path.Join(env, pool, "hosts", r.HostIP, name)
+	regPath := path.Join(env, pool, "hosts", r.HostIP, name, container.ID[0:12])
 
 	existingRegistration := ServiceRegistration{
 		Path: regPath,
