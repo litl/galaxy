@@ -8,9 +8,9 @@ import (
 )
 
 type ConfigChange struct {
-	ServiceConfig *ServiceConfig
-	Restart       bool
-	Error         error
+	AppConfig *AppConfig
+	Restart   bool
+	Error     error
 }
 
 var restartChan chan *ConfigChange
@@ -54,7 +54,7 @@ func (r *Store) checkForChanges(env string) {
 					lastVersion[changedConfig.Name], changedConfig.ID())
 				lastVersion[changedConfig.Name] = changedConfig.ID()
 				restartChan <- &ConfigChange{
-					ServiceConfig: &changeCopy,
+					AppConfig: &changeCopy,
 				}
 			}
 		}
@@ -85,8 +85,8 @@ func (r *Store) restartApp(app, env string) {
 	}
 
 	restartChan <- &ConfigChange{
-		Restart:       true,
-		ServiceConfig: serviceConfig,
+		Restart:   true,
+		AppConfig: serviceConfig,
 	}
 }
 

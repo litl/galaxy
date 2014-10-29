@@ -211,7 +211,7 @@ func (s *ServiceRuntime) StopAllMatching(name string) error {
 
 }
 
-func (s *ServiceRuntime) Stop(serviceConfig *config.ServiceConfig) error {
+func (s *ServiceRuntime) Stop(serviceConfig *config.AppConfig) error {
 	latestName := serviceConfig.ContainerName()
 	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
 	_, ok := err.(*docker.NoSuchContainer)
@@ -252,7 +252,7 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	})*/
 }
 
-func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.ServiceConfig) error {
+func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfig) error {
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
 		All: false,
 	})
@@ -373,7 +373,7 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 }
 
-func (s *ServiceRuntime) RunCommand(serviceConfig *config.ServiceConfig, cmd []string) (*docker.Container, error) {
+func (s *ServiceRuntime) RunCommand(serviceConfig *config.AppConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
@@ -459,7 +459,7 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *config.ServiceConfig, cmd []s
 	return container, err
 }
 
-func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.ServiceConfig) error {
+func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppConfig) error {
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
@@ -521,7 +521,7 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.Serv
 	return err
 }
 
-func (s *ServiceRuntime) Start(env string, serviceConfig *config.ServiceConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*docker.Container, error) {
 	img := serviceConfig.Version()
 
 	imgIdRef := serviceConfig.Version()
@@ -621,7 +621,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.ServiceConfig) 
 
 }
 
-func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.ServiceConfig) (bool, *docker.Container, error) {
+func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.AppConfig) (bool, *docker.Container, error) {
 	container, err := s.ensureDockerClient().InspectContainer(serviceConfig.ContainerName())
 	_, ok := err.(*docker.NoSuchContainer)
 	// Expected container is not actually running. Skip it and leave old ones.

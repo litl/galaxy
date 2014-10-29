@@ -26,12 +26,12 @@ func (r *RedisBackend) AppExists(app, env string) (bool, error) {
 }
 
 func (r *RedisBackend) CreateApp(app, env string) (bool, error) {
-	emptyConfig := NewServiceConfig(app, "")
+	emptyConfig := NewAppConfig(app, "")
 	emptyConfig.environmentVMap.Set("ENV", env)
 	return r.UpdateApp(emptyConfig, env)
 }
 
-func (r *RedisBackend) ListApps(env string) ([]ServiceConfig, error) {
+func (r *RedisBackend) ListApps(env string) ([]AppConfig, error) {
 	// TODO: convert to scan
 	apps, err := r.Keys(path.Join(env, "*", "environment"))
 	if err != nil {
@@ -39,7 +39,7 @@ func (r *RedisBackend) ListApps(env string) ([]ServiceConfig, error) {
 	}
 
 	// TODO: is it OK to error out early?
-	var appList []ServiceConfig
+	var appList []AppConfig
 	for _, app := range apps {
 		parts := strings.Split(app, "/")
 
@@ -64,7 +64,7 @@ func (r *RedisBackend) ListApps(env string) ([]ServiceConfig, error) {
 	return appList, nil
 }
 
-func (r *RedisBackend) UpdateApp(svcCfg *ServiceConfig, env string) (bool, error) {
+func (r *RedisBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 
 	for k, v := range svcCfg.Env() {
 		if svcCfg.environmentVMap.Get(k) != v {
@@ -103,8 +103,8 @@ func (r *RedisBackend) UpdateApp(svcCfg *ServiceConfig, env string) (bool, error
 	return true, nil
 }
 
-func (r *RedisBackend) GetApp(app, env string) (*ServiceConfig, error) {
-	svcCfg := NewServiceConfig(path.Base(app), "")
+func (r *RedisBackend) GetApp(app, env string) (*AppConfig, error) {
+	svcCfg := NewAppConfig(path.Base(app), "")
 
 	err := r.LoadVMap(path.Join(env, app, "environment"), svcCfg.environmentVMap)
 	if err != nil {
@@ -123,7 +123,7 @@ func (r *RedisBackend) GetApp(app, env string) (*ServiceConfig, error) {
 	return svcCfg, nil
 }
 
-func (r *RedisBackend) DeleteApp(svcCfg *ServiceConfig, env string) (bool, error) {
+func (r *RedisBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
 	deletedOne := false
 	deleted, err := r.Delete(path.Join(env, svcCfg.Name))
 	if err != nil {

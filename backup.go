@@ -195,7 +195,7 @@ func restoreApp(bkup *appCfg, env string) error {
 	}
 
 	if svcCfg == nil {
-		svcCfg = gconfig.NewServiceConfig(bkup.Name, bkup.Version)
+		svcCfg = gconfig.NewAppConfig(bkup.Name, bkup.Version)
 	}
 
 	for port, net := range bkup.Ports {

@@ -32,7 +32,7 @@ var (
 	runOnce         bool
 	version         bool
 	buildVersion    string
-	serviceConfigs  []*config.ServiceConfig
+	serviceConfigs  []*config.AppConfig
 	serviceRegistry *registry.ServiceRegistry
 	Store           *config.Store
 	serviceRuntime  *runtime.ServiceRuntime
@@ -74,7 +74,7 @@ func initOrDie() {
 	}
 }
 
-func pullImageAsync(serviceConfig config.ServiceConfig, errChan chan error) {
+func pullImageAsync(serviceConfig config.AppConfig, errChan chan error) {
 	// err logged via pullImage
 	_, err := pullImage(&serviceConfig)
 	if err != nil {
@@ -84,7 +84,7 @@ func pullImageAsync(serviceConfig config.ServiceConfig, errChan chan error) {
 	errChan <- nil
 }
 
-func pullImage(serviceConfig *config.ServiceConfig) (*docker.Image, error) {
+func pullImage(serviceConfig *config.AppConfig) (*docker.Image, error) {
 
 	image, err := serviceRuntime.InspectImage(serviceConfig.Version())
 	if image != nil && image.ID == serviceConfig.VersionID() || serviceConfig.VersionID() == "" {
@@ -111,7 +111,7 @@ func pullImage(serviceConfig *config.ServiceConfig) (*docker.Image, error) {
 	return image, nil
 }
 
-func startService(serviceConfig *config.ServiceConfig, logStatus bool) {
+func startService(serviceConfig *config.AppConfig, logStatus bool) {
 	started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
 	if err != nil {
 		log.Errorf("ERROR: Could not start container for %s: %s", serviceConfig.Version(), err)
@@ -290,13 +290,13 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 				continue
 			}
 
-			if changedConfig.ServiceConfig == nil {
+			if changedConfig.AppConfig == nil {
 				continue
 			}
 
-			assigned, err := appAssigned(changedConfig.ServiceConfig.Name)
+			assigned, err := appAssigned(changedConfig.AppConfig.Name)
 			if err != nil {
-				log.Errorf("ERROR: Error retrieving service config for %s: %s", changedConfig.ServiceConfig.Name, err)
+				log.Errorf("ERROR: Error retrieving service config for %s: %s", changedConfig.AppConfig.Name, err)
 				if !loop {
 					return
 				}
@@ -307,9 +307,9 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 				continue
 			}
 
-			ch, ok := workerChans[changedConfig.ServiceConfig.Name]
+			ch, ok := workerChans[changedConfig.AppConfig.Name]
 			if !ok {
-				name := changedConfig.ServiceConfig.Name
+				name := changedConfig.AppConfig.Name
 				ch := make(chan string)
 				workerChans[name] = ch
 				wg.Add(1)
@@ -321,7 +321,7 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 			}
 
 			if changedConfig.Restart {
-				log.Printf("Restarting %s", changedConfig.ServiceConfig.Name)
+				log.Printf("Restarting %s", changedConfig.AppConfig.Name)
 				ch <- "restart"
 			} else {
 				ch <- "deploy"

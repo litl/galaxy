@@ -273,7 +273,7 @@ func configSet(c *cli.Context) {
 	}
 
 	if svcCfg == nil {
-		svcCfg = gconfig.NewServiceConfig(app, "")
+		svcCfg = gconfig.NewAppConfig(app, "")
 	}
 
 	updated := false

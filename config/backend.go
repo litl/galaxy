@@ -4,10 +4,10 @@ type Backend interface {
 	// Apps
 	AppExists(app, env string) (bool, error)
 	CreateApp(app, env string) (bool, error)
-	ListApps(env string) ([]ServiceConfig, error)
-	GetApp(app, env string) (*ServiceConfig, error)
-	UpdateApp(svcCfg *ServiceConfig, env string) (bool, error)
-	DeleteApp(svcCfg *ServiceConfig, env string) (bool, error)
+	ListApps(env string) ([]AppConfig, error)
+	GetApp(app, env string) (*AppConfig, error)
+	UpdateApp(svcCfg *AppConfig, env string) (bool, error)
+	DeleteApp(svcCfg *AppConfig, env string) (bool, error)
 
 	// Pools
 	AssignApp(app, env, pool string) (bool, error)

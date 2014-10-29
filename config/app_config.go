@@ -7,7 +7,7 @@ import (
 	"github.com/litl/galaxy/utils"
 )
 
-type ServiceConfig struct {
+type AppConfig struct {
 	// ID is used for ordering and conflict resolution.
 	// Usualy set to time.Now().UnixNano()
 	Name            string `redis:"name"`
@@ -16,8 +16,8 @@ type ServiceConfig struct {
 	portsVMap       *utils.VersionedMap
 }
 
-func NewServiceConfig(app, version string) *ServiceConfig {
-	svcCfg := &ServiceConfig{
+func NewAppConfig(app, version string) *AppConfig {
+	svcCfg := &AppConfig{
 		Name:            app,
 		versionVMap:     utils.NewVersionedMap(),
 		environmentVMap: utils.NewVersionedMap(),
@@ -28,8 +28,8 @@ func NewServiceConfig(app, version string) *ServiceConfig {
 	return svcCfg
 }
 
-func NewServiceConfigWithEnv(app, version string, env map[string]string) *ServiceConfig {
-	svcCfg := NewServiceConfig(app, version)
+func NewAppConfigWithEnv(app, version string, env map[string]string) *AppConfig {
+	svcCfg := NewAppConfig(app, version)
 
 	for k, v := range env {
 		svcCfg.environmentVMap.Set(k, v)
@@ -40,7 +40,7 @@ func NewServiceConfigWithEnv(app, version string, env map[string]string) *Servic
 
 // Env returns a map representing the runtime environment for the container.
 // Changes to this map have no effect.
-func (s *ServiceConfig) Env() map[string]string {
+func (s *AppConfig) Env() map[string]string {
 	env := map[string]string{}
 	for _, k := range s.environmentVMap.Keys() {
 		val := s.environmentVMap.Get(k)
@@ -51,31 +51,31 @@ func (s *ServiceConfig) Env() map[string]string {
 	return env
 }
 
-func (s *ServiceConfig) EnvSet(key, value string) {
+func (s *AppConfig) EnvSet(key, value string) {
 	s.environmentVMap.SetVersion(key, value, s.nextID())
 }
 
-func (s *ServiceConfig) EnvGet(key string) string {
+func (s *AppConfig) EnvGet(key string) string {
 	return s.environmentVMap.Get(key)
 }
 
-func (s *ServiceConfig) Version() string {
+func (s *AppConfig) Version() string {
 	return s.versionVMap.Get("version")
 }
 
-func (s *ServiceConfig) SetVersion(version string) {
+func (s *AppConfig) SetVersion(version string) {
 	s.versionVMap.SetVersion("version", version, s.nextID())
 }
 
-func (s *ServiceConfig) VersionID() string {
+func (s *AppConfig) VersionID() string {
 	return s.versionVMap.Get("versionID")
 }
 
-func (s *ServiceConfig) SetVersionID(versionID string) {
+func (s *AppConfig) SetVersionID(versionID string) {
 	s.versionVMap.SetVersion("versionID", versionID, s.nextID())
 }
 
-func (s *ServiceConfig) Ports() map[string]string {
+func (s *AppConfig) Ports() map[string]string {
 	ports := map[string]string{}
 	for _, k := range s.portsVMap.Keys() {
 		val := s.portsVMap.Get(k)
@@ -86,17 +86,17 @@ func (s *ServiceConfig) Ports() map[string]string {
 	return ports
 }
 
-func (s *ServiceConfig) ClearPorts() {
+func (s *AppConfig) ClearPorts() {
 	for _, k := range s.portsVMap.Keys() {
 		s.portsVMap.SetVersion(k, "", s.nextID())
 	}
 }
 
-func (s *ServiceConfig) AddPort(port, portType string) {
+func (s *AppConfig) AddPort(port, portType string) {
 	s.portsVMap.Set(port, portType)
 }
 
-func (s *ServiceConfig) ID() int64 {
+func (s *AppConfig) ID() int64 {
 	id := int64(0)
 	for _, vmap := range []*utils.VersionedMap{
 		s.environmentVMap,
@@ -110,14 +110,14 @@ func (s *ServiceConfig) ID() int64 {
 	return id
 }
 
-func (s *ServiceConfig) ContainerName() string {
+func (s *AppConfig) ContainerName() string {
 	return s.Name + "_" + strconv.FormatInt(s.ID(), 10)
 }
 
 // IsContainerVersion takes a container name and return true if
 // is is a container name that could be returned from this
-// ServiceConfig
-func (s *ServiceConfig) IsContainerVersion(name string) bool {
+// AppConfig
+func (s *AppConfig) IsContainerVersion(name string) bool {
 	if !strings.Contains(name, "_") {
 		return false
 	}
@@ -135,6 +135,6 @@ func (s *ServiceConfig) IsContainerVersion(name string) bool {
 	return true
 }
 
-func (s *ServiceConfig) nextID() int64 {
+func (s *AppConfig) nextID() int64 {
 	return s.ID() + 1
 }

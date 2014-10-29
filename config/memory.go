@@ -13,15 +13,15 @@ type Value struct {
 
 type MemoryBackend struct {
 	maps        map[string]map[string]string
-	apps        map[string][]ServiceConfig // env -> []app
+	apps        map[string][]AppConfig // env -> []app
 	assignments map[string][]string
 
 	AppExistsFunc       func(app, env string) (bool, error)
 	CreateAppFunc       func(app, env string) (bool, error)
-	GetAppFunc          func(app, env string) (*ServiceConfig, error)
-	UpdateAppFunc       func(svcCfg *ServiceConfig, env string) (bool, error)
-	DeleteAppFunc       func(svcCfg *ServiceConfig, env string) (bool, error)
-	ListAppFunc         func(env string) ([]ServiceConfig, error)
+	GetAppFunc          func(app, env string) (*AppConfig, error)
+	UpdateAppFunc       func(svcCfg *AppConfig, env string) (bool, error)
+	DeleteAppFunc       func(svcCfg *AppConfig, env string) (bool, error)
+	ListAppFunc         func(env string) ([]AppConfig, error)
 	AssignAppFunc       func(app, env, pool string) (bool, error)
 	UnassignAppFunc     func(app, env, pool string) (bool, error)
 	ListAssignmentsFunc func(env, pool string) ([]string, error)
@@ -41,7 +41,7 @@ type MemoryBackend struct {
 func NewMemoryBackend() *MemoryBackend {
 	return &MemoryBackend{
 		maps:        make(map[string]map[string]string),
-		apps:        make(map[string][]ServiceConfig),
+		apps:        make(map[string][]AppConfig),
 		assignments: make(map[string][]string),
 	}
 }
@@ -66,7 +66,7 @@ func (r *MemoryBackend) CreateApp(app, env string) (bool, error) {
 	}
 
 	if exists, err := r.AppExists(app, env); !exists && err == nil {
-		r.apps[env] = append(r.apps[env], ServiceConfig{
+		r.apps[env] = append(r.apps[env], AppConfig{
 			Name: app,
 		})
 		return true, nil
@@ -75,25 +75,25 @@ func (r *MemoryBackend) CreateApp(app, env string) (bool, error) {
 	return false, nil
 }
 
-func (r *MemoryBackend) ListApps(env string) ([]ServiceConfig, error) {
+func (r *MemoryBackend) ListApps(env string) ([]AppConfig, error) {
 	return r.apps[env], nil
 }
 
-func (r *MemoryBackend) GetApp(app, env string) (*ServiceConfig, error) {
+func (r *MemoryBackend) GetApp(app, env string) (*AppConfig, error) {
 	if r.GetAppFunc != nil {
 		return r.GetAppFunc(app, env)
 	}
 	return nil, nil
 }
 
-func (r *MemoryBackend) UpdateApp(svcCfg *ServiceConfig, env string) (bool, error) {
+func (r *MemoryBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 	if r.UpdateAppFunc != nil {
 		return r.UpdateAppFunc(svcCfg, env)
 	}
 	return false, nil
 }
 
-func (r *MemoryBackend) DeleteApp(svcCfg *ServiceConfig, env string) (bool, error) {
+func (r *MemoryBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
 	if r.DeleteAppFunc != nil {
 		return r.DeleteAppFunc(svcCfg, env)
 	}
