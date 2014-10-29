@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func NewTestRegistry() (*ConfigStore, *MemoryBackend) {
-	r := &ConfigStore{}
+func NewTestRegistry() (*Store, *MemoryBackend) {
+	r := &Store{}
 	b := NewMemoryBackend()
 	r.backend = b
 	return r, b
@@ -371,7 +371,7 @@ func TestListEnvs(t *testing.T) {
 	}
 }
 
-func assertAppCreated(t *testing.T, r *ConfigStore, app string) {
+func assertAppCreated(t *testing.T, r *Store, app string) {
 	if created, err := r.CreateApp(app, "dev"); !created || err != nil {
 		t.Fatalf("CreateApp(%q) = %t, %v, want %t, %v", app,
 			created, err,
@@ -379,14 +379,14 @@ func assertAppCreated(t *testing.T, r *ConfigStore, app string) {
 	}
 }
 
-func assertAppExists(t *testing.T, r *ConfigStore, app string) {
+func assertAppExists(t *testing.T, r *Store, app string) {
 	if exists, err := r.AppExists(app, "dev"); !exists || err != nil {
 		t.Fatalf("AppExists(%q) = %t, %v, want %t, %v", app, exists, err,
 			true, nil)
 	}
 }
 
-func assertPoolCreated(t *testing.T, r *ConfigStore, pool string) {
+func assertPoolCreated(t *testing.T, r *Store, pool string) {
 	if created, err := r.CreatePool(pool, "dev"); !created || err != nil {
 		t.Errorf("CreatePool(%q) = %t, %v, want %t, %v", pool, created, err, true, nil)
 	}

@@ -28,7 +28,7 @@ import (
 var (
 	serviceRuntime  *runtime.ServiceRuntime
 	serviceRegistry *registry.ServiceRegistry
-	configStore     *gconfig.ConfigStore
+	configStore     *gconfig.Store
 
 	initOnce     sync.Once
 	buildVersion string
@@ -55,13 +55,13 @@ func initRegistry(c *cli.Context) {
 	)
 
 	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
-	initConfigStore(c)
+	initStore(c)
 }
 
 // ensure the registry as a redis host, but only once
-func initConfigStore(c *cli.Context) {
+func initStore(c *cli.Context) {
 
-	configStore = gconfig.NewConfigStore(
+	configStore = gconfig.NewStore(
 		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),

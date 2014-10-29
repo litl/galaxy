@@ -20,7 +20,7 @@ const (
 	DefaultTTL = 60
 )
 
-type ConfigStore struct {
+type Store struct {
 	backend      Backend
 	HostIP       string
 	Hostname     string
@@ -31,8 +31,8 @@ type ConfigStore struct {
 	redisHost    string
 }
 
-func NewConfigStore(hostIp string, ttl uint64, sshAddr string) *ConfigStore {
-	return &ConfigStore{
+func NewStore(hostIp string, ttl uint64, sshAddr string) *Store {
+	return &Store{
 		HostIP:      hostIp,
 		TTL:         ttl,
 		HostSSHAddr: sshAddr,
@@ -42,7 +42,7 @@ func NewConfigStore(hostIp string, ttl uint64, sshAddr string) *ConfigStore {
 }
 
 // Build the Redis Pool
-func (r *ConfigStore) Connect(redisHost string) {
+func (r *Store) Connect(redisHost string) {
 
 	r.redisHost = redisHost
 	r.backend = &RedisBackend{
@@ -51,7 +51,7 @@ func (r *ConfigStore) Connect(redisHost string) {
 	r.backend.Connect()
 }
 
-func (r *ConfigStore) PoolExists(env, pool string) (bool, error) {
+func (r *Store) PoolExists(env, pool string) (bool, error) {
 	pools, err := r.ListPools(env)
 	if err != nil {
 		return false, err
@@ -60,15 +60,15 @@ func (r *ConfigStore) PoolExists(env, pool string) (bool, error) {
 	return ok, nil
 }
 
-func (r *ConfigStore) AppExists(app, env string) (bool, error) {
+func (r *Store) AppExists(app, env string) (bool, error) {
 	return r.backend.AppExists(app, env)
 }
 
-func (r *ConfigStore) ListAssignments(env, pool string) ([]string, error) {
+func (r *Store) ListAssignments(env, pool string) ([]string, error) {
 	return r.backend.ListAssignments(env, pool)
 }
 
-func (r *ConfigStore) AssignApp(app, env, pool string) (bool, error) {
+func (r *Store) AssignApp(app, env, pool string) (bool, error) {
 	if exists, err := r.AppExists(app, env); !exists || err != nil {
 		return false, err
 	}
@@ -90,7 +90,7 @@ func (r *ConfigStore) AssignApp(app, env, pool string) (bool, error) {
 	return added, nil
 }
 
-func (r *ConfigStore) UnassignApp(app, env, pool string) (bool, error) {
+func (r *Store) UnassignApp(app, env, pool string) (bool, error) {
 	removed, err := r.backend.UnassignApp(app, env, pool)
 	if !removed || err != nil {
 		return removed, err
@@ -104,11 +104,11 @@ func (r *ConfigStore) UnassignApp(app, env, pool string) (bool, error) {
 	return removed, nil
 }
 
-func (r *ConfigStore) CreatePool(name, env string) (bool, error) {
+func (r *Store) CreatePool(name, env string) (bool, error) {
 	return r.backend.CreatePool(env, name)
 }
 
-func (r *ConfigStore) DeletePool(pool, env string) (bool, error) {
+func (r *Store) DeletePool(pool, env string) (bool, error) {
 	assignments, err := r.ListAssignments(env, pool)
 	if err != nil {
 		return false, err
@@ -121,7 +121,7 @@ func (r *ConfigStore) DeletePool(pool, env string) (bool, error) {
 	return r.backend.DeletePool(pool, env)
 }
 
-func (r *ConfigStore) ListPools(env string) (map[string][]string, error) {
+func (r *Store) ListPools(env string) (map[string][]string, error) {
 
 	assignments := make(map[string][]string)
 
@@ -142,7 +142,7 @@ func (r *ConfigStore) ListPools(env string) (map[string][]string, error) {
 	return assignments, nil
 }
 
-func (r *ConfigStore) CreateApp(app, env string) (bool, error) {
+func (r *Store) CreateApp(app, env string) (bool, error) {
 	if exists, err := r.AppExists(app, env); exists || err != nil {
 		return false, err
 	}
@@ -151,7 +151,7 @@ func (r *ConfigStore) CreateApp(app, env string) (bool, error) {
 
 }
 
-func (r *ConfigStore) DeleteApp(app, env string) (bool, error) {
+func (r *Store) DeleteApp(app, env string) (bool, error) {
 
 	pools, err := r.ListPools(env)
 	if err != nil {
@@ -186,15 +186,15 @@ func (r *ConfigStore) DeleteApp(app, env string) (bool, error) {
 	return true, nil
 }
 
-func (r *ConfigStore) ListApps(env string) ([]ServiceConfig, error) {
+func (r *Store) ListApps(env string) ([]ServiceConfig, error) {
 	return r.backend.ListApps(env)
 }
 
-func (r *ConfigStore) ListEnvs() ([]string, error) {
+func (r *Store) ListEnvs() ([]string, error) {
 	return r.backend.ListEnvs()
 }
 
-func (r *ConfigStore) GetApp(app, env string) (*ServiceConfig, error) {
+func (r *Store) GetApp(app, env string) (*ServiceConfig, error) {
 	exists, err := r.AppExists(app, env)
 	if err != nil || !exists {
 		return nil, err
@@ -203,7 +203,7 @@ func (r *ConfigStore) GetApp(app, env string) (*ServiceConfig, error) {
 	return r.backend.GetApp(app, env)
 }
 
-func (r *ConfigStore) UpdateApp(svcCfg *ServiceConfig, env string) (bool, error) {
+func (r *Store) UpdateApp(svcCfg *ServiceConfig, env string) (bool, error) {
 	updated, err := r.backend.UpdateApp(svcCfg, env)
 	if !updated || err != nil {
 		return updated, err

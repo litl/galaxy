@@ -119,7 +119,7 @@ func loadRDSStats(auth aws.Auth, tscChan chan *TSCollection, done *sync.WaitGrou
 		done.Done()
 	}()
 
-	apps, err := configStore.ListApps(env)
+	apps, err := Store.ListApps(env)
 	if err != nil {
 		log.Errorf("ERROR: %s", err)
 		return

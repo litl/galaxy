@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func AppList(configStore *config.ConfigStore, env string) error {
+func AppList(configStore *config.Store, env string) error {
 
 	envs := []string{env}
 
@@ -48,7 +48,7 @@ func AppList(configStore *config.ConfigStore, env string) error {
 	return nil
 }
 
-func AppCreate(configStore *config.ConfigStore, app, env string) error {
+func AppCreate(configStore *config.Store, app, env string) error {
 	// Don't allow creating runtime hosts entries
 	if app == "hosts" {
 		return fmt.Errorf("could not create app: %s", app)
@@ -68,7 +68,7 @@ func AppCreate(configStore *config.ConfigStore, app, env string) error {
 	return nil
 }
 
-func AppDelete(configStore *config.ConfigStore, app, env string) error {
+func AppDelete(configStore *config.Store, app, env string) error {
 
 	// Don't allow deleting runtime hosts entries
 	if app == "hosts" || app == "pools" {
@@ -88,7 +88,7 @@ func AppDelete(configStore *config.ConfigStore, app, env string) error {
 	return nil
 }
 
-func AppDeploy(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceRuntime, app, env, version string, force bool) error {
+func AppDeploy(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env, version string, force bool) error {
 
 	image, err := serviceRuntime.PullImage(version, "", force)
 	if image == nil || err != nil {
@@ -123,15 +123,15 @@ func AppDeploy(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceR
 	return nil
 }
 
-func AppRestart(configStore *config.ConfigStore, app, env string) error {
-	err := configStore.NotifyRestart(app, env)
+func AppRestart(Store *config.Store, app, env string) error {
+	err := Store.NotifyRestart(app, env)
 	if err != nil {
 		return fmt.Errorf("could not restart %s: %s", app, err)
 	}
 	return nil
 }
 
-func AppRun(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceRuntime, app, env string, args []string) error {
+func AppRun(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env string, args []string) error {
 	serviceConfig, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to run command: %s.", err)
@@ -145,7 +145,7 @@ func AppRun(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceRunt
 	return nil
 }
 
-func AppShell(configStore *config.ConfigStore, serviceRuntime *runtime.ServiceRuntime, app, env string) error {
+func AppShell(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env string) error {
 	serviceConfig, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to run command: %s.", err)

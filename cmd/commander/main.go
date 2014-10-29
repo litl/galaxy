@@ -34,7 +34,7 @@ var (
 	buildVersion    string
 	serviceConfigs  []*config.ServiceConfig
 	serviceRegistry *registry.ServiceRegistry
-	configStore     *config.ConfigStore
+	Store           *config.Store
 	serviceRuntime  *runtime.ServiceRuntime
 	workerChans     map[string]chan string
 	wg              sync.WaitGroup
@@ -49,23 +49,23 @@ func initOrDie() {
 	)
 	serviceRegistry.Connect(redisHost)
 
-	configStore = config.NewConfigStore(
+	Store = config.NewStore(
 		"",
 		registry.DefaultTTL,
 		"",
 	)
-	configStore.Connect(redisHost)
+	Store.Connect(redisHost)
 
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
-	apps, err := configStore.ListAssignments(env, pool)
+	apps, err := Store.ListAssignments(env, pool)
 	if err != nil {
 		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s", env, pool, err)
 	}
 
 	workerChans = make(map[string]chan string)
 	for _, app := range apps {
-		serviceConfig, err := configStore.GetApp(app, env)
+		serviceConfig, err := Store.GetApp(app, env)
 		if err != nil {
 			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s", env, pool, err)
 		}
@@ -135,7 +135,7 @@ func startService(serviceConfig *config.ServiceConfig, logStatus bool) {
 }
 
 func appAssigned(app string) (bool, error) {
-	assignments, err := configStore.ListAssignments(env, pool)
+	assignments, err := Store.ListAssignments(env, pool)
 	if err != nil {
 		return false, err
 	}
@@ -171,7 +171,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			serviceConfig, err := configStore.GetApp(app, env)
+			serviceConfig, err := Store.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
@@ -215,7 +215,7 @@ func restartContainers(app string, cmdChan chan string) {
 			logOnce = false
 		case <-ticker.C:
 
-			serviceConfig, err := configStore.GetApp(app, env)
+			serviceConfig, err := Store.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				continue
@@ -412,7 +412,7 @@ func main() {
 			appFs.PrintDefaults()
 		}
 		appFs.Parse(flag.Args()[1:])
-		err := commander.AppList(configStore, env)
+		err := commander.AppList(Store, env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -431,7 +431,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppCreate(configStore, appFs.Args()[0], env)
+		err := commander.AppCreate(Store, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -451,7 +451,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppDelete(configStore, appFs.Args()[0], env)
+		err := commander.AppDelete(Store, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -473,7 +473,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppDeploy(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1], force)
+		err := commander.AppDeploy(Store, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1], force)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -493,7 +493,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppRestart(configStore, appFs.Args()[0], env)
+		err := commander.AppRestart(Store, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -513,7 +513,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppRun(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1:])
+		err := commander.AppRun(Store, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1:])
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -533,7 +533,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppShell(configStore, serviceRuntime, appFs.Args()[0], env)
+		err := commander.AppShell(Store, serviceRuntime, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -599,7 +599,7 @@ func main() {
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
-		restartChan := configStore.Watch(env, cancelChan)
+		restartChan := Store.Watch(env, cancelChan)
 		monitorService(restartChan)
 	}
 
