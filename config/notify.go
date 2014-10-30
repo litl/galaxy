@@ -54,7 +54,7 @@ func (r *Store) checkForChanges(env string) {
 					lastVersion[changedConfig.Name], changedConfig.ID())
 				lastVersion[changedConfig.Name] = changedConfig.ID()
 				restartChan <- &ConfigChange{
-					AppConfig: &changeCopy,
+					AppConfig: changeCopy,
 				}
 			}
 		}
@@ -92,7 +92,7 @@ func (r *Store) restartApp(app, env string) {
 
 func (r *Store) NotifyRestart(app, env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
+	_, err := r.Backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (r *Store) NotifyRestart(app, env string) error {
 
 func (r *Store) NotifyEnvChanged(env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
+	_, err := r.Backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (r *Store) NotifyEnvChanged(env string) error {
 
 func (r *Store) subscribeChanges(env string) {
 
-	msgs := r.backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
+	msgs := r.Backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
 	for {
 
 		msg := <-msgs

@@ -8,7 +8,7 @@ import (
 func NewTestStore() (*Store, *MemoryBackend) {
 	r := &Store{}
 	b := NewMemoryBackend()
-	r.backend = b
+	r.Backend = b
 	return r, b
 }
 

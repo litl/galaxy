@@ -13,7 +13,7 @@ type Value struct {
 
 type MemoryBackend struct {
 	maps        map[string]map[string]string
-	apps        map[string][]AppConfig // env -> []app
+	apps        map[string][]*AppConfig // env -> []app
 	assignments map[string][]string
 
 	AppExistsFunc       func(app, env string) (bool, error)
@@ -29,6 +29,7 @@ type MemoryBackend struct {
 	DeletePoolFunc      func(env, pool string) (bool, error)
 	ListPoolsFunc       func(env string) ([]string, error)
 	ListEnvsFunc        func() ([]string, error)
+	ListHostsFunc       func(env, pool string) ([]HostInfo, error)
 
 	MembersFunc      func(key string) ([]string, error)
 	KeysFunc         func(key string) ([]string, error)
@@ -41,7 +42,7 @@ type MemoryBackend struct {
 func NewMemoryBackend() *MemoryBackend {
 	return &MemoryBackend{
 		maps:        make(map[string]map[string]string),
-		apps:        make(map[string][]AppConfig),
+		apps:        make(map[string][]*AppConfig),
 		assignments: make(map[string][]string),
 	}
 }
@@ -66,22 +67,26 @@ func (r *MemoryBackend) CreateApp(app, env string) (bool, error) {
 	}
 
 	if exists, err := r.AppExists(app, env); !exists && err == nil {
-		r.apps[env] = append(r.apps[env], AppConfig{
-			Name: app,
-		})
+		r.apps[env] = append(r.apps[env], NewAppConfig(app, ""))
 		return true, nil
 	}
 
 	return false, nil
 }
 
-func (r *MemoryBackend) ListApps(env string) ([]AppConfig, error) {
+func (r *MemoryBackend) ListApps(env string) ([]*AppConfig, error) {
 	return r.apps[env], nil
 }
 
 func (r *MemoryBackend) GetApp(app, env string) (*AppConfig, error) {
 	if r.GetAppFunc != nil {
 		return r.GetAppFunc(app, env)
+	}
+
+	for _, cfg := range r.apps[env] {
+		if cfg.Name == app {
+			return cfg, nil
+		}
 	}
 	return nil, nil
 }
@@ -97,7 +102,15 @@ func (r *MemoryBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
 	if r.DeleteAppFunc != nil {
 		return r.DeleteAppFunc(svcCfg, env)
 	}
-	return false, nil
+
+	cfgs := []*AppConfig{}
+	for _, cfg := range r.apps[env] {
+		if cfg.Name != svcCfg.Name {
+			cfgs = append(cfgs, cfg)
+		}
+	}
+	r.apps[env] = cfgs
+	return true, nil
 }
 
 func (r *MemoryBackend) AssignApp(app, env, pool string) (bool, error) {
@@ -316,6 +329,9 @@ func (r *MemoryBackend) UpdateHost(env, pool string, host HostInfo) error {
 }
 
 func (r *MemoryBackend) ListHosts(env, pool string) ([]HostInfo, error) {
+	if r.ListHostsFunc != nil {
+		return r.ListHostsFunc(env, pool)
+	}
 	panic("not implemented")
 }
 

@@ -4,7 +4,7 @@ type Backend interface {
 	// Apps
 	AppExists(app, env string) (bool, error)
 	CreateApp(app, env string) (bool, error)
-	ListApps(env string) ([]AppConfig, error)
+	ListApps(env string) ([]*AppConfig, error)
 	GetApp(app, env string) (*AppConfig, error)
 	UpdateApp(svcCfg *AppConfig, env string) (bool, error)
 	DeleteApp(svcCfg *AppConfig, env string) (bool, error)

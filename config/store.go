@@ -25,7 +25,7 @@ type HostInfo struct {
 }
 
 type Store struct {
-	backend      Backend
+	Backend      Backend
 	HostIP       string
 	Hostname     string
 	TTL          uint64
@@ -49,10 +49,10 @@ func NewStore(hostIp string, ttl uint64, sshAddr string) *Store {
 func (r *Store) Connect(redisHost string) {
 
 	r.redisHost = redisHost
-	r.backend = &RedisBackend{
+	r.Backend = &RedisBackend{
 		RedisHost: redisHost,
 	}
-	r.backend.Connect()
+	r.Backend.Connect()
 }
 
 func (r *Store) PoolExists(env, pool string) (bool, error) {
@@ -65,11 +65,11 @@ func (r *Store) PoolExists(env, pool string) (bool, error) {
 }
 
 func (r *Store) AppExists(app, env string) (bool, error) {
-	return r.backend.AppExists(app, env)
+	return r.Backend.AppExists(app, env)
 }
 
 func (r *Store) ListAssignments(env, pool string) ([]string, error) {
-	return r.backend.ListAssignments(env, pool)
+	return r.Backend.ListAssignments(env, pool)
 }
 
 func (r *Store) AssignApp(app, env, pool string) (bool, error) {
@@ -81,7 +81,7 @@ func (r *Store) AssignApp(app, env, pool string) (bool, error) {
 		return false, errors.New(fmt.Sprintf("pool %s does not exist", pool))
 	}
 
-	added, err := r.backend.AssignApp(app, env, pool)
+	added, err := r.Backend.AssignApp(app, env, pool)
 	if err != nil {
 		return false, err
 	}
@@ -95,7 +95,7 @@ func (r *Store) AssignApp(app, env, pool string) (bool, error) {
 }
 
 func (r *Store) UnassignApp(app, env, pool string) (bool, error) {
-	removed, err := r.backend.UnassignApp(app, env, pool)
+	removed, err := r.Backend.UnassignApp(app, env, pool)
 	if !removed || err != nil {
 		return removed, err
 	}
@@ -109,7 +109,7 @@ func (r *Store) UnassignApp(app, env, pool string) (bool, error) {
 }
 
 func (r *Store) CreatePool(name, env string) (bool, error) {
-	return r.backend.CreatePool(env, name)
+	return r.Backend.CreatePool(env, name)
 }
 
 func (r *Store) DeletePool(pool, env string) (bool, error) {
@@ -122,11 +122,11 @@ func (r *Store) DeletePool(pool, env string) (bool, error) {
 		return false, nil
 	}
 
-	return r.backend.DeletePool(pool, env)
+	return r.Backend.DeletePool(pool, env)
 }
 
 func (r *Store) ListPools(env string) ([]string, error) {
-	return r.backend.ListPools(env)
+	return r.Backend.ListPools(env)
 }
 
 func (r *Store) CreateApp(app, env string) (bool, error) {
@@ -134,7 +134,7 @@ func (r *Store) CreateApp(app, env string) (bool, error) {
 		return false, err
 	}
 
-	return r.backend.CreateApp(app, env)
+	return r.Backend.CreateApp(app, env)
 
 }
 
@@ -155,7 +155,7 @@ func (r *Store) DeleteApp(app, env string) (bool, error) {
 		}
 	}
 
-	svcCfg, err := r.backend.GetApp(app, env)
+	svcCfg, err := r.Backend.GetApp(app, env)
 	if err != nil {
 		return false, err
 	}
@@ -164,7 +164,7 @@ func (r *Store) DeleteApp(app, env string) (bool, error) {
 		return true, nil
 	}
 
-	deleted, err := r.backend.DeleteApp(svcCfg, env)
+	deleted, err := r.Backend.DeleteApp(svcCfg, env)
 	if !deleted || err != nil {
 		return deleted, err
 	}
@@ -177,12 +177,12 @@ func (r *Store) DeleteApp(app, env string) (bool, error) {
 	return true, nil
 }
 
-func (r *Store) ListApps(env string) ([]AppConfig, error) {
-	return r.backend.ListApps(env)
+func (r *Store) ListApps(env string) ([]*AppConfig, error) {
+	return r.Backend.ListApps(env)
 }
 
 func (r *Store) ListEnvs() ([]string, error) {
-	return r.backend.ListEnvs()
+	return r.Backend.ListEnvs()
 }
 
 func (r *Store) GetApp(app, env string) (*AppConfig, error) {
@@ -191,11 +191,11 @@ func (r *Store) GetApp(app, env string) (*AppConfig, error) {
 		return nil, err
 	}
 
-	return r.backend.GetApp(app, env)
+	return r.Backend.GetApp(app, env)
 }
 
 func (r *Store) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
-	updated, err := r.backend.UpdateApp(svcCfg, env)
+	updated, err := r.Backend.UpdateApp(svcCfg, env)
 	if !updated || err != nil {
 		return updated, err
 	}
@@ -208,13 +208,13 @@ func (r *Store) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 }
 
 func (r *Store) UpdateHost(env, pool string, host HostInfo) error {
-	return r.backend.UpdateHost(env, pool, host)
+	return r.Backend.UpdateHost(env, pool, host)
 }
 
 func (r *Store) ListHosts(env, pool string) ([]HostInfo, error) {
-	return r.backend.ListHosts(env, pool)
+	return r.Backend.ListHosts(env, pool)
 }
 
 func (r *Store) DeleteHost(env, pool string, host HostInfo) error {
-	return r.backend.DeleteHost(env, pool, host)
+	return r.Backend.DeleteHost(env, pool, host)
 }

@@ -31,7 +31,7 @@ func (r *RedisBackend) CreateApp(app, env string) (bool, error) {
 	return r.UpdateApp(emptyConfig, env)
 }
 
-func (r *RedisBackend) ListApps(env string) ([]AppConfig, error) {
+func (r *RedisBackend) ListApps(env string) ([]*AppConfig, error) {
 	// TODO: convert to scan
 	apps, err := r.Keys(path.Join(env, "*", "environment"))
 	if err != nil {
@@ -39,7 +39,7 @@ func (r *RedisBackend) ListApps(env string) ([]AppConfig, error) {
 	}
 
 	// TODO: is it OK to error out early?
-	var appList []AppConfig
+	var appList []*AppConfig
 	for _, app := range apps {
 		parts := strings.Split(app, "/")
 
@@ -58,7 +58,7 @@ func (r *RedisBackend) ListApps(env string) ([]AppConfig, error) {
 			return nil, err
 		}
 
-		appList = append(appList, *cfg)
+		appList = append(appList, cfg)
 	}
 
 	return appList, nil
