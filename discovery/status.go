@@ -20,8 +20,8 @@ func status(c *cli.Context) {
 	}
 
 	outputBuffer.Log(strings.Join([]string{
-		"CONTAINER ID", "IMAGE",
-		"EXTERNAL", "INTERNAL", "CREATED", "EXPIRES",
+		"APP", "CONTAINER ID", "IMAGE",
+		"EXTERNAL", "INTERNAL", "PORT", "CREATED", "EXPIRES",
 	}, " | "))
 
 	for _, container := range containers {
@@ -36,10 +36,12 @@ func status(c *cli.Context) {
 
 		if registered != nil {
 			outputBuffer.Log(strings.Join([]string{
+				registered.Name,
 				registered.ContainerID[0:12],
 				registered.Image,
 				registered.ExternalAddr(),
 				registered.InternalAddr(),
+				registered.Port,
 				utils.HumanDuration(time.Now().UTC().Sub(registered.StartedAt)) + " ago",
 				"In " + utils.HumanDuration(registered.Expires.Sub(time.Now().UTC())),
 			}, " | "))

@@ -39,8 +39,8 @@ func getShuttleConfig(c *cli.Context) (*shuttle.Config, error) {
 	}
 
 	return config, nil
-
 }
+
 func pruneShuttleBackends(c *cli.Context) {
 	config, err := getShuttleConfig(c)
 	if err != nil {
@@ -54,16 +54,24 @@ func pruneShuttleBackends(c *cli.Context) {
 		return
 	}
 
+	containers, err := serviceRuntime.ManagedContainers()
+	if err != nil {
+		log.Errorf("ERROR: Unable to list galaxy containers: %s", err)
+		return
+	}
+
 	for _, service := range config.Services {
 
 		// Remove services that no longer exist
-		svcCfg, err := configStore.GetServiceConfig(service.Name, utils.GalaxyEnv(c))
-		if err != nil {
-			log.Errorf("ERROR: Unable to get service config for %s: %s", service.Name, err)
-			return
+		appRunning := false
+		for _, container := range containers {
+			if serviceRuntime.EnvFor(container)["GALAXY_APP"] == service.Name {
+				appRunning = true
+				break
+			}
 		}
 
-		if svcCfg == nil {
+		if !appRunning {
 			err := unregisterShuttleService(c, &service)
 			if err != nil {
 				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", service.Name, err)

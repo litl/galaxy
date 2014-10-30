@@ -3,10 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
-	"path"
-	"strings"
 
-	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -23,8 +20,8 @@ const (
 	DefaultTTL = 60
 )
 
-type ConfigStore struct {
-	backend      ConfigBackend
+type Store struct {
+	backend      Backend
 	HostIP       string
 	Hostname     string
 	TTL          uint64
@@ -34,8 +31,8 @@ type ConfigStore struct {
 	redisHost    string
 }
 
-func NewConfigStore(hostIp string, ttl uint64, sshAddr string) *ConfigStore {
-	return &ConfigStore{
+func NewStore(hostIp string, ttl uint64, sshAddr string) *Store {
+	return &Store{
 		HostIP:      hostIp,
 		TTL:         ttl,
 		HostSSHAddr: sshAddr,
@@ -45,7 +42,7 @@ func NewConfigStore(hostIp string, ttl uint64, sshAddr string) *ConfigStore {
 }
 
 // Build the Redis Pool
-func (r *ConfigStore) Connect(redisHost string) {
+func (r *Store) Connect(redisHost string) {
 
 	r.redisHost = redisHost
 	r.backend = &RedisBackend{
@@ -54,19 +51,7 @@ func (r *ConfigStore) Connect(redisHost string) {
 	r.backend.Connect()
 }
 
-// TODO: log or return error?
-func (r *ConfigStore) CountInstances(app, env string) int {
-	// TODO: convert to SCAN
-	// TODO: Should this just sum hosts? (this counts all services on all hosts)
-	matches, err := r.backend.Keys(path.Join(env, "*", "hosts", "*", app))
-	if err != nil {
-		log.Printf("ERROR: could not count instances - %s\n", err)
-	}
-
-	return len(matches)
-}
-
-func (r *ConfigStore) PoolExists(env, pool string) (bool, error) {
+func (r *Store) PoolExists(env, pool string) (bool, error) {
 	pools, err := r.ListPools(env)
 	if err != nil {
 		return false, err
@@ -75,19 +60,15 @@ func (r *ConfigStore) PoolExists(env, pool string) (bool, error) {
 	return ok, nil
 }
 
-func (r *ConfigStore) AppExists(app, env string) (bool, error) {
-	matches, err := r.backend.Keys(path.Join(env, app, "*"))
-	if err != nil {
-		return false, err
-	}
-	return len(matches) > 0, nil
+func (r *Store) AppExists(app, env string) (bool, error) {
+	return r.backend.AppExists(app, env)
 }
 
-func (r *ConfigStore) ListAssignments(env, pool string) ([]string, error) {
-	return r.backend.Members(path.Join(env, "pools", pool))
+func (r *Store) ListAssignments(env, pool string) ([]string, error) {
+	return r.backend.ListAssignments(env, pool)
 }
 
-func (r *ConfigStore) AssignApp(app, env, pool string) (bool, error) {
+func (r *Store) AssignApp(app, env, pool string) (bool, error) {
 	if exists, err := r.AppExists(app, env); !exists || err != nil {
 		return false, err
 	}
@@ -96,57 +77,38 @@ func (r *ConfigStore) AssignApp(app, env, pool string) (bool, error) {
 		return false, errors.New(fmt.Sprintf("pool %s does not exist", pool))
 	}
 
-	added, err := r.backend.AddMember(path.Join(env, "pools", pool), app)
+	added, err := r.backend.AssignApp(app, env, pool)
 	if err != nil {
 		return false, err
 	}
 
 	err = r.NotifyRestart(app, env)
 	if err != nil {
-		return added == 1, err
+		return added, err
 	}
 
-	return added == 1, nil
+	return added, nil
 }
 
-func (r *ConfigStore) UnassignApp(app, env, pool string) (bool, error) {
-	//FIXME: Scan keys to make sure there are no deploye apps before
-	//deleting the pool.
-
-	//FIXME: Shutdown the associated auto-scaling groups tied to the
-	//pool
-
-	removed, err := r.backend.RemoveMember(path.Join(env, "pools", pool), app)
-	if removed == 0 || err != nil {
-		return false, err
+func (r *Store) UnassignApp(app, env, pool string) (bool, error) {
+	removed, err := r.backend.UnassignApp(app, env, pool)
+	if !removed || err != nil {
+		return removed, err
 	}
 
 	err = r.NotifyRestart(app, env)
 	if err != nil {
-		return removed == 1, err
+		return removed, err
 	}
 
-	return removed == 1, nil
+	return removed, nil
 }
 
-func (r *ConfigStore) CreatePool(name, env string) (bool, error) {
-	//FIXME: Create an associated auto-scaling groups tied to the
-	//pool
-
-	added, err := r.backend.AddMember(path.Join(env, "pools", "*"), name)
-	if err != nil {
-		return false, err
-	}
-	return added == 1, nil
+func (r *Store) CreatePool(name, env string) (bool, error) {
+	return r.backend.CreatePool(env, name)
 }
 
-func (r *ConfigStore) DeletePool(pool, env string) (bool, error) {
-	//FIXME: Scan keys to make sure there are no deploye apps before
-	//deleting the pool.
-
-	//FIXME: Shutdown the associated auto-scaling groups tied to the
-	//pool
-
+func (r *Store) DeletePool(pool, env string) (bool, error) {
 	assignments, err := r.ListAssignments(env, pool)
 	if err != nil {
 		return false, err
@@ -156,17 +118,14 @@ func (r *ConfigStore) DeletePool(pool, env string) (bool, error) {
 		return false, nil
 	}
 
-	removed, err := r.backend.RemoveMember(path.Join(env, "pools", "*"), pool)
-	if err != nil {
-		return false, err
-	}
-	return removed == 1, nil
+	return r.backend.DeletePool(pool, env)
 }
 
-func (r *ConfigStore) ListPools(env string) (map[string][]string, error) {
+func (r *Store) ListPools(env string) (map[string][]string, error) {
+
 	assignments := make(map[string][]string)
 
-	matches, err := r.backend.Members(path.Join(env, "pools", "*"))
+	matches, err := r.backend.ListPools(env)
 	if err != nil {
 		return assignments, err
 	}
@@ -183,18 +142,16 @@ func (r *ConfigStore) ListPools(env string) (map[string][]string, error) {
 	return assignments, nil
 }
 
-func (r *ConfigStore) CreateApp(app, env string) (bool, error) {
+func (r *Store) CreateApp(app, env string) (bool, error) {
 	if exists, err := r.AppExists(app, env); exists || err != nil {
 		return false, err
 	}
 
-	emptyConfig := NewServiceConfig(app, "")
-	emptyConfig.environmentVMap.Set("ENV", env)
+	return r.backend.CreateApp(app, env)
 
-	return r.SetServiceConfig(emptyConfig, env)
 }
 
-func (r *ConfigStore) DeleteApp(app, env string) (bool, error) {
+func (r *Store) DeleteApp(app, env string) (bool, error) {
 
 	pools, err := r.ListPools(env)
 	if err != nil {
@@ -207,7 +164,7 @@ func (r *ConfigStore) DeleteApp(app, env string) (bool, error) {
 		}
 	}
 
-	svcCfg, err := r.GetServiceConfig(app, env)
+	svcCfg, err := r.backend.GetApp(app, env)
 	if err != nil {
 		return false, err
 	}
@@ -216,54 +173,45 @@ func (r *ConfigStore) DeleteApp(app, env string) (bool, error) {
 		return true, nil
 	}
 
-	return r.DeleteServiceConfig(svcCfg, env)
+	deleted, err := r.backend.DeleteApp(svcCfg, env)
+	if !deleted || err != nil {
+		return deleted, err
+	}
+
+	err = r.NotifyEnvChanged(env)
+	if err != nil {
+		return deleted, err
+	}
+
+	return true, nil
 }
 
-func (r *ConfigStore) ListApps(env string) ([]ServiceConfig, error) {
-	// TODO: convert to scan
-	apps, err := r.backend.Keys(path.Join(env, "*", "environment"))
-	if err != nil {
+func (r *Store) ListApps(env string) ([]AppConfig, error) {
+	return r.backend.ListApps(env)
+}
+
+func (r *Store) ListEnvs() ([]string, error) {
+	return r.backend.ListEnvs()
+}
+
+func (r *Store) GetApp(app, env string) (*AppConfig, error) {
+	exists, err := r.AppExists(app, env)
+	if err != nil || !exists {
 		return nil, err
 	}
 
-	// TODO: is it OK to error out early?
-	var appList []ServiceConfig
-	for _, app := range apps {
-		parts := strings.Split(app, "/")
-
-		// app entries should be 3 parts, /env/pool/app
-		if len(parts) != 3 {
-			continue
-		}
-
-		// we don't want host keys
-		if parts[1] == "hosts" {
-			continue
-		}
-
-		cfg, err := r.GetServiceConfig(parts[1], env)
-		if err != nil {
-			return nil, err
-		}
-
-		appList = append(appList, *cfg)
-	}
-
-	return appList, nil
+	return r.backend.GetApp(app, env)
 }
 
-func (r *ConfigStore) ListEnvs() ([]string, error) {
-	envs := []string{}
-	apps, err := r.backend.Keys(path.Join("*", "*", "environment"))
-	if err != nil {
-		return nil, err
+func (r *Store) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
+	updated, err := r.backend.UpdateApp(svcCfg, env)
+	if !updated || err != nil {
+		return updated, err
 	}
 
-	for _, app := range apps {
-		parts := strings.Split(app, "/")
-		if !utils.StringInSlice(parts[0], envs) {
-			envs = append(envs, parts[0])
-		}
+	err = r.NotifyEnvChanged(env)
+	if err != nil {
+		return false, err
 	}
-	return envs, nil
+	return true, nil
 }

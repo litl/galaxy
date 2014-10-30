@@ -29,7 +29,7 @@ var (
 	httpClient      *http.Client
 	wg              sync.WaitGroup
 	serviceRegistry *registry.ServiceRegistry
-	configStore     *config.ConfigStore
+	Store           *config.Store
 )
 
 type sliceVar []string
@@ -80,13 +80,13 @@ func main() {
 
 	serviceRegistry.Connect(redisHost)
 
-	configStore = config.NewConfigStore(
+	Store = config.NewStore(
 		"",
 		registry.DefaultTTL,
 		"",
 	)
 
-	configStore.Connect(redisHost)
+	Store.Connect(redisHost)
 
 	stats = NewTSCollection()
 	tscChan := make(chan *TSCollection, 100)

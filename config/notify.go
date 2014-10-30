@@ -8,18 +8,18 @@ import (
 )
 
 type ConfigChange struct {
-	ServiceConfig *ServiceConfig
-	Restart       bool
-	Error         error
+	AppConfig *AppConfig
+	Restart   bool
+	Error     error
 }
 
 var restartChan chan *ConfigChange
 
-func (r *ConfigStore) CheckForChangesNow() {
+func (r *Store) CheckForChangesNow() {
 	r.pollCh <- true
 }
 
-func (r *ConfigStore) checkForChanges(env string) {
+func (r *Store) checkForChanges(env string) {
 	lastVersion := make(map[string]int64)
 	for {
 		serviceConfigs, err := r.ListApps(env)
@@ -54,14 +54,14 @@ func (r *ConfigStore) checkForChanges(env string) {
 					lastVersion[changedConfig.Name], changedConfig.ID())
 				lastVersion[changedConfig.Name] = changedConfig.ID()
 				restartChan <- &ConfigChange{
-					ServiceConfig: &changeCopy,
+					AppConfig: &changeCopy,
 				}
 			}
 		}
 	}
 }
 
-func (r *ConfigStore) checkForChangePeriodically(stop chan struct{}) {
+func (r *Store) checkForChangePeriodically(stop chan struct{}) {
 	// TODO: default polling interval
 	ticker := time.NewTicker(10 * time.Second)
 	for {
@@ -75,8 +75,8 @@ func (r *ConfigStore) checkForChangePeriodically(stop chan struct{}) {
 	}
 }
 
-func (r *ConfigStore) restartApp(app, env string) {
-	serviceConfig, err := r.GetServiceConfig(app, env)
+func (r *Store) restartApp(app, env string) {
+	serviceConfig, err := r.GetApp(app, env)
 	if err != nil {
 		restartChan <- &ConfigChange{
 			Error: err,
@@ -85,12 +85,12 @@ func (r *ConfigStore) restartApp(app, env string) {
 	}
 
 	restartChan <- &ConfigChange{
-		Restart:       true,
-		ServiceConfig: serviceConfig,
+		Restart:   true,
+		AppConfig: serviceConfig,
 	}
 }
 
-func (r *ConfigStore) NotifyRestart(app, env string) error {
+func (r *Store) NotifyRestart(app, env string) error {
 	// TODO: received count ignored, use it somehow?
 	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
 	if err != nil {
@@ -99,7 +99,7 @@ func (r *ConfigStore) NotifyRestart(app, env string) error {
 	return nil
 }
 
-func (r *ConfigStore) notifyChanged(env string) error {
+func (r *Store) NotifyEnvChanged(env string) error {
 	// TODO: received count ignored, use it somehow?
 	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
 	if err != nil {
@@ -108,7 +108,7 @@ func (r *ConfigStore) notifyChanged(env string) error {
 	return nil
 }
 
-func (r *ConfigStore) subscribeChanges(env string) {
+func (r *Store) subscribeChanges(env string) {
 
 	msgs := r.backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
 	for {
@@ -126,7 +126,7 @@ func (r *ConfigStore) subscribeChanges(env string) {
 	}
 }
 
-func (r *ConfigStore) Watch(env string, stop chan struct{}) chan *ConfigChange {
+func (r *Store) Watch(env string, stop chan struct{}) chan *ConfigChange {
 	restartChan = make(chan *ConfigChange, 10)
 	go r.checkForChanges(env)
 	go r.checkForChangePeriodically(stop)
