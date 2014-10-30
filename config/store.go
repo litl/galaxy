@@ -20,6 +20,10 @@ const (
 	DefaultTTL = 60
 )
 
+type HostInfo struct {
+	HostIP string
+}
+
 type Store struct {
 	backend      Backend
 	HostIP       string
@@ -56,8 +60,8 @@ func (r *Store) PoolExists(env, pool string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, ok := pools[pool]
-	return ok, nil
+
+	return utils.StringInSlice(pool, pools), nil
 }
 
 func (r *Store) AppExists(app, env string) (bool, error) {
@@ -121,25 +125,8 @@ func (r *Store) DeletePool(pool, env string) (bool, error) {
 	return r.backend.DeletePool(pool, env)
 }
 
-func (r *Store) ListPools(env string) (map[string][]string, error) {
-
-	assignments := make(map[string][]string)
-
-	matches, err := r.backend.ListPools(env)
-	if err != nil {
-		return assignments, err
-	}
-
-	for _, pool := range matches {
-
-		members, err := r.ListAssignments(env, pool)
-		if err != nil {
-			return assignments, err
-		}
-		assignments[pool] = members
-	}
-
-	return assignments, nil
+func (r *Store) ListPools(env string) ([]string, error) {
+	return r.backend.ListPools(env)
 }
 
 func (r *Store) CreateApp(app, env string) (bool, error) {
@@ -158,7 +145,11 @@ func (r *Store) DeleteApp(app, env string) (bool, error) {
 		return false, err
 	}
 
-	for pool, assignments := range pools {
+	for _, pool := range pools {
+		assignments, err := r.ListAssignments(env, pool)
+		if err != nil {
+			return false, err
+		}
 		if utils.StringInSlice(app, assignments) {
 			return false, errors.New(fmt.Sprintf("app is assigned to pool %s", pool))
 		}
@@ -214,4 +205,16 @@ func (r *Store) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (r *Store) UpdateHost(env, pool string, host HostInfo) error {
+	return r.backend.UpdateHost(env, pool, host)
+}
+
+func (r *Store) ListHosts(env, pool string) ([]HostInfo, error) {
+	return r.backend.ListHosts(env, pool)
+}
+
+func (r *Store) DeleteHost(env, pool string, host HostInfo) error {
+	return r.backend.DeleteHost(env, pool, host)
 }

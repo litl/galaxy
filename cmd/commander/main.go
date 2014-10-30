@@ -6,9 +6,12 @@ import (
 	"fmt"
 	golog "log"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
 	"time"
+
+	"syscall"
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander"
@@ -26,6 +29,7 @@ var (
 	env             string
 	pool            string
 	loop            bool
+	hostIP          string
 	shuttleHost     string
 	statsdHost      string
 	debug           bool
@@ -72,6 +76,10 @@ func initOrDie() {
 
 		workerChans[serviceConfig.Name] = make(chan string)
 	}
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM)
+	go deregisterHost(signals)
 }
 
 func pullImageAsync(serviceConfig config.AppConfig, errChan chan error) {
@@ -132,6 +140,23 @@ func startService(serviceConfig *config.AppConfig, logStatus bool) {
 	if err != nil {
 		log.Errorf("ERROR: Could not stop containers: %s", err)
 	}
+}
+
+func heartbeatHost() {
+	for {
+		configStore.UpdateHost(env, pool, config.HostInfo{
+			HostIP: hostIP,
+		})
+		time.Sleep(45 * time.Second)
+	}
+}
+
+func deregisterHost(signals chan os.Signal) {
+	<-signals
+	configStore.DeleteHost(env, pool, config.HostInfo{
+		HostIP: hostIP,
+	})
+	os.Exit(0)
 }
 
 func appAssigned(app string) (bool, error) {
@@ -336,6 +361,7 @@ func main() {
 	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
+	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
 	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
 	flag.StringVar(&statsdHost, "statsdAddr", utils.GetEnv("GALAXY_STATSD_HOST", ""), "IP where containers can reach a statsd service. Defaults to docker0 IP:8125.")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
@@ -356,6 +382,7 @@ func main() {
 		println("   stop            Stops one or more apps")
 		println("   runtime         List container runtime policies")
 		println("   runtime:set     Set container runtime policies")
+		println("   hosts           List hosts in an env and pool")
 		println("\nOptions:\n")
 		flag.PrintDefaults()
 	}
@@ -581,6 +608,24 @@ func main() {
 			log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
 		}
 		return
+	case "hosts":
+		hostFs := flag.NewFlagSet("hosts", flag.ExitOnError)
+		hostFs.Usage = func() {
+			println("Usage: commander hosts\n")
+			println("    List hosts in an env and pool\n")
+			println("Options:\n")
+			hostFs.PrintDefaults()
+		}
+		err := hostFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		err = commander.HostsList(configStore, env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
 	case "runtime":
 		runtimeFs := flag.NewFlagSet("runtime", flag.ExitOnError)
 		runtimeFs.Usage = func() {
@@ -655,6 +700,9 @@ func main() {
 	}
 
 	if loop {
+
+		wg.Add(1)
+		go heartbeatHost()
 
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?

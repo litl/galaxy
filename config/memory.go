@@ -310,3 +310,15 @@ func (r *MemoryBackend) DeleteMulti(key string, fields ...string) (int, error) {
 	}
 	return len(fields), nil
 }
+
+func (r *MemoryBackend) UpdateHost(env, pool string, host HostInfo) error {
+	panic("not implemented")
+}
+
+func (r *MemoryBackend) ListHosts(env, pool string) ([]HostInfo, error) {
+	panic("not implemented")
+}
+
+func (r *MemoryBackend) DeleteHost(env, pool string, host HostInfo) error {
+	panic("not implemented")
+}

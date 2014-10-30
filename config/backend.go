@@ -20,6 +20,11 @@ type Backend interface {
 	// Envs
 	ListEnvs() ([]string, error)
 
+	// Host
+	UpdateHost(env, pool string, host HostInfo) error
+	ListHosts(env, pool string) ([]HostInfo, error)
+	DeleteHost(env, pool string, host HostInfo) error
+
 	//Pub/Sub
 	Subscribe(key string) chan string
 	Notify(key, value string) (int, error)

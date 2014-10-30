@@ -530,10 +530,16 @@ func poolList(c *cli.Context) {
 			continue
 		}
 
-		for name, assigments := range pools {
+		for _, pool := range pools {
+
+			assigments, err := configStore.ListAssignments(env, pool)
+			if err != nil {
+				log.Fatalf("ERROR: cannot list pool assignments: %s", err)
+			}
+
 			columns = append(columns, strings.Join([]string{
 				env,
-				name,
+				pool,
 				strings.Join(assigments, ",")}, " | "))
 		}
 

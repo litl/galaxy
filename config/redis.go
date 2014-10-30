@@ -547,3 +547,58 @@ func (r *RedisBackend) DeleteMulti(key string, fields ...string) (int, error) {
 	return redis.Int(conn.Do("HDEL", redisArgs...))
 
 }
+
+func (r *RedisBackend) DeleteHost(env, pool string, host HostInfo) error {
+	key := path.Join(env, pool, "hosts", host.HostIP, "info")
+	_, err := r.Delete(key)
+	return err
+}
+
+func (r *RedisBackend) UpdateHost(env, pool string, host HostInfo) error {
+	key := path.Join(env, pool, "hosts", host.HostIP, "info")
+	existing := utils.NewVersionedMap()
+
+	err := r.LoadVMap(key, existing)
+	if err != nil {
+		return err
+	}
+
+	save := false
+	if existing.Get("HostIP") != host.HostIP {
+		existing.Set("HostIP", host.HostIP)
+		save = true
+	}
+
+	if save {
+		err = r.SaveVMap(key, existing)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = r.Expire(key, DefaultTTL)
+	return err
+}
+
+func (r *RedisBackend) ListHosts(env, pool string) ([]HostInfo, error) {
+	key := path.Join(env, pool, "hosts", "*", "info")
+	keys, err := r.Keys(key)
+	if err != nil {
+		return nil, err
+	}
+
+	hosts := []HostInfo{}
+
+	for _, k := range keys {
+		existing := utils.NewVersionedMap()
+
+		err := r.LoadVMap(k, existing)
+		if err != nil {
+			return nil, err
+		}
+		hosts = append(hosts, HostInfo{
+			HostIP: existing.Get("HostIP"),
+		})
+	}
+	return hosts, nil
+}
