@@ -100,6 +100,12 @@ func (r *RedisBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 		return false, err
 	}
 
+	err = r.SaveVMap(path.Join(env, svcCfg.Name, "runtime"),
+		svcCfg.runtimeVMap)
+
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -120,6 +126,10 @@ func (r *RedisBackend) GetApp(app, env string) (*AppConfig, error) {
 		return nil, err
 	}
 
+	err = r.LoadVMap(path.Join(env, app, "runtime"), svcCfg.runtimeVMap)
+	if err != nil {
+		return nil, err
+	}
 	return svcCfg, nil
 }
 
@@ -132,7 +142,7 @@ func (r *RedisBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
 
 	deletedOne = deletedOne || deleted == 1
 
-	for _, k := range []string{"environment", "version", "ports"} {
+	for _, k := range []string{"environment", "version", "ports", "runtime"} {
 		deleted, err = r.Delete(path.Join(env, svcCfg.Name, k))
 		if err != nil {
 			return false, err
