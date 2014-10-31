@@ -272,8 +272,10 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfi
 			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
 			continue
 		}
+
+		env := s.EnvFor(dockerContainer)
 		// Container name does match one that would be started w/ this service config
-		if s.EnvFor(dockerContainer)["GALAXY_APP"] != serviceConfig.Name {
+		if env["GALAXY_APP"] != serviceConfig.Name {
 			continue
 		}
 
@@ -386,6 +388,8 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *config.AppConfig, cmd []strin
 	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
+	envVars = append(envVars, "GALAXY_APP="+serviceConfig.Name)
+	envVars = append(envVars, "GALAXY_VERSION="+strconv.FormatInt(serviceConfig.ID(), 10))
 
 	runCmd := []string{"/bin/bash", "-c", strings.Join(cmd, " ")}
 
@@ -490,6 +494,8 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 	args = append(args, s.shuttleHost)
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(serviceConfig.ID(), 10)))
 
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
@@ -547,6 +553,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(serviceConfig.ID(), 10)))
 
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
@@ -634,7 +641,8 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.App
 		return false, nil, err
 	}
 
-	if s.EnvFor(container)["GALAXY_APP"] != serviceConfig.Name {
+	cenv := s.EnvFor(container)
+	if cenv["GALAXY_APP"] != serviceConfig.Name {
 		return false, container, nil
 	}
 
