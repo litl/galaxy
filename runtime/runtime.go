@@ -179,9 +179,7 @@ func (s *ServiceRuntime) InspectContainer(id string) (*docker.Container, error) 
 }
 
 func (s *ServiceRuntime) StopAllMatching(name string) error {
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return err
 	}
@@ -253,9 +251,7 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 }
 
 func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfig) error {
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return err
 	}
@@ -299,9 +295,7 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfi
 }
 
 func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) error {
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return err
 	}
