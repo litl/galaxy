@@ -136,7 +136,7 @@ func startService(serviceConfig *config.AppConfig, logStatus bool) {
 
 	log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
-	err = serviceRuntime.StopAllButLatestService(serviceConfig.Name, stopCutoff)
+	err = serviceRuntime.StopAllButCurrentVersion(serviceConfig)
 	if err != nil {
 		log.Errorf("ERROR: Could not stop containers: %s", err)
 	}

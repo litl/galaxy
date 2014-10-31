@@ -186,39 +186,36 @@ func (s *ServiceRuntime) StopAllMatching(name string) error {
 
 	for _, container := range containers {
 
-		// We name all galaxy managed containers
-		if len(container.Names) == 0 {
-			continue
-		}
-
+		env := s.EnvFor(container)
 		// Container name does match one that would be started w/ this service config
-		if !strings.HasPrefix(strings.TrimPrefix(container.Names[0], "/"), name+"_") {
+		if env["GALAXY_APP"] != name {
 			continue
 		}
 
-		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-		_, ok := err.(*docker.NoSuchContainer)
-		// container is not actually running. Skip it and leave old ones.
-		if err != nil && ok {
-			continue
-		}
-
-		s.stopContainer(dockerContainer)
+		s.stopContainer(container)
 	}
 	return nil
 
 }
 
 func (s *ServiceRuntime) Stop(serviceConfig *config.AppConfig) error {
-	latestName := serviceConfig.ContainerName()
-	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
-	_, ok := err.(*docker.NoSuchContainer)
-	// Expected container is not actually running. Skip it and leave old ones.
-	if err != nil && ok {
-		return nil
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return err
 	}
 
-	return s.stopContainer(latestContainer)
+	for _, container := range containers {
+		cenv := s.EnvFor(container)
+		if cenv["GALAXY_APP"] == serviceConfig.Name &&
+			cenv["GALAXY_VERSION"] == strconv.FormatInt(serviceConfig.ID(), 10) &&
+			serviceConfig.VersionID() == container.Image {
+			err = s.stopContainer(container)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
@@ -228,6 +225,7 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	}
 
 	log.Printf("Stopping %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
+
 	c := make(chan error, 1)
 	go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
 	select {
@@ -258,18 +256,7 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfi
 
 	for _, container := range containers {
 
-		// We name all galaxy managed containers
-		if len(container.Names) == 0 {
-			continue
-		}
-
-		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-		if err != nil {
-			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
-			continue
-		}
-
-		env := s.EnvFor(dockerContainer)
+		env := s.EnvFor(container)
 		// Container name does match one that would be started w/ this service config
 		if env["GALAXY_APP"] != serviceConfig.Name {
 			continue
@@ -287,8 +274,13 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfi
 
 		}
 
-		if image.ID != serviceConfig.VersionID() && serviceConfig.VersionID() != "" {
-			s.stopContainer(dockerContainer)
+		version := env["GALAXY_VERSION"]
+
+		imageDiffers := image.ID != serviceConfig.VersionID() && serviceConfig.VersionID() != ""
+		versionDiffers := version != strconv.FormatInt(serviceConfig.ID(), 10) && version != ""
+
+		if imageDiffers || versionDiffers {
+			s.stopContainer(container)
 		}
 	}
 	return nil
@@ -302,12 +294,7 @@ func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) 
 
 	var toStop []*docker.Container
 	var latestContainer *docker.Container
-	for _, apiContainer := range containers {
-		container, err := s.ensureDockerClient().InspectContainer(apiContainer.ID)
-		if err != nil {
-			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
-			continue
-		}
+	for _, container := range containers {
 		if s.EnvFor(container)["GALAXY_APP"] == name {
 			if latestContainer == nil || container.Created.After(latestContainer.Created) {
 				latestContainer = container
@@ -317,7 +304,6 @@ func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) 
 	}
 
 	for _, container := range toStop {
-
 		if container.ID != latestContainer.ID &&
 			container.Created.Unix() < (time.Now().Unix()-stopCutoff) {
 			s.stopContainer(container)
@@ -599,6 +585,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 	}
 
 	log.Printf("Starting %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+
 	err = s.ensureDockerClient().StartContainer(container.ID,
 		&docker.HostConfig{
 			Dns:             []string{s.shuttleHost},
@@ -623,21 +610,10 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 }
 
 func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.AppConfig) (bool, *docker.Container, error) {
-	container, err := s.ensureDockerClient().InspectContainer(serviceConfig.ContainerName())
-	_, ok := err.(*docker.NoSuchContainer)
-	// Expected container is not actually running. Skip it and leave old ones.
-	if (err != nil && ok) || container == nil {
-		container, err := s.Start(env, serviceConfig)
-		return true, container, err
-	}
 
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return false, nil, err
-	}
-
-	cenv := s.EnvFor(container)
-	if cenv["GALAXY_APP"] != serviceConfig.Name {
-		return false, container, nil
 	}
 
 	image, err := s.InspectImage(serviceConfig.Version())
@@ -645,27 +621,31 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.App
 		return false, nil, err
 	}
 
-	imageDiffers := image.ID != container.Image
-	notRunning := !container.State.Running
-
-	// If their is a stopped container, remove it so we start a new one instead.
-	if notRunning {
-		err := s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
-			ID: container.ID,
-		})
-		if err != nil {
-			return false, nil, err
+	var running *docker.Container
+	for _, container := range containers {
+		cenv := s.EnvFor(container)
+		if cenv["GALAXY_APP"] == serviceConfig.Name &&
+			cenv["GALAXY_VERSION"] == strconv.FormatInt(serviceConfig.ID(), 10) &&
+			image.ID == container.Image {
+			running = container
+			break
 		}
 	}
 
-	if imageDiffers || notRunning {
-
-		container, err := s.Start(env, serviceConfig)
-		return true, container, err
+	if running != nil {
+		return false, running, nil
 	}
 
-	return false, container, nil
+	err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+		ID: serviceConfig.ContainerName(),
+	})
+	_, ok := err.(*docker.NoSuchContainer)
+	if err != nil && !ok {
+		return false, nil, err
+	}
 
+	container, err := s.Start(env, serviceConfig)
+	return true, container, err
 }
 
 func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Image, error) {
