@@ -437,3 +437,185 @@ func (s *BasicSuite) TestParallel(c *C) {
 
 	wg.Wait()
 }
+
+type UDPSuite struct {
+	servers []*udpTestServer
+	service *Service
+}
+
+var _ = Suite(&UDPSuite{})
+
+func (s *UDPSuite) SetUpTest(c *C) {
+	svcCfg := client.ServiceConfig{
+		Name:    "testService",
+		Addr:    "127.0.0.1:11110",
+		Network: "udp",
+	}
+
+	if err := Registry.AddService(svcCfg); err != nil {
+		c.Fatal(err)
+	}
+
+	s.service = Registry.GetService(svcCfg.Name)
+}
+
+func (s *UDPSuite) TearDownTest(c *C) {
+	for _, s := range s.servers {
+		s.Stop()
+	}
+
+	// get rid of the servers refs too!
+	s.servers = nil
+
+	// clear global defaults in Registry
+	Registry.cfg.Balance = ""
+	Registry.cfg.CheckInterval = 0
+	Registry.cfg.Fall = 0
+	Registry.cfg.Rise = 0
+	Registry.cfg.ClientTimeout = 0
+	Registry.cfg.ServerTimeout = 0
+	Registry.cfg.DialTimeout = 0
+
+	err := Registry.RemoveService(s.service.Name)
+	if err != nil {
+		c.Fatalf("could not remove service '%s': %s", s.service.Name, err)
+	}
+}
+
+// Add a UDP service, make sure it works, and remove it
+func (s *UDPSuite) TestAddRemove(c *C) {
+	bckCfg := client.BackendConfig{
+		Name:    "UDPServer",
+		Addr:    "127.0.0.1:11111",
+		Network: "udp",
+	}
+
+	s.service.add(NewBackend(bckCfg))
+
+	lAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	rAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:11110")
+	conn, err := net.ListenUDP("udp", lAddr)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	n, err := conn.WriteToUDP([]byte("TEST"), rAddr)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// try to make sure packets were delivered and read
+	time.Sleep(100 * time.Millisecond)
+
+	stats := s.service.Stats()
+	c.Assert(stats.Rcvd, Equals, int64(n))
+
+	ok := s.service.remove("UDPServer")
+	c.Assert(ok, Equals, true)
+
+	stats = s.service.Stats()
+	c.Assert(len(stats.Backends), Equals, 0)
+
+}
+
+// Make sure UDP Services work, and check our WeightedRoundRobin since we're
+// already testing it.
+func (s *UDPSuite) TestWeightedRoundRobin(c *C) {
+	servers := make([]*udpTestServer, 3)
+
+	var err error
+	for i, _ := range servers {
+		servers[i], err = NewUDPTestServer(fmt.Sprintf("127.0.0.1:1111%d", i+1), c)
+		if err != nil {
+			c.Fatal(err)
+		}
+		bckCfg := client.BackendConfig{
+			Name:    fmt.Sprintf("UDPServer%d", i+1),
+			Addr:    servers[i].addr,
+			Weight:  i + 1,
+			Network: "udp",
+		}
+		s.service.add(NewBackend(bckCfg))
+	}
+
+	defer func() {
+		for _, s := range servers {
+			s.Stop()
+		}
+	}()
+
+	lAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	rAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:11110")
+
+	conn, err := net.ListenUDP("udp", lAddr)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	for i := 0; i < 12; i++ {
+		msg := fmt.Sprintf("TEST_%d", i)
+		_, err := conn.WriteToUDP([]byte(msg), rAddr)
+		if err != nil {
+			c.Fatal(err)
+		}
+	}
+
+	// The order that packets are delivered to the 3 servers
+	time.Sleep(100 * time.Millisecond)
+	rcvOrder := []int{
+		0, 6, //               servers[0]
+		1, 2, 7, 8, //         servers[1]
+		3, 4, 5, 9, 10, 11, // servers[2]
+	}
+
+	packetNum := 0
+	for _, srv := range servers {
+		srv.Lock()
+		for _, p := range srv.packets {
+			c.Assert(string(p), Equals, fmt.Sprintf("TEST_%d", rcvOrder[packetNum]))
+			packetNum++
+		}
+		srv.Unlock()
+	}
+}
+
+// Throw a lot of packets at the proxy then count what went through
+// This doesn't pas or fail, just logs how much made it to the backend.
+func (s *UDPSuite) TestSpew(c *C) {
+	server, err := NewUDPTestServer("127.0.0.1:11111", c)
+	if err != nil {
+		c.Fatal(err)
+	}
+	defer server.Stop()
+
+	bckCfg := client.BackendConfig{
+		Name:    "UDPServer",
+		Addr:    server.addr,
+		Network: "udp",
+	}
+	s.service.add(NewBackend(bckCfg))
+
+	lAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	rAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:11110")
+
+	conn, err := net.ListenUDP("udp", lAddr)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	msg := []byte("10   BYTES")
+	toSend := 10000
+	for i := 0; i < toSend; i++ {
+		n, err := conn.WriteToUDP(msg, rAddr)
+		if err != nil || n != len(msg) {
+			c.Fatal(fmt.Sprintf("%d %s", n, err))
+		}
+	}
+
+	// make sure everything the service received made it to the backend.
+	time.Sleep(100 * time.Millisecond)
+	stats := s.service.Stats()
+	c.Logf("Sent %d packets", toSend)
+	c.Logf("Proxied %d packets", stats.Rcvd/10)
+	c.Logf("Received %d packets", server.count)
+}
