@@ -364,12 +364,18 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *config.AppConfig, cmd []strin
 		return nil, err
 	}
 
+	instanceId, err := s.NextInstanceSlot(serviceConfig.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	envVars := []string{}
 	for key, value := range serviceConfig.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 	envVars = append(envVars, "GALAXY_APP="+serviceConfig.Name)
 	envVars = append(envVars, "GALAXY_VERSION="+strconv.FormatInt(serviceConfig.ID(), 10))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
 
 	runCmd := []string{"/bin/bash", "-c", strings.Join(cmd, " ")}
 
@@ -477,6 +483,13 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(serviceConfig.ID(), 10)))
 
+	instanceId, err := s.NextInstanceSlot(serviceConfig.Name)
+	if err != nil {
+		return err
+	}
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
+
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
 		log.Warnf("Unable to determine public hostname. Not on AWS? %s", err)
@@ -508,6 +521,7 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 }
 
 func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*docker.Container, error) {
+
 	img := serviceConfig.Version()
 
 	imgIdRef := serviceConfig.Version()
@@ -530,10 +544,16 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
+	instanceId, err := s.NextInstanceSlot(serviceConfig.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(serviceConfig.ID(), 10)))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
 
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
@@ -868,4 +888,25 @@ func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 		}
 	}
 	return apps, nil
+}
+
+func (s *ServiceRuntime) NextInstanceSlot(app string) (int, error) {
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return 0, err
+	}
+
+	instances := []int{}
+	for _, c := range containers {
+		gi := s.EnvFor(c)["GALAXY_INSTANCE"]
+		if gi != "" {
+			i, err := strconv.ParseInt(gi, 10, 64)
+			if err != nil {
+				log.Warnf("WARN: Invalid number %s for %s. Ignoring.", gi, c.ID[:12])
+				continue
+			}
+			instances = append(instances, int(i))
+		}
+	}
+	return utils.NextSlot(instances), nil
 }
