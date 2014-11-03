@@ -31,7 +31,7 @@ func (s *Service) roundRobin() []*Backend {
 		s.lastCount = 0
 	}
 
-	// if our backend was over-weight, but we con't find another, use this
+	// if our backend was over-weight, but we can't find another, use this
 	var reuse *Backend
 
 	var balanced []*Backend
@@ -110,6 +110,61 @@ func (s *Service) leastConn() []*Backend {
 	sort.Sort(ByActive(balanced))
 
 	return balanced
+}
+
+// Simple, but still weighted, RR for UDP where we don't don't have active
+// connections or connection failures.
+func (s *Service) udpRoundRobin() *Backend {
+	s.Lock()
+	defer s.Unlock()
+
+	count := len(s.Backends)
+	switch count {
+	case 0:
+		return nil
+	case 1:
+		// fast track for the single backend case
+		return s.Backends[0]
+	}
+
+	// we may be out of range if we lost a backend since last connections
+	if s.lastBackend >= count {
+		s.lastBackend = 0
+		s.lastCount = 0
+	}
+
+	// if our backend was over-weight, but we can't find another, use this
+	var backend, reuse *Backend
+
+	// Find the next Up backend to call
+	for i := 0; i < count; i++ {
+		backend = s.Backends[s.lastBackend]
+
+		if backend.Up() {
+			if s.lastCount >= int(backend.Weight) {
+				// used too many times, but save it just in case
+				reuse = backend
+				s.lastBackend = (s.lastBackend + 1) % count
+				s.lastCount = 0
+				continue
+			}
+
+			s.lastCount++
+			break
+		}
+
+		s.lastBackend = (s.lastBackend + 1) % count
+	}
+
+	if backend != nil {
+		return backend
+	}
+
+	if reuse != nil {
+		return reuse
+	}
+
+	return nil
 }
 
 type ByActive []*Backend

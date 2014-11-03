@@ -99,6 +99,7 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = Registry.UpdateConfig(cfg)
+	//FIXME: this doesn't return an error for an empty or broken service
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)

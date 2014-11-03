@@ -38,6 +38,7 @@ type Service struct {
 	HTTPConns     int64
 	HTTPErrors    int64
 	HTTPActive    int64
+	Network       string
 
 	// Next returns the backends in priority order.
 	next func() []*Backend
@@ -47,7 +48,8 @@ type Service struct {
 	lastCount   int
 
 	// Each Service owns it's own netowrk listener
-	listener net.Listener
+	tcpListener net.Listener
+	udpListener *net.UDPConn
 
 	// reverse proxy for vhost routing
 	httpProxy *ReverseProxy
@@ -100,6 +102,7 @@ func NewService(cfg client.ServiceConfig) *Service {
 		DialTimeout:   time.Duration(cfg.DialTimeout) * time.Millisecond,
 		errorPages:    NewErrorResponse(cfg.ErrorPages),
 		errPagesCfg:   cfg.ErrorPages,
+		Network:       cfg.Network,
 	}
 
 	// TODO: insert this into the backends too
@@ -130,6 +133,10 @@ func NewService(cfg client.ServiceConfig) *Service {
 	}
 	if s.Fall == 0 {
 		s.Fall = 2
+	}
+
+	if s.Network == "" {
+		s.Network = "tcp"
 	}
 
 	for _, b := range cfg.Backends {
@@ -193,6 +200,8 @@ func (s *Service) Stats() ServiceStat {
 		HTTPConns:     s.HTTPConns,
 		HTTPErrors:    s.HTTPErrors,
 		HTTPActive:    atomic.LoadInt64(&s.HTTPActive),
+		Rcvd:          atomic.LoadInt64(&s.Rcvd),
+		Sent:          atomic.LoadInt64(&s.Sent),
 	}
 
 	for _, b := range s.Backends {
@@ -223,6 +232,7 @@ func (s *Service) Config() client.ServiceConfig {
 		ServerTimeout: int(s.ServerTimeout / time.Millisecond),
 		DialTimeout:   int(s.DialTimeout / time.Millisecond),
 		ErrorPages:    s.errPagesCfg,
+		Network:       s.Network,
 	}
 	for _, b := range s.Backends {
 		config.Backends = append(config.Backends, b.Config())
@@ -252,11 +262,16 @@ func (s *Service) add(backend *Backend) {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Printf("Adding TCP backend %s for %s at %s", backend.Addr, s.Name, s.Addr)
+	log.Printf("Adding %s backend %s for %s at %s", backend.Network, backend.Addr, s.Name, s.Addr)
 	backend.up = true
 	backend.rwTimeout = s.ServerTimeout
 	backend.dialTimeout = s.DialTimeout
 	backend.checkInterval = time.Duration(s.CheckInterval) * time.Millisecond
+
+	// We may add some allowed protocol bridging in the future, but for now just fail
+	if s.Network[:3] != backend.Network[:3] {
+		log.Errorf("ERROR: backend %s cannot use network '%s'", backend.Name, backend.Network)
+	}
 
 	// replace an existing backend if we have it.
 	for i, b := range s.Backends {
@@ -280,7 +295,7 @@ func (s *Service) remove(name string) bool {
 
 	for i, b := range s.Backends {
 		if b.Name == name {
-			log.Printf("Removing TCP backend %s for %s at %s", b.Addr, s.Name, s.Addr)
+			log.Printf("Removing %s backend %s for %s at %s", b.Network, b.Addr, s.Name, s.Addr)
 			last := len(s.Backends) - 1
 			deleted := b
 			s.Backends[i], s.Backends[last] = s.Backends[last], nil
@@ -296,38 +311,108 @@ func (s *Service) remove(name string) bool {
 func (s *Service) start() (err error) {
 	s.Lock()
 	defer s.Unlock()
-	log.Printf("Starting TCP listener for %s on %s", s.Name, s.Addr)
-
-	s.listener, err = newTimeoutListener(s.Addr, s.ClientTimeout)
-	if err != nil {
-		return err
-	}
 
 	if s.Backends == nil {
 		s.Backends = make([]*Backend, 0)
 	}
 
-	s.run()
+	// TODO: IPV6 is untested, probably not working
+	switch s.Network {
+	case "tcp", "tcp4", "tcp6":
+		log.Printf("Starting TCP listener for %s on %s", s.Name, s.Addr)
+
+		s.tcpListener, err = newTimeoutListener(s.Network, s.Addr, s.ClientTimeout)
+		if err != nil {
+			return err
+		}
+
+		go s.runTCP()
+	case "udp", "udp4", "udp6":
+		log.Printf("Starting UDP listener for %s on %s", s.Name, s.Addr)
+
+		laddr, err := net.ResolveUDPAddr(s.Network, s.Addr)
+		if err != nil {
+			return err
+		}
+		s.udpListener, err = net.ListenUDP(s.Network, laddr)
+		if err != nil {
+			return err
+		}
+
+		go s.runUDP()
+	default:
+		return fmt.Errorf("Error: unknown network '%s'", s.Network)
+	}
+
 	return nil
 }
 
 // Start the Service's Accept loop
-func (s *Service) run() {
-	go func() {
-		for {
-			conn, err := s.listener.Accept()
-			if err != nil {
-				if err, ok := err.(*net.OpError); ok && err.Temporary() {
-					log.Warnln("WARN:", err)
-					continue
-				}
-				// we must be getting shut down
+func (s *Service) runTCP() {
+	for {
+		conn, err := s.tcpListener.Accept()
+		if err != nil {
+			if err, ok := err.(net.Error); ok && err.Temporary() {
+				log.Warnln("WARN:", err)
+				continue
+			}
+			// we must be getting shut down
+			return
+		}
+
+		go s.connectTCP(conn)
+	}
+}
+
+func (s *Service) runUDP() {
+	buff := make([]byte, 65536)
+	conn := s.udpListener
+
+	// for UDP, we can proxy the data right here.
+	for {
+		n, _, err := conn.ReadFromUDP(buff)
+		if err != nil {
+			// we can't cleanly signal the Read to stop, so we have to
+			// string-match this error.
+			if err.Error() == "use of closed network connection" {
+				// normal shutdown
+				return
+			} else if err, ok := err.(net.Error); ok && err.Temporary() {
+				log.Warnf("WARN: %s", err.Error())
+			} else {
+				// unexpected error, log it before exiting
+				log.Errorf("ERROR: %s", err.Error())
+				atomic.AddInt64(&s.Errors, 1)
 				return
 			}
-
-			go s.connect(conn)
 		}
-	}()
+
+		if n == 0 {
+			continue
+		}
+
+		atomic.AddInt64(&s.Rcvd, int64(n))
+
+		backend := s.udpRoundRobin()
+		if backend == nil {
+			// this could produce a lot of message
+			// TODO: log some %, or max rate of messages
+			continue
+		}
+
+		n, err = conn.WriteTo(buff[:n], backend.udpAddr)
+		if err != nil {
+			if err, ok := err.(net.Error); ok && err.Temporary() {
+				log.Warnf("WARN: %s", err.Error())
+				continue
+			}
+
+			log.Errorf("ERROR: %s", err.Error())
+			atomic.AddInt64(&s.Errors, 1)
+		} else {
+			atomic.AddInt64(&s.Sent, int64(n))
+		}
+	}
 }
 
 // Return the addresses of the current backends in the order they would be balanced
@@ -401,13 +486,13 @@ func (s *Service) Dial(nw, addr string) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *Service) connect(cliConn net.Conn) {
+func (s *Service) connectTCP(cliConn net.Conn) {
 	backends := s.next()
 
 	// Try the first backend given, but if that fails, cycle through them all
 	// to make a best effort to connect the client.
 	for _, b := range backends {
-		srvConn, err := s.dialer.Dial("tcp", b.Addr)
+		srvConn, err := s.dialer.Dial(b.Network, b.Addr)
 		if err != nil {
 			log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, b.Name, err)
 			atomic.AddInt64(&b.Errors, 1)
@@ -428,20 +513,33 @@ func (s *Service) stop() {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Printf("Stopping TCP listener for %s on %s", s.Name, s.Addr)
+	log.Printf("Stopping Listener for %s on %s:%s", s.Name, s.Network, s.Addr)
 	for _, backend := range s.Backends {
 		backend.Stop()
 	}
 
-	// the service may have been bad, and the listener failed
-	if s.listener == nil {
-		return
+	switch s.Network {
+	case "tcp", "tcp4", "tcp6":
+		// the service may have been bad, and the listener failed
+		if s.tcpListener == nil {
+			return
+		}
+
+		err := s.tcpListener.Close()
+		if err != nil {
+			log.Println(err)
+		}
+
+	case "udp", "udp4", "udp6":
+		if s.udpListener == nil {
+			return
+		}
+		err := s.udpListener.Close()
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
-	err := s.listener.Close()
-	if err != nil {
-		log.Println(err)
-	}
 }
 
 // Provide a ServeHTTP method for out ReverseProxy
@@ -462,7 +560,7 @@ func (s *Service) errStats(pr *ProxyRequest) bool {
 
 // A net.Listener that provides a read/write timeout
 type timeoutListener struct {
-	net.Listener
+	*net.TCPListener
 	rwTimeout time.Duration
 
 	// these aren't reported yet, but our new counting connections need to
@@ -471,33 +569,35 @@ type timeoutListener struct {
 	written int64
 }
 
-func newTimeoutListener(addr string, timeout time.Duration) (net.Listener, error) {
-	l, err := net.Listen("tcp", addr)
+func newTimeoutListener(netw, addr string, timeout time.Duration) (net.Listener, error) {
+	lAddr, err := net.ResolveTCPAddr(netw, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	l, err := net.ListenTCP(netw, lAddr)
 	if err != nil {
 		return nil, err
 	}
 
 	tl := &timeoutListener{
-		Listener:  l,
-		rwTimeout: timeout,
+		TCPListener: l,
+		rwTimeout:   timeout,
 	}
 	return tl, nil
 }
+
 func (l *timeoutListener) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
+	conn, err := l.TCPListener.Accept()
 	if err != nil {
 		return nil, err
 	}
 
-	c, ok := conn.(*net.TCPConn)
-	if ok {
-		tc := &shuttleConn{
-			TCPConn:   c,
-			rwTimeout: l.rwTimeout,
-			read:      &l.read,
-			written:   &l.written,
-		}
-		return tc, nil
+	sc := &shuttleConn{
+		TCPConn:   conn.(*net.TCPConn),
+		rwTimeout: l.rwTimeout,
+		read:      &l.read,
+		written:   &l.written,
 	}
-	return conn, nil
+	return sc, nil
 }

@@ -2,7 +2,6 @@ package client
 
 import (
 	"encoding/json"
-	"fmt"
 	"reflect"
 )
 
@@ -39,6 +38,7 @@ type BackendConfig struct {
 	Addr      string `json:"address"`
 	CheckAddr string `json:"check_address"`
 	Weight    int    `json:"weight"`
+	Network   string `json:"network,omitempty"`
 }
 
 func (b BackendConfig) Equal(other BackendConfig) bool {
@@ -48,6 +48,14 @@ func (b BackendConfig) Equal(other BackendConfig) bool {
 
 	if b.Weight == 0 {
 		b.Weight = 1
+	}
+
+	if b.Network == "" {
+		b.Network = "tcp"
+	}
+
+	if other.Network == "" {
+		other.Network = "tcp"
 	}
 
 	return b == other
@@ -76,6 +84,7 @@ type ServiceConfig struct {
 	ServerTimeout int              `json:"server_timeout"`
 	DialTimeout   int              `json:"connect_timeout"`
 	ErrorPages    map[string][]int `json:"error_pages,omitempty"`
+	Network       string           `json:"network,omitempty"`
 }
 
 // Compare a service's settings, ignoring individual backends.
@@ -113,6 +122,10 @@ func (s ServiceConfig) Equal(other ServiceConfig) bool {
 		other.Fall = 2
 	}
 
+	if s.Network == "" {
+		s.Network = "tcp"
+	}
+
 	// We handle backends separately
 	s.Backends = nil
 	other.Backends = nil
@@ -147,8 +160,6 @@ func (s ServiceConfig) DeepEqual(other ServiceConfig) bool {
 				if a.Equal(b) {
 					break NEXT
 				} else {
-					fmt.Println("A", a)
-					fmt.Println("B", b)
 					return false
 				}
 			}
