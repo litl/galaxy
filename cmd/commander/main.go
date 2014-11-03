@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"strconv"
 	"syscall"
 
 	docker "github.com/fsouza/go-dockerclient"
@@ -120,26 +121,47 @@ func pullImage(serviceConfig *config.AppConfig) (*docker.Image, error) {
 }
 
 func startService(serviceConfig *config.AppConfig, logStatus bool) {
-	started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
+
+	desired, err := commander.Balanced(configStore, hostIP, serviceConfig.Name, env, pool)
 	if err != nil {
-		log.Errorf("ERROR: Could not start container for %s: %s", serviceConfig.Version(), err)
+		log.Errorf("ERROR: Could not determine instance count: %s", err)
 		return
 	}
 
-	if started {
+	running, err := serviceRuntime.InstanceCount(serviceConfig.Name, strconv.FormatInt(serviceConfig.ID(), 10))
+	if err != nil {
+		log.Errorf("ERROR: Could not determine running instance count: %s", err)
+		return
+	}
+
+	for i := 0; i < desired-running; i++ {
+		container, err := serviceRuntime.Start(env, serviceConfig)
+		if err != nil {
+			log.Errorf("ERROR: Could not start containers: %s", err)
+			return
+		}
+
 		log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 	}
-
-	if logStatus && !debug {
-		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-	}
-
-	log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
 
 	err = serviceRuntime.StopAllButCurrentVersion(serviceConfig)
 	if err != nil {
 		log.Errorf("ERROR: Could not stop containers: %s", err)
 	}
+
+	running, err = serviceRuntime.InstanceCount(serviceConfig.Name, strconv.FormatInt(serviceConfig.ID(), 10))
+	if err != nil {
+		log.Errorf("ERROR: Could not determine running instance count: %s", err)
+		return
+	}
+
+	for i := 0; i < running-desired; i++ {
+		err := serviceRuntime.Stop(serviceConfig)
+		if err != nil {
+			log.Errorf("ERROR: Could not stop container: %s", err)
+		}
+	}
+
 }
 
 func heartbeatHost() {
@@ -275,23 +297,7 @@ func restartContainers(app string, cmdChan chan string) {
 				log.Errorf("ERROR: Could not pull images: %s", err)
 				continue
 			}
-
-			started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
-			if err != nil {
-				log.Errorf("ERROR: Could not start containers: %s", err)
-				continue
-			}
-
-			if started {
-				log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-			}
-
-			log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-
-			err = serviceRuntime.StopAllButCurrentVersion(serviceConfig)
-			if err != nil {
-				log.Errorf("ERROR: Could not stop containers: %s", err)
-			}
+			startService(serviceConfig, logOnce)
 		}
 
 		if !loop {

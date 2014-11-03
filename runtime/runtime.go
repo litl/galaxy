@@ -364,7 +364,7 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *config.AppConfig, cmd []strin
 		return nil, err
 	}
 
-	instanceId, err := s.NextInstanceSlot(serviceConfig.Name)
+	instanceId, err := s.NextInstanceSlot(serviceConfig.Name, strconv.FormatInt(serviceConfig.ID(), 10))
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +483,7 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(serviceConfig.ID(), 10)))
 
-	instanceId, err := s.NextInstanceSlot(serviceConfig.Name)
+	instanceId, err := s.NextInstanceSlot(serviceConfig.Name, strconv.FormatInt(serviceConfig.ID(), 10))
 	if err != nil {
 		return err
 	}
@@ -544,7 +544,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
-	instanceId, err := s.NextInstanceSlot(serviceConfig.Name)
+	instanceId, err := s.NextInstanceSlot(serviceConfig.Name, strconv.FormatInt(serviceConfig.ID(), 10))
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +562,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 	}
 	envVars = append(envVars, fmt.Sprintf("PUBLIC_HOSTNAME=%s", publicDns))
 
-	containerName := serviceConfig.ContainerName()
+	containerName := serviceConfig.ContainerName() + "." + strconv.FormatInt(int64(instanceId), 10)
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
 	_, ok := err.(*docker.NoSuchContainer)
 	if err != nil && !ok {
@@ -890,23 +890,42 @@ func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 	return apps, nil
 }
 
-func (s *ServiceRuntime) NextInstanceSlot(app string) (int, error) {
+func (s *ServiceRuntime) instanceIds(app, versionId string) ([]int, error) {
 	containers, err := s.ManagedContainers()
 	if err != nil {
-		return 0, err
+		return []int{}, err
 	}
 
 	instances := []int{}
 	for _, c := range containers {
 		gi := s.EnvFor(c)["GALAXY_INSTANCE"]
+		gv := s.EnvFor(c)["GALAXY_VERSION"]
 		if gi != "" {
 			i, err := strconv.ParseInt(gi, 10, 64)
 			if err != nil {
 				log.Warnf("WARN: Invalid number %s for %s. Ignoring.", gi, c.ID[:12])
 				continue
 			}
+
+			if versionId != "" && gv != versionId {
+				continue
+			}
 			instances = append(instances, int(i))
 		}
 	}
+	return instances, nil
+}
+
+func (s *ServiceRuntime) InstanceCount(app, versionId string) (int, error) {
+	instances, err := s.instanceIds(app, versionId)
+	return len(instances), err
+}
+
+func (s *ServiceRuntime) NextInstanceSlot(app, versionId string) (int, error) {
+	instances, err := s.instanceIds(app, versionId)
+	if err != nil {
+		return 0, err
+	}
+
 	return utils.NextSlot(instances), nil
 }
