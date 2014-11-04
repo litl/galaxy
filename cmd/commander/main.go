@@ -169,6 +169,10 @@ func heartbeatHost() {
 		configStore.UpdateHost(env, pool, config.HostInfo{
 			HostIP: hostIP,
 		})
+
+		if !loop {
+			return
+		}
 		time.Sleep(45 * time.Second)
 	}
 }
@@ -237,6 +241,7 @@ func restartContainers(app string, cmdChan chan string) {
 			if cmd == "deploy" {
 				_, err = pullImage(serviceConfig)
 				if err != nil {
+					log.Errorf("ERROR: Error pulling image for %s: %s", app, err)
 					if !loop {
 						return
 					}
@@ -696,6 +701,8 @@ func main() {
 	log.Printf("Starting commander %s", buildVersion)
 	log.Printf("Using env = %s, pool = %s",
 		env, pool)
+
+	heartbeatHost()
 
 	for app, ch := range workerChans {
 		if len(apps) == 0 || utils.StringInSlice(app, apps) {
