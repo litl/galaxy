@@ -389,7 +389,7 @@ func main() {
 		println("   app:restart     Restart an app")
 		println("   app:run         Run a command within an app on this host")
 		println("   app:shell       Run a bash shell within an app on this host")
-		println("   start           Starts one or more apps")
+		println("   app:start       Starts one or more apps")
 		println("   stop            Stops one or more apps")
 		println("   runtime         List container runtime policies")
 		println("   runtime:set     Set container runtime policies")
@@ -578,9 +578,9 @@ func main() {
 		}
 		return
 
-	case "start":
+	case "app:start":
 
-		startFs := flag.NewFlagSet("start", flag.ExitOnError)
+		startFs := flag.NewFlagSet("app:start", flag.ExitOnError)
 		startFs.Usage = func() {
 			println("Usage: commander start [options] [<app>]*\n")
 			println("    Starts one or more apps. If no apps are specified, starts all apps.\n")
@@ -591,6 +591,17 @@ func main() {
 
 		apps = startFs.Args()
 
+		if len(apps) == 0 {
+			acs, err := configStore.ListApps(env)
+			if err != nil {
+				log.Fatalf("ERROR: Unable to list apps: %s", err)
+			}
+			for _, ac := range acs {
+				apps = append(apps, ac.Name)
+			}
+		}
+
+		heartbeatHost()
 		break
 	case "stop":
 		stopFs := flag.NewFlagSet("stop", flag.ExitOnError)
@@ -701,8 +712,6 @@ func main() {
 	log.Printf("Starting commander %s", buildVersion)
 	log.Printf("Using env = %s, pool = %s",
 		env, pool)
-
-	heartbeatHost()
 
 	for app, ch := range workerChans {
 		if len(apps) == 0 || utils.StringInSlice(app, apps) {

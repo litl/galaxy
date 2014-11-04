@@ -104,7 +104,6 @@ func (s *AppConfig) ID() int64 {
 		s.environmentVMap,
 		s.versionVMap,
 		s.portsVMap,
-		s.runtimeVMap,
 	} {
 		if vmap.LatestVersion() > id {
 			id = vmap.LatestVersion()
@@ -123,7 +122,7 @@ func (s *AppConfig) nextID() int64 {
 
 func (s *AppConfig) SetProcesses(pool string, count int) {
 	key := fmt.Sprintf("%s-ps", pool)
-	s.runtimeVMap.SetVersion(key, strconv.FormatInt(int64(count), 10), s.nextID())
+	s.runtimeVMap.Set(key, strconv.FormatInt(int64(count), 10))
 }
 
 func (s *AppConfig) GetProcesses(pool string) int {

@@ -209,10 +209,7 @@ func (s *ServiceRuntime) Stop(serviceConfig *config.AppConfig) error {
 		if cenv["GALAXY_APP"] == serviceConfig.Name &&
 			cenv["GALAXY_VERSION"] == strconv.FormatInt(serviceConfig.ID(), 10) &&
 			serviceConfig.VersionID() == container.Image {
-			err = s.stopContainer(container)
-			if err != nil {
-				return err
-			}
+			return s.stopContainer(container)
 		}
 	}
 	return nil
