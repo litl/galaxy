@@ -390,7 +390,7 @@ func main() {
 		println("   app:run         Run a command within an app on this host")
 		println("   app:shell       Run a bash shell within an app on this host")
 		println("   app:start       Starts one or more apps")
-		println("   stop            Stops one or more apps")
+		println("   app:stop        Stops one or more apps")
 		println("   runtime         List container runtime policies")
 		println("   runtime:set     Set container runtime policies")
 		println("   hosts           List hosts in an env and pool")
@@ -603,8 +603,8 @@ func main() {
 
 		heartbeatHost()
 		break
-	case "stop":
-		stopFs := flag.NewFlagSet("stop", flag.ExitOnError)
+	case "app:stop":
+		stopFs := flag.NewFlagSet("app:stop", flag.ExitOnError)
 		stopFs.Usage = func() {
 			println("Usage: commander stop [options] [<app>]*\n")
 			println("    Stops one or more apps. If no apps are specified, stops all apps.\n")
