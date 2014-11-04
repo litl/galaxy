@@ -132,13 +132,13 @@ func AppRestart(Store *config.Store, app, env string) error {
 }
 
 func AppRun(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env string, args []string) error {
-	serviceConfig, err := configStore.GetApp(app, env)
+	appCfg, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to run command: %s.", err)
 
 	}
 
-	_, err = serviceRuntime.RunCommand(serviceConfig, args)
+	_, err = serviceRuntime.RunCommand(appCfg, args)
 	if err != nil {
 		return fmt.Errorf("could not start container: %s", err)
 	}
@@ -146,12 +146,12 @@ func AppRun(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, a
 }
 
 func AppShell(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env string) error {
-	serviceConfig, err := configStore.GetApp(app, env)
+	appCfg, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to run command: %s.", err)
 	}
 
-	err = serviceRuntime.StartInteractive(env, serviceConfig)
+	err = serviceRuntime.StartInteractive(env, appCfg)
 	if err != nil {
 		return fmt.Errorf("could not start container: %s", err)
 	}

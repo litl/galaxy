@@ -37,7 +37,6 @@ var (
 	runOnce         bool
 	version         bool
 	buildVersion    string
-	serviceConfigs  []*config.AppConfig
 	serviceRegistry *registry.ServiceRegistry
 	configStore     *config.Store
 	serviceRuntime  *runtime.ServiceRuntime
@@ -71,12 +70,12 @@ func initOrDie() {
 
 	workerChans = make(map[string]chan string)
 	for _, app := range apps {
-		serviceConfig, err := configStore.GetApp(app, env)
+		appCfg, err := configStore.GetApp(app, env)
 		if err != nil {
 			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s", env, pool, err)
 		}
 
-		workerChans[serviceConfig.Name] = make(chan string)
+		workerChans[appCfg.Name] = make(chan string)
 	}
 
 	signalsChan = make(chan os.Signal, 1)
@@ -84,9 +83,9 @@ func initOrDie() {
 	go deregisterHost(signalsChan)
 }
 
-func pullImageAsync(serviceConfig config.AppConfig, errChan chan error) {
+func pullImageAsync(appCfg config.AppConfig, errChan chan error) {
 	// err logged via pullImage
-	_, err := pullImage(&serviceConfig)
+	_, err := pullImage(&appCfg)
 	if err != nil {
 		errChan <- err
 		return
@@ -94,70 +93,70 @@ func pullImageAsync(serviceConfig config.AppConfig, errChan chan error) {
 	errChan <- nil
 }
 
-func pullImage(serviceConfig *config.AppConfig) (*docker.Image, error) {
+func pullImage(appCfg *config.AppConfig) (*docker.Image, error) {
 
-	image, err := serviceRuntime.InspectImage(serviceConfig.Version())
-	if image != nil && image.ID == serviceConfig.VersionID() || serviceConfig.VersionID() == "" {
+	image, err := serviceRuntime.InspectImage(appCfg.Version())
+	if image != nil && image.ID == appCfg.VersionID() || appCfg.VersionID() == "" {
 		return image, nil
 	}
 
-	log.Printf("Pulling %s version %s\n", serviceConfig.Name, serviceConfig.Version())
-	image, err = serviceRuntime.PullImage(serviceConfig.Version(),
-		serviceConfig.VersionID(), true)
+	log.Printf("Pulling %s version %s\n", appCfg.Name, appCfg.Version())
+	image, err = serviceRuntime.PullImage(appCfg.Version(),
+		appCfg.VersionID(), true)
 	if image == nil || err != nil {
 		log.Errorf("ERROR: Could not pull image %s: %s",
-			serviceConfig.Version(), err)
+			appCfg.Version(), err)
 		return nil, err
 	}
 
-	if image.ID != serviceConfig.VersionID() && len(serviceConfig.VersionID()) > 12 {
+	if image.ID != appCfg.VersionID() && len(appCfg.VersionID()) > 12 {
 		log.Errorf("ERROR: Pulled image for %s does not match expected ID. Expected: %s: Got: %s",
-			serviceConfig.Version(),
-			image.ID[0:12], serviceConfig.VersionID()[0:12])
-		return nil, errors.New(fmt.Sprintf("failed to pull image ID %s", serviceConfig.VersionID()[0:12]))
+			appCfg.Version(),
+			image.ID[0:12], appCfg.VersionID()[0:12])
+		return nil, errors.New(fmt.Sprintf("failed to pull image ID %s", appCfg.VersionID()[0:12]))
 	}
 
-	log.Printf("Pulled %s\n", serviceConfig.Version())
+	log.Printf("Pulled %s\n", appCfg.Version())
 	return image, nil
 }
 
-func startService(serviceConfig *config.AppConfig, logStatus bool) {
+func startService(appCfg *config.AppConfig, logStatus bool) {
 
-	desired, err := commander.Balanced(configStore, hostIP, serviceConfig.Name, env, pool)
+	desired, err := commander.Balanced(configStore, hostIP, appCfg.Name, env, pool)
 	if err != nil {
 		log.Errorf("ERROR: Could not determine instance count: %s", err)
 		return
 	}
 
-	running, err := serviceRuntime.InstanceCount(serviceConfig.Name, strconv.FormatInt(serviceConfig.ID(), 10))
+	running, err := serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
 	if err != nil {
 		log.Errorf("ERROR: Could not determine running instance count: %s", err)
 		return
 	}
 
 	for i := 0; i < desired-running; i++ {
-		container, err := serviceRuntime.Start(env, serviceConfig)
+		container, err := serviceRuntime.Start(env, appCfg)
 		if err != nil {
 			log.Errorf("ERROR: Could not start containers: %s", err)
 			return
 		}
 
-		log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+		log.Printf("Started %s version %s as %s\n", appCfg.Name, appCfg.Version(), container.ID[0:12])
 	}
 
-	err = serviceRuntime.StopAllButCurrentVersion(serviceConfig)
+	err = serviceRuntime.StopAllButCurrentVersion(appCfg)
 	if err != nil {
 		log.Errorf("ERROR: Could not stop containers: %s", err)
 	}
 
-	running, err = serviceRuntime.InstanceCount(serviceConfig.Name, strconv.FormatInt(serviceConfig.ID(), 10))
+	running, err = serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
 	if err != nil {
 		log.Errorf("ERROR: Could not determine running instance count: %s", err)
 		return
 	}
 
 	for i := 0; i < running-desired; i++ {
-		err := serviceRuntime.Stop(serviceConfig)
+		err := serviceRuntime.Stop(appCfg)
 		if err != nil {
 			log.Errorf("ERROR: Could not stop container: %s", err)
 		}
@@ -224,7 +223,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			serviceConfig, err := configStore.GetApp(app, env)
+			appCfg, err := configStore.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
@@ -233,7 +232,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			if serviceConfig.Version() == "" {
+			if appCfg.Version() == "" {
 				if !loop {
 					return
 				}
@@ -241,7 +240,7 @@ func restartContainers(app string, cmdChan chan string) {
 			}
 
 			if cmd == "deploy" {
-				_, err = pullImage(serviceConfig)
+				_, err = pullImage(appCfg)
 				if err != nil {
 					log.Errorf("ERROR: Error pulling image for %s: %s", app, err)
 					if !loop {
@@ -249,19 +248,19 @@ func restartContainers(app string, cmdChan chan string) {
 					}
 					continue
 				}
-				startService(serviceConfig, logOnce)
+				startService(appCfg, logOnce)
 			}
 
 			if cmd == "restart" {
-				err := serviceRuntime.Stop(serviceConfig)
+				err := serviceRuntime.Stop(appCfg)
 				if err != nil {
 					log.Errorf("ERROR: Could not stop %s: %s",
-						serviceConfig.Version(), err)
+						appCfg.Version(), err)
 					if !loop {
 						return
 					}
 
-					startService(serviceConfig, logOnce)
+					startService(appCfg, logOnce)
 					continue
 				}
 			}
@@ -269,7 +268,7 @@ func restartContainers(app string, cmdChan chan string) {
 			logOnce = false
 		case <-ticker.C:
 
-			serviceConfig, err := configStore.GetApp(app, env)
+			appCfg, err := configStore.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				continue
@@ -285,18 +284,18 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			if serviceConfig == nil || !assigned {
+			if appCfg == nil || !assigned {
 				log.Errorf("%s no longer exists.  Stopping worker.", app)
 				serviceRuntime.StopAllMatching(app)
 				delete(workerChans, app)
 				return
 			}
 
-			if serviceConfig.Version() == "" {
+			if appCfg.Version() == "" {
 				continue
 			}
 
-			_, err = pullImage(serviceConfig)
+			_, err = pullImage(appCfg)
 			if err != nil {
 				if !loop {
 					return
@@ -304,7 +303,7 @@ func restartContainers(app string, cmdChan chan string) {
 				log.Errorf("ERROR: Could not pull images: %s", err)
 				continue
 			}
-			startService(serviceConfig, logOnce)
+			startService(appCfg, logOnce)
 		}
 
 		if !loop {
