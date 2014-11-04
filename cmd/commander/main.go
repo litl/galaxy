@@ -43,6 +43,7 @@ var (
 	serviceRuntime  *runtime.ServiceRuntime
 	workerChans     map[string]chan string
 	wg              sync.WaitGroup
+	signalsChan     chan os.Signal
 )
 
 func initOrDie() {
@@ -78,9 +79,9 @@ func initOrDie() {
 		workerChans[serviceConfig.Name] = make(chan string)
 	}
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, os.Kill, syscall.SIGTERM)
-	go deregisterHost(signals)
+	signalsChan = make(chan os.Signal, 1)
+	signal.Notify(signalsChan, os.Interrupt, os.Kill, syscall.SIGTERM)
+	go deregisterHost(signalsChan)
 }
 
 func pullImageAsync(serviceConfig config.AppConfig, errChan chan error) {
@@ -178,6 +179,7 @@ func heartbeatHost() {
 }
 
 func deregisterHost(signals chan os.Signal) {
+	wg.Add(1)
 	<-signals
 	configStore.DeleteHost(env, pool, config.HostInfo{
 		HostIP: hostIP,
@@ -442,6 +444,18 @@ func main() {
 			agentFs.PrintDefaults()
 		}
 		agentFs.Parse(flag.Args()[1:])
+
+		hosts, err := configStore.ListHosts(env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+
+		for _, hi := range hosts {
+			if hi.HostIP == hostIP {
+				log.Fatalf("ERROR: agent already running on this host")
+			}
+		}
+
 	case "app":
 		appFs := flag.NewFlagSet("app", flag.ExitOnError)
 		appFs.Usage = func() {
@@ -707,6 +721,11 @@ func main() {
 		}
 		log.Printf("Runtime options update for %s in %s running on %s", app, env, pool)
 		return
+
+	default:
+		fmt.Println("Unknown command")
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	log.Printf("Starting commander %s", buildVersion)
@@ -733,5 +752,7 @@ func main() {
 		monitorService(restartChan)
 	}
 
+	close(signalsChan)
 	wg.Wait()
+
 }
