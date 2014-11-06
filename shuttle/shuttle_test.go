@@ -580,7 +580,7 @@ func (s *UDPSuite) TestWeightedRoundRobin(c *C) {
 }
 
 // Throw a lot of packets at the proxy then count what went through
-// This doesn't pas or fail, just logs how much made it to the backend.
+// This doesn't pass or fail, just logs how much made it to the backend.
 func (s *UDPSuite) TestSpew(c *C) {
 	server, err := NewUDPTestServer("127.0.0.1:11111", c)
 	if err != nil {

@@ -115,7 +115,7 @@ func (r *HostRouter) Start(ready chan bool) {
 	// These timeouts are for each individual Read/Write operation
 	// These will close keepalive connections too.
 	// TODO: configure timeout somewhere
-	r.listener, err = newTimeoutListener("tcp", listenAddr, 120*time.Second)
+	r.listener, err = newTimeoutListener("tcp", listenAddr, 300*time.Second)
 	if err != nil {
 		log.Errorf("%s", err)
 		r.Unlock()

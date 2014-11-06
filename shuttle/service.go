@@ -316,7 +316,6 @@ func (s *Service) start() (err error) {
 		s.Backends = make([]*Backend, 0)
 	}
 
-	// TODO: IPV6 is untested, probably not working
 	switch s.Network {
 	case "tcp", "tcp4", "tcp6":
 		log.Printf("Starting TCP listener for %s on %s", s.Name, s.Addr)
@@ -462,7 +461,7 @@ func (s *Service) Dial(nw, addr string) (net.Conn, error) {
 		return nil, DialError{fmt.Errorf("no backend matching %s", addr)}
 	}
 
-	srvConn, err := s.dialer.Dial("tcp", backend.Addr)
+	srvConn, err := s.dialer.Dial(nw, backend.Addr)
 	if err != nil {
 		log.Errorf("ERROR: connecting to backend %s/%s: %s", s.Name, backend.Name, err)
 		atomic.AddInt64(&backend.Errors, 1)
