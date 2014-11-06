@@ -49,14 +49,13 @@ func initOrDie() {
 
 	serviceRegistry = registry.NewServiceRegistry(
 		registry.DefaultTTL,
-		"",
 	)
 	serviceRegistry.Connect(redisHost)
 
 	configStore = config.NewStore(
 		registry.DefaultTTL,
-		"",
 	)
+
 	configStore.Connect(redisHost)
 
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)

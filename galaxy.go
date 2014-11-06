@@ -50,7 +50,6 @@ func initRegistry(c *cli.Context) {
 
 	serviceRegistry = registry.NewServiceRegistry(
 		uint64(c.Int("ttl")),
-		c.GlobalString("sshAddr"),
 	)
 
 	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
@@ -62,7 +61,6 @@ func initStore(c *cli.Context) {
 
 	configStore = gconfig.NewStore(
 		uint64(c.Int("ttl")),
-		c.GlobalString("sshAddr"),
 	)
 
 	configStore.Connect(utils.GalaxyRedisHost(c))

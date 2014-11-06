@@ -42,9 +42,7 @@ func initOrDie(c *cli.Context) {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-
 		uint64(c.Int("ttl")),
-		c.GlobalString("sshAddr"),
 	)
 
 	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
@@ -81,7 +79,6 @@ func main() {
 		cli.StringFlag{Name: "env", Value: utils.DefaultEnv, Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: utils.DefaultPool, Usage: "pool (web, worker, etc.)"},
 		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
-		cli.StringFlag{Name: "sshAddr", Value: "127.0.0.1:22", Usage: "hosts external ssh IP:port"},
 		cli.StringFlag{Name: "shuttleAddr", Value: "127.0.0.1:9090", Usage: "shuttle http address"},
 		cli.BoolFlag{Name: "debug", Usage: "enbable debug logging"},
 	}
