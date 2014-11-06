@@ -99,6 +99,7 @@ func postService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = Registry.UpdateConfig(cfg)
+	//FIXME: this doesn't return an error for an empty or broken service
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -185,6 +186,7 @@ func addHandlers() {
 	r.HandleFunc("/", getStats).Methods("GET")
 	r.HandleFunc("/", postConfig).Methods("PUT", "POST")
 	r.HandleFunc("/_config", getConfig).Methods("GET")
+	r.HandleFunc("/_config", postConfig).Methods("PUT", "POST")
 	r.HandleFunc("/_stats", getStats).Methods("GET")
 	r.HandleFunc("/{service}", getService).Methods("GET")
 	r.HandleFunc("/{service}", postService).Methods("PUT", "POST")

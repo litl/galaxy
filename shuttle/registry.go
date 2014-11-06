@@ -249,6 +249,11 @@ func (s *ServiceRegistry) AddService(svcCfg client.ServiceConfig) error {
 	setServiceDefaults(&svcCfg, s.cfg)
 
 	service := NewService(svcCfg)
+	err := service.start()
+	if err != nil {
+		return err
+	}
+
 	s.svcs[service.Name] = service
 
 	for _, name := range svcCfg.VirtualHosts {
@@ -260,7 +265,7 @@ func (s *ServiceRegistry) AddService(svcCfg client.ServiceConfig) error {
 		vhost.Add(service)
 	}
 
-	return service.start()
+	return nil
 }
 
 // Replace the service's configuration, or update its list of backends.

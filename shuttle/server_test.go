@@ -45,7 +45,7 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 	}
 
 	s.addr = s.listener.Addr().String()
-	c.Log("listning on ", s.addr)
+	c.Log("listening on ", s.addr)
 
 	s.wg.Add(1)
 	go func() {
@@ -84,6 +84,73 @@ func NewTestServer(addr string, c Tester) (*testServer, error) {
 
 func (s *testServer) Stop() {
 	s.listener.Close()
+	// We may be imediately creating another identical server.
+	// Wait until all goroutines return to ensure we can bind again.
+	s.wg.Wait()
+}
+
+type udpTestServer struct {
+	sync.Mutex
+	addr    string
+	conn    *net.UDPConn
+	count   int
+	packets [][]byte
+	wg      *sync.WaitGroup
+}
+
+// Start a tcp server which responds with it's addr after every read.
+func NewUDPTestServer(addr string, c Tester) (*udpTestServer, error) {
+	s := &udpTestServer{}
+	s.wg = new(sync.WaitGroup)
+
+	lAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// try really hard to bind this so we don't fail tests
+	for i := 0; i < 3; i++ {
+		s.conn, err = net.ListenUDP("udp", lAddr)
+		if err == nil {
+			break
+		}
+		c.Log("Listen error:", err)
+		c.Log("Trying again in 1s...")
+		time.Sleep(time.Second)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	s.addr = addr
+	c.Log("listening on UDP:", s.addr)
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		// receive packets into a single buffer so we don't waste time make'ing them
+		buff := make([]byte, 1048576)
+		pos := 0
+		for {
+			n, _, err := s.conn.ReadFromUDP(buff[pos:])
+			if err != nil {
+				return
+			}
+			s.count++
+
+			// lock the packet slice so we can safely inspect it from tests
+			s.Lock()
+			s.packets = append(s.packets, buff[pos:pos+n])
+			s.Unlock()
+			pos += n
+		}
+	}()
+	return s, nil
+}
+
+func (s *udpTestServer) Stop() {
+	s.conn.Close()
 	// We may be imediately creating another identical server.
 	// Wait until all goroutines return to ensure we can bind again.
 	s.wg.Wait()

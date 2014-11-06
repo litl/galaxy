@@ -24,6 +24,7 @@ type Backend struct {
 	Conns      int64
 	Active     int64
 	HTTPActive int64
+	Network    string
 
 	// these are loaded from the service, so a backend doesn't need to access
 	// the service struct at all.
@@ -40,6 +41,9 @@ type Backend struct {
 	startCheck sync.Once
 	// stop the health-check loop
 	stopCheck chan interface{}
+
+	// so we only need to ResolveUDPAddr once
+	udpAddr *net.UDPAddr
 }
 
 // The json stats we return for the backend
@@ -65,12 +69,27 @@ func NewBackend(cfg client.BackendConfig) *Backend {
 		Addr:      cfg.Addr,
 		CheckAddr: cfg.CheckAddr,
 		Weight:    cfg.Weight,
+		Network:   cfg.Network,
 		stopCheck: make(chan interface{}),
 	}
 
 	// don't want a weight of 0
 	if b.Weight == 0 {
 		b.Weight = 1
+	}
+
+	if b.Network == "" {
+		b.Network = "tcp"
+	}
+
+	switch b.Network {
+	case "udp", "udp4", "udp6":
+		var err error
+		b.udpAddr, err = net.ResolveUDPAddr(b.Network, b.Addr)
+		if err != nil {
+			log.Errorf("ERROR: %s", err.Error())
+			b.up = false
+		}
 	}
 
 	return b
@@ -207,7 +226,6 @@ func (b *Backend) Proxy(srvConn, cliConn net.Conn) {
 	// Backend is a pointer receiver so we can get the address of the fields,
 	// but all updates will be done atomically.
 
-	// TODO: might not be TCP? (this would panic)
 	bConn := &shuttleConn{
 		TCPConn:   srvConn.(*net.TCPConn),
 		rwTimeout: b.rwTimeout,
@@ -313,5 +331,5 @@ func (c *shuttleConn) Close() error {
 
 // Empty function to override the ReadFrom in *net.TCPConn
 // io.Copy will attempt to use ReadFrom when it can, but there's no bennefit
-// for a TCPConn, and it prevents us from collecting Read/Write stats.
+// for a TCPConn->TCPConn, and it prevents us from collecting Read/Write stats.
 func (c *shuttleConn) ReadFrom() {}
