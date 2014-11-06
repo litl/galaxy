@@ -186,6 +186,7 @@ func addHandlers() {
 	r.HandleFunc("/", getStats).Methods("GET")
 	r.HandleFunc("/", postConfig).Methods("PUT", "POST")
 	r.HandleFunc("/_config", getConfig).Methods("GET")
+	r.HandleFunc("/_config", postConfig).Methods("PUT", "POST")
 	r.HandleFunc("/_stats", getStats).Methods("GET")
 	r.HandleFunc("/{service}", getService).Methods("GET")
 	r.HandleFunc("/{service}", postService).Methods("PUT", "POST")
