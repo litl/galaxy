@@ -190,7 +190,7 @@ func unregisterShuttle(c *cli.Context) {
 	for _, r := range registrations {
 
 		// Registration for a container on a different host? Skip it.
-		if r.ExternalIP != serviceRegistry.HostIP {
+		if r.ExternalIP != c.GlobalString("hostIp") {
 			continue
 		}
 

@@ -734,7 +734,7 @@ func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Imag
 
 }
 
-func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegistration, error) {
+func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*registry.ServiceRegistration, error) {
 	containers, err := s.ManagedContainers()
 	if err != nil {
 		return nil, err
@@ -744,7 +744,7 @@ func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegis
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
-		registration, err := s.serviceRegistry.RegisterService(env, pool, container)
+		registration, err := s.serviceRegistry.RegisterService(env, pool, hostIP, container)
 		if err != nil {
 			log.Printf("ERROR: Could not register %s: %s\n", name, err)
 			continue
@@ -756,7 +756,7 @@ func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegis
 
 }
 
-func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, error) {
+func (s *ServiceRuntime) UnRegisterAll(env, pool, hostIP string) ([]*docker.Container, error) {
 
 	containers, err := s.ManagedContainers()
 	if err != nil {
@@ -767,7 +767,7 @@ func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, e
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
-		_, err = s.serviceRegistry.UnRegisterService(env, pool, container)
+		_, err = s.serviceRegistry.UnRegisterService(env, pool, hostIP, container)
 		if err != nil {
 			log.Printf("ERROR: Could not unregister %s: %s\n", name, err)
 			return removed, err
@@ -780,7 +780,7 @@ func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, e
 	return removed, nil
 }
 
-func (s *ServiceRuntime) RegisterEvents(env, pool string, listener chan ContainerEvent) error {
+func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan ContainerEvent) error {
 	go func() {
 		c := make(chan *docker.APIEvents)
 
@@ -826,7 +826,7 @@ func (s *ServiceRuntime) RegisterEvents(env, pool string, listener chan Containe
 
 					name := s.EnvFor(container)["GALAXY_APP"]
 					if name != "" {
-						registration, err := s.serviceRegistry.GetServiceRegistration(env, pool, container)
+						registration, err := s.serviceRegistry.GetServiceRegistration(env, pool, hostIP, container)
 						if err != nil {
 							log.Printf("WARN: Could not find service registration for %s/%s: %s", name, container.ID[:12], err)
 							continue

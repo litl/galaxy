@@ -48,14 +48,12 @@ var (
 func initOrDie() {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		"",
 		registry.DefaultTTL,
 		"",
 	)
 	serviceRegistry.Connect(redisHost)
 
 	configStore = config.NewStore(
-		"",
 		registry.DefaultTTL,
 		"",
 	)

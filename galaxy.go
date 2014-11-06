@@ -49,7 +49,6 @@ func init() {
 func initRegistry(c *cli.Context) {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),
 	)
@@ -62,7 +61,6 @@ func initRegistry(c *cli.Context) {
 func initStore(c *cli.Context) {
 
 	configStore = gconfig.NewStore(
-		c.GlobalString("hostIp"),
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),
 	)

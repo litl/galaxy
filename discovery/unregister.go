@@ -20,7 +20,8 @@ func unregister(c *cli.Context) {
 	}, " | "))
 
 	unregisterShuttle(c)
-	containers, err := serviceRuntime.UnRegisterAll(utils.GalaxyEnv(c), utils.GalaxyPool(c))
+	containers, err := serviceRuntime.UnRegisterAll(utils.GalaxyEnv(c), utils.GalaxyPool(c),
+		c.GlobalString("hostIp"))
 	if err != nil {
 		log.Fatalf("ERROR: Problem unregistering containers: %s", err)
 	}

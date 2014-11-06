@@ -42,7 +42,7 @@ func initOrDie(c *cli.Context) {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-		c.GlobalString("hostIp"),
+
 		uint64(c.Int("ttl")),
 		c.GlobalString("sshAddr"),
 	)
