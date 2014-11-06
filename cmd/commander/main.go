@@ -390,6 +390,7 @@ func main() {
 		println("   app:shell       Run a bash shell within an app on this host")
 		println("   app:start       Starts one or more apps")
 		println("   app:stop        Stops one or more apps")
+		println("   config          List config for an app")
 		println("   runtime         List container runtime policies")
 		println("   runtime:set     Set container runtime policies")
 		println("   hosts           List hosts in an env and pool")
@@ -657,6 +658,32 @@ func main() {
 			log.Fatalf("ERROR: %s", err)
 		}
 		return
+	case "config":
+		configFs := flag.NewFlagSet("config", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app>\n")
+			println("    List config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() != 1 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigList(configStore, app, env)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+
 	case "runtime":
 		runtimeFs := flag.NewFlagSet("runtime", flag.ExitOnError)
 		runtimeFs.Usage = func() {

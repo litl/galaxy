@@ -7,8 +7,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"sort"
-
 	"strings"
 	"sync"
 
@@ -217,28 +215,11 @@ func configList(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config")
 
-	cfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
+	err := commander.ConfigList(configStore, app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to list config: %s.", err)
 		return
 	}
-
-	if cfg == nil {
-		log.Fatalf("ERROR: Unable to list config for %s.", app)
-		return
-	}
-
-	keys := sort.StringSlice{}
-	for k, _ := range cfg.Env() {
-		keys = append(keys, k)
-	}
-
-	keys.Sort()
-
-	for _, k := range keys {
-		log.Printf("%s=%s\n", k, cfg.Env()[k])
-	}
-
 }
 
 func configSet(c *cli.Context) {
