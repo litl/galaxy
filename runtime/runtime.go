@@ -179,48 +179,40 @@ func (s *ServiceRuntime) InspectContainer(id string) (*docker.Container, error) 
 }
 
 func (s *ServiceRuntime) StopAllMatching(name string) error {
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return err
 	}
 
 	for _, container := range containers {
 
-		// We name all galaxy managed containers
-		if len(container.Names) == 0 {
-			continue
-		}
-
+		env := s.EnvFor(container)
 		// Container name does match one that would be started w/ this service config
-		if !strings.HasPrefix(strings.TrimPrefix(container.Names[0], "/"), name+"_") {
+		if env["GALAXY_APP"] != name {
 			continue
 		}
 
-		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-		_, ok := err.(*docker.NoSuchContainer)
-		// container is not actually running. Skip it and leave old ones.
-		if err != nil && ok {
-			continue
-		}
-
-		s.stopContainer(dockerContainer)
+		s.stopContainer(container)
 	}
 	return nil
 
 }
 
-func (s *ServiceRuntime) Stop(serviceConfig *config.AppConfig) error {
-	latestName := serviceConfig.ContainerName()
-	latestContainer, err := s.ensureDockerClient().InspectContainer(latestName)
-	_, ok := err.(*docker.NoSuchContainer)
-	// Expected container is not actually running. Skip it and leave old ones.
-	if err != nil && ok {
-		return nil
+func (s *ServiceRuntime) Stop(appCfg *config.AppConfig) error {
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return err
 	}
 
-	return s.stopContainer(latestContainer)
+	for _, container := range containers {
+		cenv := s.EnvFor(container)
+		if cenv["GALAXY_APP"] == appCfg.Name &&
+			cenv["GALAXY_VERSION"] == strconv.FormatInt(appCfg.ID(), 10) &&
+			appCfg.VersionID() == container.Image {
+			return s.stopContainer(container)
+		}
+	}
+	return nil
 }
 
 func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
@@ -230,6 +222,7 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	}
 
 	log.Printf("Stopping %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
+
 	c := make(chan error, 1)
 	go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
 	select {
@@ -252,28 +245,17 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	})*/
 }
 
-func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfig) error {
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+func (s *ServiceRuntime) StopAllButCurrentVersion(appCfg *config.AppConfig) error {
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return err
 	}
 
 	for _, container := range containers {
 
-		// We name all galaxy managed containers
-		if len(container.Names) == 0 {
-			continue
-		}
-
-		dockerContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-		if err != nil {
-			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
-			continue
-		}
+		env := s.EnvFor(container)
 		// Container name does match one that would be started w/ this service config
-		if s.EnvFor(dockerContainer)["GALAXY_APP"] != serviceConfig.Name {
+		if env["GALAXY_APP"] != appCfg.Name {
 			continue
 		}
 
@@ -289,29 +271,27 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(serviceConfig *config.AppConfi
 
 		}
 
-		if image.ID != serviceConfig.VersionID() && serviceConfig.VersionID() != "" {
-			s.stopContainer(dockerContainer)
+		version := env["GALAXY_VERSION"]
+
+		imageDiffers := image.ID != appCfg.VersionID() && appCfg.VersionID() != ""
+		versionDiffers := version != strconv.FormatInt(appCfg.ID(), 10) && version != ""
+
+		if imageDiffers || versionDiffers {
+			s.stopContainer(container)
 		}
 	}
 	return nil
 }
 
 func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) error {
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
-	})
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return err
 	}
 
 	var toStop []*docker.Container
 	var latestContainer *docker.Container
-	for _, apiContainer := range containers {
-		container, err := s.ensureDockerClient().InspectContainer(apiContainer.ID)
-		if err != nil {
-			log.Printf("ERROR: Unable to inspect container: %s\n", container.ID)
-			continue
-		}
+	for _, container := range containers {
 		if s.EnvFor(container)["GALAXY_APP"] == name {
 			if latestContainer == nil || container.Created.After(latestContainer.Created) {
 				latestContainer = container
@@ -321,7 +301,6 @@ func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) 
 	}
 
 	for _, container := range toStop {
-
 		if container.ID != latestContainer.ID &&
 			container.Created.Unix() < (time.Now().Unix()-stopCutoff) {
 			s.stopContainer(container)
@@ -373,25 +352,33 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 }
 
-func (s *ServiceRuntime) RunCommand(serviceConfig *config.AppConfig, cmd []string) (*docker.Container, error) {
+func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
-	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
-	_, err := s.PullImage(serviceConfig.Version(), serviceConfig.VersionID(), true)
+	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
+	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID(), true)
+	if err != nil {
+		return nil, err
+	}
+
+	instanceId, err := s.NextInstanceSlot(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
 	if err != nil {
 		return nil, err
 	}
 
 	envVars := []string{}
-	for key, value := range serviceConfig.Env() {
+	for key, value := range appCfg.Env() {
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
+	envVars = append(envVars, "GALAXY_APP="+appCfg.Name)
+	envVars = append(envVars, "GALAXY_VERSION="+strconv.FormatInt(appCfg.ID(), 10))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
 
 	runCmd := []string{"/bin/bash", "-c", strings.Join(cmd, " ")}
 
 	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
-			Image:        serviceConfig.Version(),
+			Image:        appCfg.Version(),
 			Env:          envVars,
 			AttachStdout: true,
 			AttachStderr: true,
@@ -459,11 +446,11 @@ func (s *ServiceRuntime) RunCommand(serviceConfig *config.AppConfig, cmd []strin
 	return container, err
 }
 
-func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppConfig) error {
+func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) error {
 
 	// see if we have the image locally
-	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", serviceConfig.Version())
-	_, err := s.PullImage(serviceConfig.Version(), serviceConfig.VersionID(), true)
+	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
+	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID(), true)
 	if err != nil {
 		return err
 	}
@@ -471,7 +458,7 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 	args := []string{
 		"run", "--rm", "-i",
 	}
-	for key, value := range serviceConfig.Env() {
+	for key, value := range appCfg.Env() {
 		if key == "ENV" {
 			args = append(args, "-e")
 			args = append(args, strings.ToUpper(key)+"="+env)
@@ -489,7 +476,16 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 	args = append(args, "--dns")
 	args = append(args, s.shuttleHost)
 	args = append(args, "-e")
-	args = append(args, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
+	args = append(args, fmt.Sprintf("GALAXY_APP=%s", appCfg.Name))
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(appCfg.ID(), 10)))
+
+	instanceId, err := s.NextInstanceSlot(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
+	if err != nil {
+		return err
+	}
+	args = append(args, "-e")
+	args = append(args, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
 
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
@@ -500,9 +496,9 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("PUBLIC_HOSTNAME=%s", publicDns))
 
-	args = append(args, []string{"-t", serviceConfig.Version(), "/bin/bash"}...)
+	args = append(args, []string{"-t", appCfg.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
-	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", serviceConfig.Version(), "/bin/bash")
+	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", appCfg.Version(), "/bin/bash")
 	cmd := exec.Command("docker", args...)
 
 	cmd.Stdin = os.Stdin
@@ -521,12 +517,13 @@ func (s *ServiceRuntime) StartInteractive(env string, serviceConfig *config.AppC
 	return err
 }
 
-func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*docker.Container, error) {
-	img := serviceConfig.Version()
+func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Container, error) {
 
-	imgIdRef := serviceConfig.Version()
-	if serviceConfig.VersionID() != "" {
-		imgIdRef = serviceConfig.VersionID()
+	img := appCfg.Version()
+
+	imgIdRef := appCfg.Version()
+	if appCfg.VersionID() != "" {
+		imgIdRef = appCfg.VersionID()
 	}
 	// see if we have the image locally
 	image, err := s.PullImage(img, imgIdRef, false)
@@ -536,7 +533,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 
 	// setup env vars from etcd
 	var envVars []string
-	for key, value := range serviceConfig.Env() {
+	for key, value := range appCfg.Env() {
 		if key == "ENV" {
 			envVars = append(envVars, strings.ToUpper(key)+"="+env)
 			continue
@@ -544,9 +541,16 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 		envVars = append(envVars, strings.ToUpper(key)+"="+value)
 	}
 
+	instanceId, err := s.NextInstanceSlot(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
+	if err != nil {
+		return nil, err
+	}
+
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
-	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", serviceConfig.Name))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", appCfg.Name))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(appCfg.ID(), 10)))
+	envVars = append(envVars, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
 
 	publicDns, err := EC2PublicHostname()
 	if err != nil {
@@ -555,7 +559,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 	}
 	envVars = append(envVars, fmt.Sprintf("PUBLIC_HOSTNAME=%s", publicDns))
 
-	containerName := serviceConfig.ContainerName()
+	containerName := appCfg.ContainerName() + "." + strconv.FormatInt(int64(instanceId), 10)
 	container, err := s.ensureDockerClient().InspectContainer(containerName)
 	_, ok := err.(*docker.NoSuchContainer)
 	if err != nil && !ok {
@@ -566,14 +570,14 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 	// and re-create it.
 	if container != nil && container.Image != image.ID {
 		if container.State.Running {
-			log.Printf("Stopping %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+			log.Printf("Stopping %s version %s running as %s", appCfg.Name, appCfg.Version(), container.ID[0:12])
 			err := s.ensureDockerClient().StopContainer(container.ID, 10)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		log.Printf("Removing %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+		log.Printf("Removing %s version %s running as %s", appCfg.Name, appCfg.Version(), container.ID[0:12])
 		err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 			ID: container.ID,
 		})
@@ -584,7 +588,7 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 	}
 
 	if container == nil {
-		log.Printf("Creating %s version %s", serviceConfig.Name, serviceConfig.Version())
+		log.Printf("Creating %s version %s", appCfg.Name, appCfg.Version())
 		container, err = s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
 			Name: containerName,
 			Config: &docker.Config{
@@ -597,7 +601,8 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 		}
 	}
 
-	log.Printf("Starting %s version %s running as %s", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+	log.Printf("Starting %s version %s running as %s", appCfg.Name, appCfg.Version(), container.ID[0:12])
+
 	err = s.ensureDockerClient().StartContainer(container.ID,
 		&docker.HostConfig{
 			Dns:             []string{s.shuttleHost},
@@ -621,49 +626,43 @@ func (s *ServiceRuntime) Start(env string, serviceConfig *config.AppConfig) (*do
 
 }
 
-func (s *ServiceRuntime) StartIfNotRunning(env string, serviceConfig *config.AppConfig) (bool, *docker.Container, error) {
-	container, err := s.ensureDockerClient().InspectContainer(serviceConfig.ContainerName())
-	_, ok := err.(*docker.NoSuchContainer)
-	// Expected container is not actually running. Skip it and leave old ones.
-	if (err != nil && ok) || container == nil {
-		container, err := s.Start(env, serviceConfig)
-		return true, container, err
-	}
+func (s *ServiceRuntime) StartIfNotRunning(env string, appCfg *config.AppConfig) (bool, *docker.Container, error) {
 
+	containers, err := s.ManagedContainers()
 	if err != nil {
 		return false, nil, err
 	}
 
-	if s.EnvFor(container)["GALAXY_APP"] != serviceConfig.Name {
-		return false, container, nil
-	}
-
-	image, err := s.InspectImage(serviceConfig.Version())
+	image, err := s.InspectImage(appCfg.Version())
 	if err != nil {
 		return false, nil, err
 	}
 
-	imageDiffers := image.ID != container.Image
-	notRunning := !container.State.Running
-
-	// If their is a stopped container, remove it so we start a new one instead.
-	if notRunning {
-		err := s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
-			ID: container.ID,
-		})
-		if err != nil {
-			return false, nil, err
+	var running *docker.Container
+	for _, container := range containers {
+		cenv := s.EnvFor(container)
+		if cenv["GALAXY_APP"] == appCfg.Name &&
+			cenv["GALAXY_VERSION"] == strconv.FormatInt(appCfg.ID(), 10) &&
+			image.ID == container.Image {
+			running = container
+			break
 		}
 	}
 
-	if imageDiffers || notRunning {
-
-		container, err := s.Start(env, serviceConfig)
-		return true, container, err
+	if running != nil {
+		return false, running, nil
 	}
 
-	return false, container, nil
+	err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+		ID: appCfg.ContainerName(),
+	})
+	_, ok := err.(*docker.NoSuchContainer)
+	if err != nil && !ok {
+		return false, nil, err
+	}
 
+	container, err := s.Start(env, appCfg)
+	return true, container, err
 }
 
 func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Image, error) {
@@ -886,4 +885,44 @@ func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 		}
 	}
 	return apps, nil
+}
+
+func (s *ServiceRuntime) instanceIds(app, versionId string) ([]int, error) {
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return []int{}, err
+	}
+
+	instances := []int{}
+	for _, c := range containers {
+		gi := s.EnvFor(c)["GALAXY_INSTANCE"]
+		gv := s.EnvFor(c)["GALAXY_VERSION"]
+		if gi != "" {
+			i, err := strconv.ParseInt(gi, 10, 64)
+			if err != nil {
+				log.Warnf("WARN: Invalid number %s for %s. Ignoring.", gi, c.ID[:12])
+				continue
+			}
+
+			if versionId != "" && gv != versionId {
+				continue
+			}
+			instances = append(instances, int(i))
+		}
+	}
+	return instances, nil
+}
+
+func (s *ServiceRuntime) InstanceCount(app, versionId string) (int, error) {
+	instances, err := s.instanceIds(app, versionId)
+	return len(instances), err
+}
+
+func (s *ServiceRuntime) NextInstanceSlot(app, versionId string) (int, error) {
+	instances, err := s.instanceIds(app, versionId)
+	if err != nil {
+		return 0, err
+	}
+
+	return utils.NextSlot(instances), nil
 }

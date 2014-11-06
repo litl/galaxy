@@ -6,9 +6,13 @@ import (
 	"fmt"
 	golog "log"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
 	"time"
+
+	"strconv"
+	"syscall"
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander"
@@ -26,18 +30,19 @@ var (
 	env             string
 	pool            string
 	loop            bool
+	hostIP          string
 	shuttleHost     string
 	statsdHost      string
 	debug           bool
 	runOnce         bool
 	version         bool
 	buildVersion    string
-	serviceConfigs  []*config.AppConfig
 	serviceRegistry *registry.ServiceRegistry
-	Store           *config.Store
+	configStore     *config.Store
 	serviceRuntime  *runtime.ServiceRuntime
 	workerChans     map[string]chan string
 	wg              sync.WaitGroup
+	signalsChan     chan os.Signal
 )
 
 func initOrDie() {
@@ -49,34 +54,38 @@ func initOrDie() {
 	)
 	serviceRegistry.Connect(redisHost)
 
-	Store = config.NewStore(
+	configStore = config.NewStore(
 		"",
 		registry.DefaultTTL,
 		"",
 	)
-	Store.Connect(redisHost)
+	configStore.Connect(redisHost)
 
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
 
-	apps, err := Store.ListAssignments(env, pool)
+	apps, err := configStore.ListAssignments(env, pool)
 	if err != nil {
 		log.Fatalf("ERROR: Could not retrieve service configs for /%s/%s: %s", env, pool, err)
 	}
 
 	workerChans = make(map[string]chan string)
 	for _, app := range apps {
-		serviceConfig, err := Store.GetApp(app, env)
+		appCfg, err := configStore.GetApp(app, env)
 		if err != nil {
 			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s", env, pool, err)
 		}
 
-		workerChans[serviceConfig.Name] = make(chan string)
+		workerChans[appCfg.Name] = make(chan string)
 	}
+
+	signalsChan = make(chan os.Signal, 1)
+	signal.Notify(signalsChan, os.Interrupt, os.Kill, syscall.SIGTERM)
+	go deregisterHost(signalsChan)
 }
 
-func pullImageAsync(serviceConfig config.AppConfig, errChan chan error) {
+func pullImageAsync(appCfg config.AppConfig, errChan chan error) {
 	// err logged via pullImage
-	_, err := pullImage(&serviceConfig)
+	_, err := pullImage(&appCfg)
 	if err != nil {
 		errChan <- err
 		return
@@ -84,58 +93,102 @@ func pullImageAsync(serviceConfig config.AppConfig, errChan chan error) {
 	errChan <- nil
 }
 
-func pullImage(serviceConfig *config.AppConfig) (*docker.Image, error) {
+func pullImage(appCfg *config.AppConfig) (*docker.Image, error) {
 
-	image, err := serviceRuntime.InspectImage(serviceConfig.Version())
-	if image != nil && image.ID == serviceConfig.VersionID() || serviceConfig.VersionID() == "" {
+	image, err := serviceRuntime.InspectImage(appCfg.Version())
+	if image != nil && image.ID == appCfg.VersionID() || appCfg.VersionID() == "" {
 		return image, nil
 	}
 
-	log.Printf("Pulling %s version %s\n", serviceConfig.Name, serviceConfig.Version())
-	image, err = serviceRuntime.PullImage(serviceConfig.Version(),
-		serviceConfig.VersionID(), true)
+	log.Printf("Pulling %s version %s\n", appCfg.Name, appCfg.Version())
+	image, err = serviceRuntime.PullImage(appCfg.Version(),
+		appCfg.VersionID(), true)
 	if image == nil || err != nil {
 		log.Errorf("ERROR: Could not pull image %s: %s",
-			serviceConfig.Version(), err)
+			appCfg.Version(), err)
 		return nil, err
 	}
 
-	if image.ID != serviceConfig.VersionID() && len(serviceConfig.VersionID()) > 12 {
+	if image.ID != appCfg.VersionID() && len(appCfg.VersionID()) > 12 {
 		log.Errorf("ERROR: Pulled image for %s does not match expected ID. Expected: %s: Got: %s",
-			serviceConfig.Version(),
-			image.ID[0:12], serviceConfig.VersionID()[0:12])
-		return nil, errors.New(fmt.Sprintf("failed to pull image ID %s", serviceConfig.VersionID()[0:12]))
+			appCfg.Version(),
+			image.ID[0:12], appCfg.VersionID()[0:12])
+		return nil, errors.New(fmt.Sprintf("failed to pull image ID %s", appCfg.VersionID()[0:12]))
 	}
 
-	log.Printf("Pulled %s\n", serviceConfig.Version())
+	log.Printf("Pulled %s\n", appCfg.Version())
 	return image, nil
 }
 
-func startService(serviceConfig *config.AppConfig, logStatus bool) {
-	started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
+func startService(appCfg *config.AppConfig, logStatus bool) {
+
+	desired, err := commander.Balanced(configStore, hostIP, appCfg.Name, env, pool)
 	if err != nil {
-		log.Errorf("ERROR: Could not start container for %s: %s", serviceConfig.Version(), err)
+		log.Errorf("ERROR: Could not determine instance count: %s", err)
 		return
 	}
 
-	if started {
-		log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+	running, err := serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
+	if err != nil {
+		log.Errorf("ERROR: Could not determine running instance count: %s", err)
+		return
 	}
 
-	if logStatus && !debug {
-		log.Printf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
+	for i := 0; i < desired-running; i++ {
+		container, err := serviceRuntime.Start(env, appCfg)
+		if err != nil {
+			log.Errorf("ERROR: Could not start containers: %s", err)
+			return
+		}
+
+		log.Printf("Started %s version %s as %s\n", appCfg.Name, appCfg.Version(), container.ID[0:12])
 	}
 
-	log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-
-	err = serviceRuntime.StopAllButLatestService(serviceConfig.Name, stopCutoff)
+	err = serviceRuntime.StopAllButCurrentVersion(appCfg)
 	if err != nil {
 		log.Errorf("ERROR: Could not stop containers: %s", err)
 	}
+
+	running, err = serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
+	if err != nil {
+		log.Errorf("ERROR: Could not determine running instance count: %s", err)
+		return
+	}
+
+	for i := 0; i < running-desired; i++ {
+		err := serviceRuntime.Stop(appCfg)
+		if err != nil {
+			log.Errorf("ERROR: Could not stop container: %s", err)
+		}
+	}
+
+}
+
+func heartbeatHost() {
+	wg.Add(1)
+	defer wg.Done()
+	for {
+		configStore.UpdateHost(env, pool, config.HostInfo{
+			HostIP: hostIP,
+		})
+
+		if !loop {
+			return
+		}
+		time.Sleep(45 * time.Second)
+	}
+}
+
+func deregisterHost(signals chan os.Signal) {
+	<-signals
+	configStore.DeleteHost(env, pool, config.HostInfo{
+		HostIP: hostIP,
+	})
+	os.Exit(0)
 }
 
 func appAssigned(app string) (bool, error) {
-	assignments, err := Store.ListAssignments(env, pool)
+	assignments, err := configStore.ListAssignments(env, pool)
 	if err != nil {
 		return false, err
 	}
@@ -171,7 +224,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			serviceConfig, err := Store.GetApp(app, env)
+			appCfg, err := configStore.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				if !loop {
@@ -180,7 +233,7 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			if serviceConfig.Version() == "" {
+			if appCfg.Version() == "" {
 				if !loop {
 					return
 				}
@@ -188,26 +241,27 @@ func restartContainers(app string, cmdChan chan string) {
 			}
 
 			if cmd == "deploy" {
-				_, err = pullImage(serviceConfig)
+				_, err = pullImage(appCfg)
 				if err != nil {
+					log.Errorf("ERROR: Error pulling image for %s: %s", app, err)
 					if !loop {
 						return
 					}
 					continue
 				}
-				startService(serviceConfig, logOnce)
+				startService(appCfg, logOnce)
 			}
 
 			if cmd == "restart" {
-				err := serviceRuntime.Stop(serviceConfig)
+				err := serviceRuntime.Stop(appCfg)
 				if err != nil {
 					log.Errorf("ERROR: Could not stop %s: %s",
-						serviceConfig.Version(), err)
+						appCfg.Version(), err)
 					if !loop {
 						return
 					}
 
-					startService(serviceConfig, logOnce)
+					startService(appCfg, logOnce)
 					continue
 				}
 			}
@@ -215,7 +269,7 @@ func restartContainers(app string, cmdChan chan string) {
 			logOnce = false
 		case <-ticker.C:
 
-			serviceConfig, err := Store.GetApp(app, env)
+			appCfg, err := configStore.GetApp(app, env)
 			if err != nil {
 				log.Errorf("ERROR: Error retrieving service config for %s: %s", app, err)
 				continue
@@ -231,18 +285,18 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			if serviceConfig == nil || !assigned {
+			if appCfg == nil || !assigned {
 				log.Errorf("%s no longer exists.  Stopping worker.", app)
 				serviceRuntime.StopAllMatching(app)
 				delete(workerChans, app)
 				return
 			}
 
-			if serviceConfig.Version() == "" {
+			if appCfg.Version() == "" {
 				continue
 			}
 
-			_, err = pullImage(serviceConfig)
+			_, err = pullImage(appCfg)
 			if err != nil {
 				if !loop {
 					return
@@ -250,23 +304,7 @@ func restartContainers(app string, cmdChan chan string) {
 				log.Errorf("ERROR: Could not pull images: %s", err)
 				continue
 			}
-
-			started, container, err := serviceRuntime.StartIfNotRunning(env, serviceConfig)
-			if err != nil {
-				log.Errorf("ERROR: Could not start containers: %s", err)
-				continue
-			}
-
-			if started {
-				log.Printf("Started %s version %s as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-			}
-
-			log.Debugf("%s version %s running as %s\n", serviceConfig.Name, serviceConfig.Version(), container.ID[0:12])
-
-			err = serviceRuntime.StopAllButCurrentVersion(serviceConfig)
-			if err != nil {
-				log.Errorf("ERROR: Could not stop containers: %s", err)
-			}
+			startService(appCfg, logOnce)
 		}
 
 		if !loop {
@@ -336,6 +374,7 @@ func main() {
 	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
+	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
 	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
 	flag.StringVar(&statsdHost, "statsdAddr", utils.GetEnv("GALAXY_STATSD_HOST", ""), "IP where containers can reach a statsd service. Defaults to docker0 IP:8125.")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
@@ -352,11 +391,13 @@ func main() {
 		println("   app:restart     Restart an app")
 		println("   app:run         Run a command within an app on this host")
 		println("   app:shell       Run a bash shell within an app on this host")
-		println("   start           Starts one or more apps")
-		println("   stop            Stops one or more apps")
+		println("   app:start       Starts one or more apps")
+		println("   app:stop        Stops one or more apps")
+		println("   runtime         List container runtime policies")
+		println("   runtime:set     Set container runtime policies")
+		println("   hosts           List hosts in an env and pool")
 		println("\nOptions:\n")
 		flag.PrintDefaults()
-
 	}
 
 	flag.Parse()
@@ -403,6 +444,18 @@ func main() {
 			agentFs.PrintDefaults()
 		}
 		agentFs.Parse(flag.Args()[1:])
+
+		hosts, err := configStore.ListHosts(env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+
+		for _, hi := range hosts {
+			if hi.HostIP == hostIP {
+				log.Fatalf("ERROR: agent already running on this host")
+			}
+		}
+
 	case "app":
 		appFs := flag.NewFlagSet("app", flag.ExitOnError)
 		appFs.Usage = func() {
@@ -412,7 +465,7 @@ func main() {
 			appFs.PrintDefaults()
 		}
 		appFs.Parse(flag.Args()[1:])
-		err := commander.AppList(Store, env)
+		err := commander.AppList(configStore, env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -431,7 +484,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppCreate(Store, appFs.Args()[0], env)
+		err := commander.AppCreate(configStore, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -451,7 +504,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppDelete(Store, appFs.Args()[0], env)
+		err := commander.AppDelete(configStore, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -462,7 +515,7 @@ func main() {
 		appFs := flag.NewFlagSet("app:delete", flag.ExitOnError)
 		appFs.BoolVar(&force, "force", false, "Force pulling image")
 		appFs.Usage = func() {
-			println("Usage: commander app:deploy <app> <version>\n")
+			println("Usage: commander app:deploy [-force] <app> <version>\n")
 			println("    Deploy an app in an environment\n")
 			println("Options:\n")
 			appFs.PrintDefaults()
@@ -473,7 +526,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppDeploy(Store, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1], force)
+		err := commander.AppDeploy(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1], force)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -493,7 +546,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppRestart(Store, appFs.Args()[0], env)
+		err := commander.AppRestart(configStore, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -513,7 +566,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppRun(Store, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1:])
+		err := commander.AppRun(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1:])
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -533,15 +586,15 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppShell(Store, serviceRuntime, appFs.Args()[0], env)
+		err := commander.AppShell(configStore, serviceRuntime, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
 		return
 
-	case "start":
+	case "app:start":
 
-		startFs := flag.NewFlagSet("start", flag.ExitOnError)
+		startFs := flag.NewFlagSet("app:start", flag.ExitOnError)
 		startFs.Usage = func() {
 			println("Usage: commander start [options] [<app>]*\n")
 			println("    Starts one or more apps. If no apps are specified, starts all apps.\n")
@@ -552,9 +605,18 @@ func main() {
 
 		apps = startFs.Args()
 
+		if len(apps) == 0 {
+			acs, err := configStore.ListApps(env)
+			if err != nil {
+				log.Fatalf("ERROR: Unable to list apps: %s", err)
+			}
+			for _, ac := range acs {
+				apps = append(apps, ac.Name)
+			}
+		}
 		break
-	case "stop":
-		stopFs := flag.NewFlagSet("stop", flag.ExitOnError)
+	case "app:stop":
+		stopFs := flag.NewFlagSet("app:stop", flag.ExitOnError)
 		stopFs.Usage = func() {
 			println("Usage: commander stop [options] [<app>]*\n")
 			println("    Stops one or more apps. If no apps are specified, stops all apps.\n")
@@ -580,11 +642,101 @@ func main() {
 			log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
 		}
 		return
+	case "hosts":
+		hostFs := flag.NewFlagSet("hosts", flag.ExitOnError)
+		hostFs.Usage = func() {
+			println("Usage: commander hosts\n")
+			println("    List hosts in an env and pool\n")
+			println("Options:\n")
+			hostFs.PrintDefaults()
+		}
+		err := hostFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		err = commander.HostsList(configStore, env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+	case "runtime":
+		runtimeFs := flag.NewFlagSet("runtime", flag.ExitOnError)
+		runtimeFs.Usage = func() {
+			println("Usage: commander runtime\n")
+			println("    List container runtime policies\n")
+			println("Options:\n")
+			runtimeFs.PrintDefaults()
+		}
+		err := runtimeFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		app := ""
+		if runtimeFs.NArg() > 0 {
+			app = runtimeFs.Args()[0]
+		}
+
+		err = commander.RuntimeList(configStore, app, env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+
+	case "runtime:set":
+		var ps int
+		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
+		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
+		runtimeFs.Usage = func() {
+			println("Usage: commander runtime:set [-ps 1] <app>\n")
+			println("    Set container runtime policies\n")
+			println("Options:\n")
+			runtimeFs.PrintDefaults()
+		}
+
+		err := runtimeFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if runtimeFs.NArg() != 1 {
+			runtimeFs.Usage()
+			os.Exit(1)
+		}
+
+		app := runtimeFs.Args()[0]
+
+		updated, err := commander.RuntimeSet(configStore, app, env, pool, commander.RuntimeOptions{
+			Ps: ps,
+		})
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+
+		if !updated {
+			log.Fatalf("ERROR: Failed to set runtime options.")
+		}
+		log.Printf("Runtime options update for %s in %s running on %s", app, env, pool)
+		return
+
+	default:
+		fmt.Println("Unknown command")
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	log.Printf("Starting commander %s", buildVersion)
 	log.Printf("Using env = %s, pool = %s",
 		env, pool)
+
+	go heartbeatHost()
+
+	defer func() {
+		configStore.DeleteHost(env, pool, config.HostInfo{
+			HostIP: hostIP,
+		})
+	}()
 
 	for app, ch := range workerChans {
 		if len(apps) == 0 || utils.StringInSlice(app, apps) {
@@ -599,9 +751,10 @@ func main() {
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
-		restartChan := Store.Watch(env, cancelChan)
+		restartChan := configStore.Watch(env, cancelChan)
 		monitorService(restartChan)
 	}
 
 	wg.Wait()
+
 }

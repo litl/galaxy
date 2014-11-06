@@ -1,9 +1,10 @@
 package config
 
 import (
-	"strconv"
-
+	"fmt"
 	"github.com/litl/galaxy/utils"
+	"strconv"
+	"strings"
 )
 
 type AppConfig struct {
@@ -13,6 +14,7 @@ type AppConfig struct {
 	versionVMap     *utils.VersionedMap
 	environmentVMap *utils.VersionedMap
 	portsVMap       *utils.VersionedMap
+	runtimeVMap     *utils.VersionedMap
 }
 
 func NewAppConfig(app, version string) *AppConfig {
@@ -21,6 +23,7 @@ func NewAppConfig(app, version string) *AppConfig {
 		versionVMap:     utils.NewVersionedMap(),
 		environmentVMap: utils.NewVersionedMap(),
 		portsVMap:       utils.NewVersionedMap(),
+		runtimeVMap:     utils.NewVersionedMap(),
 	}
 	svcCfg.SetVersion(version)
 
@@ -115,4 +118,28 @@ func (s *AppConfig) ContainerName() string {
 
 func (s *AppConfig) nextID() int64 {
 	return s.ID() + 1
+}
+
+func (s *AppConfig) SetProcesses(pool string, count int) {
+	key := fmt.Sprintf("%s-ps", pool)
+	s.runtimeVMap.Set(key, strconv.FormatInt(int64(count), 10))
+}
+
+func (s *AppConfig) GetProcesses(pool string) int {
+	key := fmt.Sprintf("%s-ps", pool)
+	ps := s.runtimeVMap.Get(key)
+	if ps == "" {
+		return 0
+	}
+	count, _ := strconv.ParseInt(ps, 10, 16)
+	return int(count)
+}
+
+func (s *AppConfig) RuntimePools() []string {
+	keys := s.runtimeVMap.Keys()
+	pools := []string{}
+	for _, k := range keys {
+		pools = append(pools, k[:strings.Index(k, "-")])
+	}
+	return pools
 }

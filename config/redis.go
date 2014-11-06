@@ -31,7 +31,7 @@ func (r *RedisBackend) CreateApp(app, env string) (bool, error) {
 	return r.UpdateApp(emptyConfig, env)
 }
 
-func (r *RedisBackend) ListApps(env string) ([]AppConfig, error) {
+func (r *RedisBackend) ListApps(env string) ([]*AppConfig, error) {
 	// TODO: convert to scan
 	apps, err := r.Keys(path.Join(env, "*", "environment"))
 	if err != nil {
@@ -39,7 +39,7 @@ func (r *RedisBackend) ListApps(env string) ([]AppConfig, error) {
 	}
 
 	// TODO: is it OK to error out early?
-	var appList []AppConfig
+	var appList []*AppConfig
 	for _, app := range apps {
 		parts := strings.Split(app, "/")
 
@@ -58,7 +58,7 @@ func (r *RedisBackend) ListApps(env string) ([]AppConfig, error) {
 			return nil, err
 		}
 
-		appList = append(appList, *cfg)
+		appList = append(appList, cfg)
 	}
 
 	return appList, nil
@@ -100,6 +100,12 @@ func (r *RedisBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 		return false, err
 	}
 
+	err = r.SaveVMap(path.Join(env, svcCfg.Name, "runtime"),
+		svcCfg.runtimeVMap)
+
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -120,6 +126,10 @@ func (r *RedisBackend) GetApp(app, env string) (*AppConfig, error) {
 		return nil, err
 	}
 
+	err = r.LoadVMap(path.Join(env, app, "runtime"), svcCfg.runtimeVMap)
+	if err != nil {
+		return nil, err
+	}
 	return svcCfg, nil
 }
 
@@ -132,7 +142,7 @@ func (r *RedisBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
 
 	deletedOne = deletedOne || deleted == 1
 
-	for _, k := range []string{"environment", "version", "ports"} {
+	for _, k := range []string{"environment", "version", "ports", "runtime"} {
 		deleted, err = r.Delete(path.Join(env, svcCfg.Name, k))
 		if err != nil {
 			return false, err
@@ -536,4 +546,59 @@ func (r *RedisBackend) DeleteMulti(key string, fields ...string) (int, error) {
 	redisArgs := redis.Args{}.Add(key).AddFlat(args)
 	return redis.Int(conn.Do("HDEL", redisArgs...))
 
+}
+
+func (r *RedisBackend) DeleteHost(env, pool string, host HostInfo) error {
+	key := path.Join(env, pool, "hosts", host.HostIP, "info")
+	_, err := r.Delete(key)
+	return err
+}
+
+func (r *RedisBackend) UpdateHost(env, pool string, host HostInfo) error {
+	key := path.Join(env, pool, "hosts", host.HostIP, "info")
+	existing := utils.NewVersionedMap()
+
+	err := r.LoadVMap(key, existing)
+	if err != nil {
+		return err
+	}
+
+	save := false
+	if existing.Get("HostIP") != host.HostIP {
+		existing.Set("HostIP", host.HostIP)
+		save = true
+	}
+
+	if save {
+		err = r.SaveVMap(key, existing)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = r.Expire(key, DefaultTTL)
+	return err
+}
+
+func (r *RedisBackend) ListHosts(env, pool string) ([]HostInfo, error) {
+	key := path.Join(env, pool, "hosts", "*", "info")
+	keys, err := r.Keys(key)
+	if err != nil {
+		return nil, err
+	}
+
+	hosts := []HostInfo{}
+
+	for _, k := range keys {
+		existing := utils.NewVersionedMap()
+
+		err := r.LoadVMap(k, existing)
+		if err != nil {
+			return nil, err
+		}
+		hosts = append(hosts, HostInfo{
+			HostIP: existing.Get("HostIP"),
+		})
+	}
+	return hosts, nil
 }

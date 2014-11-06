@@ -130,3 +130,16 @@ func GalaxyRedisHost(c *cli.Context) string {
 	}
 	return strings.TrimSpace(GetEnv("GALAXY_REDIS_HOST", c.GlobalString("redis")))
 }
+
+// NextSlot finds the first available index in an array of integers
+func NextSlot(used []int) int {
+	free := 0
+RESTART:
+	for _, v := range used {
+		if v == free {
+			free = free + 1
+			goto RESTART
+		}
+	}
+	return free
+}

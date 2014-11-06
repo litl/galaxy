@@ -530,10 +530,16 @@ func poolList(c *cli.Context) {
 			continue
 		}
 
-		for name, assigments := range pools {
+		for _, pool := range pools {
+
+			assigments, err := configStore.ListAssignments(env, pool)
+			if err != nil {
+				log.Fatalf("ERROR: cannot list pool assignments: %s", err)
+			}
+
 			columns = append(columns, strings.Join([]string{
 				env,
-				name,
+				pool,
 				strings.Join(assigments, ",")}, " | "))
 		}
 
@@ -580,13 +586,13 @@ func pgPsql(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "pg:psql")
 
-	serviceConfig, err := configStore.GetApp(app, utils.GalaxyEnv(c))
+	appCfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Unable to run command: %s.", err)
 		return
 	}
 
-	database_url := serviceConfig.Env()["DATABASE_URL"]
+	database_url := appCfg.Env()["DATABASE_URL"]
 	if database_url == "" {
 		log.Printf("No DATABASE_URL configured.  Set one with config:set first.")
 		return

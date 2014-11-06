@@ -75,3 +75,27 @@ func TestSplitDockerImageWithRepositoryAndTag(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestNextSlotEmpty(t *testing.T) {
+	if NextSlot([]int{}) != 0 {
+		t.Fatal("Expected 0")
+	}
+}
+
+func TestNextSlotSimple(t *testing.T) {
+	if NextSlot([]int{0}) != 1 {
+		t.Fatal("Expected 1")
+	}
+}
+
+func TestNextSlotGap(t *testing.T) {
+	if NextSlot([]int{0, 1, 3}) != 2 {
+		t.Fatal("Expected 2")
+	}
+}
+
+func TestNextSlotEnd(t *testing.T) {
+	if NextSlot([]int{0, 1, 2, 3}) != 4 {
+		t.Fatal("Expected 4")
+	}
+}

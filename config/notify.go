@@ -22,7 +22,7 @@ func (r *Store) CheckForChangesNow() {
 func (r *Store) checkForChanges(env string) {
 	lastVersion := make(map[string]int64)
 	for {
-		serviceConfigs, err := r.ListApps(env)
+		appCfg, err := r.ListApps(env)
 		if err != nil {
 			restartChan <- &ConfigChange{
 				Error: err,
@@ -31,7 +31,7 @@ func (r *Store) checkForChanges(env string) {
 			continue
 		}
 
-		for _, config := range serviceConfigs {
+		for _, config := range appCfg {
 			lastVersion[config.Name] = config.ID()
 		}
 		break
@@ -40,21 +40,21 @@ func (r *Store) checkForChanges(env string) {
 
 	for {
 		<-r.pollCh
-		serviceConfigs, err := r.ListApps(env)
+		appCfg, err := r.ListApps(env)
 		if err != nil {
 			restartChan <- &ConfigChange{
 				Error: err,
 			}
 			continue
 		}
-		for _, changedConfig := range serviceConfigs {
+		for _, changedConfig := range appCfg {
 			changeCopy := changedConfig
 			if changedConfig.ID() != lastVersion[changedConfig.Name] {
 				log.Printf("%s changed from %d to %d", changedConfig.Name,
 					lastVersion[changedConfig.Name], changedConfig.ID())
 				lastVersion[changedConfig.Name] = changedConfig.ID()
 				restartChan <- &ConfigChange{
-					AppConfig: &changeCopy,
+					AppConfig: changeCopy,
 				}
 			}
 		}
@@ -76,7 +76,7 @@ func (r *Store) checkForChangePeriodically(stop chan struct{}) {
 }
 
 func (r *Store) restartApp(app, env string) {
-	serviceConfig, err := r.GetApp(app, env)
+	appCfg, err := r.GetApp(app, env)
 	if err != nil {
 		restartChan <- &ConfigChange{
 			Error: err,
@@ -86,13 +86,13 @@ func (r *Store) restartApp(app, env string) {
 
 	restartChan <- &ConfigChange{
 		Restart:   true,
-		AppConfig: serviceConfig,
+		AppConfig: appCfg,
 	}
 }
 
 func (r *Store) NotifyRestart(app, env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
+	_, err := r.Backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (r *Store) NotifyRestart(app, env string) error {
 
 func (r *Store) NotifyEnvChanged(env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
+	_, err := r.Backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (r *Store) NotifyEnvChanged(env string) error {
 
 func (r *Store) subscribeChanges(env string) {
 
-	msgs := r.backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
+	msgs := r.Backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
 	for {
 
 		msg := <-msgs
