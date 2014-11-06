@@ -104,7 +104,56 @@ func BenchmarkTCPProxy(b *testing.B) {
 
 	runtime.GC()
 }
-func BenchmarkReverseProxy(b *testing.B) {
+
+func BenchmarkHTTPProxy(b *testing.B) {
+	setupBench(b)
+	defer tearDownBench(b)
+
+	svcCfg := client.ServiceConfig{
+		Name:         "VHostTest",
+		Addr:         "127.0.0.1:9000",
+		VirtualHosts: []string{"test-vhost"},
+	}
+
+	for _, srv := range benchBackends {
+		cfg := client.BackendConfig{
+			Addr: srv.addr,
+			Name: srv.addr,
+		}
+		svcCfg.Backends = append(svcCfg.Backends, cfg)
+	}
+
+	err := Registry.AddService(svcCfg)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	req, err := http.NewRequest("GET", "http://"+listenAddr+"/addr", nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	req.Host = "test-vhost"
+	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			b.Fatal("Error during GET:", err)
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			b.Fatal("Error during Read:", err)
+		}
+		if len(body) < 7 {
+			b.Fatalf("Error in Response: %s", body)
+		}
+	}
+
+}
+
+func BenchmarkHTTPProxyKeepalive(b *testing.B) {
 	setupBench(b)
 	defer tearDownBench(b)
 
@@ -135,7 +184,6 @@ func BenchmarkReverseProxy(b *testing.B) {
 	req.Host = "test-vhost"
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = false
 
-	runtime.GC()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		resp, err := http.DefaultClient.Do(req)
@@ -151,5 +199,4 @@ func BenchmarkReverseProxy(b *testing.B) {
 		}
 	}
 
-	runtime.GC()
 }
