@@ -25,6 +25,10 @@ func Balanced(configStore *config.Store, hostId, app, env, pool string) (int, er
 		return 0, nil
 	}
 
+	if desired == -1 {
+		return 1, nil
+	}
+
 	hostIds := []string{}
 	for _, h := range hosts {
 		hostIds = append(hostIds, h.HostIP)

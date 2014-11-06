@@ -164,3 +164,17 @@ func TestScheduleFiveTwoHost(t *testing.T) {
 		t.Errorf("Expected %d. Got %d", 2, count)
 	}
 }
+
+func TestScheduleOneDefault(t *testing.T) {
+
+	s := setup(t, -1, []string{"127.0.0.1"})
+
+	count, err := Balanced(s, "127.0.0.1", "app", "dev", "web")
+	if err != nil {
+		t.Errorf("Expected %d. Got %s", 1, err)
+	}
+
+	if count != 1 {
+		t.Errorf("Expected %d. Got %d", 1, count)
+	}
+}

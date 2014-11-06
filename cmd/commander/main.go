@@ -165,6 +165,8 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 }
 
 func heartbeatHost() {
+	wg.Add(1)
+	defer wg.Done()
 	for {
 		configStore.UpdateHost(env, pool, config.HostInfo{
 			HostIP: hostIP,
@@ -178,7 +180,6 @@ func heartbeatHost() {
 }
 
 func deregisterHost(signals chan os.Signal) {
-	wg.Add(1)
 	<-signals
 	configStore.DeleteHost(env, pool, config.HostInfo{
 		HostIP: hostIP,
@@ -613,8 +614,6 @@ func main() {
 				apps = append(apps, ac.Name)
 			}
 		}
-
-		heartbeatHost()
 		break
 	case "app:stop":
 		stopFs := flag.NewFlagSet("app:stop", flag.ExitOnError)
@@ -731,6 +730,14 @@ func main() {
 	log.Printf("Using env = %s, pool = %s",
 		env, pool)
 
+	go heartbeatHost()
+
+	defer func() {
+		configStore.DeleteHost(env, pool, config.HostInfo{
+			HostIP: hostIP,
+		})
+	}()
+
 	for app, ch := range workerChans {
 		if len(apps) == 0 || utils.StringInSlice(app, apps) {
 			wg.Add(1)
@@ -741,9 +748,6 @@ func main() {
 
 	if loop {
 
-		wg.Add(1)
-		go heartbeatHost()
-
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
@@ -751,7 +755,6 @@ func main() {
 		monitorService(restartChan)
 	}
 
-	close(signalsChan)
 	wg.Wait()
 
 }
