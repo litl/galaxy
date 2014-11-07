@@ -51,6 +51,7 @@ func initOrDie(c *cli.Context) {
 		serviceRegistry,
 		c.GlobalString("shuttleAddr"),
 		"",
+		c.GlobalString("hostIp"),
 	)
 
 	outputBuffer = &utils.OutputBuffer{}

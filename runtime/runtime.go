@@ -27,6 +27,8 @@ type ServiceRuntime struct {
 	shuttleHost     string
 	statsdHost      string
 	serviceRegistry *registry.ServiceRegistry
+	dockerIP        string
+	hostIP          string
 }
 
 type ContainerEvent struct {
@@ -35,11 +37,12 @@ type ContainerEvent struct {
 	ServiceRegistration *registry.ServiceRegistration
 }
 
-func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, statsdHost string) *ServiceRuntime {
+func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, statsdHost, hostIP string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
 	}
+
 	if shuttleHost == "" {
 		shuttleHost = dockerZero
 	}
@@ -54,8 +57,9 @@ func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, s
 		shuttleHost:     shuttleHost,
 		statsdHost:      statsdHost,
 		serviceRegistry: serviceRegistry,
+		hostIP:          hostIP,
+		dockerIP:        dockerZero,
 	}
-
 }
 
 func GetEndpoint() string {
@@ -470,7 +474,7 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 	}
 
 	args = append(args, "-e")
-	args = append(args, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
+	args = append(args, fmt.Sprintf("HOST_IP=%s", s.hostIP))
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	args = append(args, "--dns")
@@ -546,7 +550,7 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 		return nil, err
 	}
 
-	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
+	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.hostIP))
 	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", appCfg.Name))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(appCfg.ID(), 10)))
@@ -925,4 +929,9 @@ func (s *ServiceRuntime) NextInstanceSlot(app, versionId string) (int, error) {
 	}
 
 	return utils.NextSlot(instances), nil
+}
+
+func (s ServiceRuntime) replaceVarEnv(in, hostIp string) string {
+	out := strings.Replace(in, "$HOST_IP", hostIp, -1)
+	return strings.Replace(out, "$DOCKER_IP", s.dockerIP, -1)
 }

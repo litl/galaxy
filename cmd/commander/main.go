@@ -58,7 +58,7 @@ func initOrDie() {
 
 	configStore.Connect(redisHost)
 
-	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
+	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost, hostIP)
 
 	apps, err := configStore.ListAssignments(env, pool)
 	if err != nil {
