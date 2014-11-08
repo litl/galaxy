@@ -88,9 +88,9 @@ func AppDelete(configStore *config.Store, app, env string) error {
 	return nil
 }
 
-func AppDeploy(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env, version string, force bool) error {
+func AppDeploy(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env, version string) error {
 
-	image, err := serviceRuntime.PullImage(version, "", force)
+	image, err := serviceRuntime.PullImage(version, "")
 	if image == nil || err != nil {
 		return fmt.Errorf("unable to pull %s. Has it been released yet?", version)
 	}

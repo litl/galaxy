@@ -162,7 +162,7 @@ func appDeploy(c *cli.Context) {
 		return
 	}
 
-	err := commander.AppDeploy(configStore, serviceRuntime, app, utils.GalaxyEnv(c), version, c.Bool("force"))
+	err := commander.AppDeploy(configStore, serviceRuntime, app, utils.GalaxyEnv(c), version)
 	if err != nil {
 		log.Fatalf("ERROR: %s", err)
 	}

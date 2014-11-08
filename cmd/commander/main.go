@@ -99,7 +99,7 @@ func pullImage(appCfg *config.AppConfig) (*docker.Image, error) {
 
 	log.Printf("Pulling %s version %s\n", appCfg.Name, appCfg.Version())
 	image, err = serviceRuntime.PullImage(appCfg.Version(),
-		appCfg.VersionID(), true)
+		appCfg.VersionID())
 	if image == nil || err != nil {
 		log.Errorf("ERROR: Could not pull image %s: %s",
 			appCfg.Version(), err)
@@ -512,9 +512,7 @@ func main() {
 		return
 
 	case "app:deploy":
-		var force bool
 		appFs := flag.NewFlagSet("app:delete", flag.ExitOnError)
-		appFs.BoolVar(&force, "force", false, "Force pulling image")
 		appFs.Usage = func() {
 			println("Usage: commander app:deploy [-force] <app> <version>\n")
 			println("    Deploy an app in an environment\n")
@@ -527,7 +525,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppDeploy(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1], force)
+		err := commander.AppDeploy(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1])
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}

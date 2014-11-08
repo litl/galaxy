@@ -360,7 +360,7 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
-	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID(), true)
+	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID())
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +454,7 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
-	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID(), true)
+	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID())
 	if err != nil {
 		return err
 	}
@@ -530,7 +530,7 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 		imgIdRef = appCfg.VersionID()
 	}
 	// see if we have the image locally
-	image, err := s.PullImage(img, imgIdRef, false)
+	image, err := s.PullImage(img, imgIdRef)
 	if err != nil {
 		return nil, err
 	}
@@ -669,14 +669,14 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, appCfg *config.AppConfig)
 	return true, container, err
 }
 
-func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Image, error) {
+func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	image, err := s.InspectImage(version)
 
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
 	}
 
-	if image != nil && image.ID == id && !force {
+	if image != nil && image.ID == id {
 		return image, nil
 	}
 
