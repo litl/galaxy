@@ -50,7 +50,6 @@ func initOrDie(c *cli.Context) {
 	serviceRuntime = runtime.NewServiceRuntime(
 		serviceRegistry,
 		c.GlobalString("shuttleAddr"),
-		"",
 		c.GlobalString("hostIp"),
 	)
 

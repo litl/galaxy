@@ -68,7 +68,6 @@ func initRuntime(c *cli.Context) {
 	serviceRuntime = runtime.NewServiceRuntime(
 		serviceRegistry,
 		"",
-		"",
 		"127.0.0.1",
 	)
 }

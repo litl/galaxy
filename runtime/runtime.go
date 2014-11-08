@@ -25,7 +25,6 @@ type ServiceRuntime struct {
 	dockerClient    *docker.Client
 	authConfig      *auth.ConfigFile
 	shuttleHost     string
-	statsdHost      string
 	serviceRegistry *registry.ServiceRegistry
 	dockerIP        string
 	hostIP          string
@@ -37,7 +36,7 @@ type ContainerEvent struct {
 	ServiceRegistration *registry.ServiceRegistration
 }
 
-func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, statsdHost, hostIP string) *ServiceRuntime {
+func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, hostIP string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
@@ -47,15 +46,8 @@ func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, s
 		shuttleHost = dockerZero
 	}
 
-	if statsdHost == "" {
-		statsdHost = dockerZero + ":8125"
-	}
-
-	statsdHost = utils.GetEnv("GALAXY_STATSD_HOST", statsdHost)
-
 	return &ServiceRuntime{
 		shuttleHost:     shuttleHost,
-		statsdHost:      statsdHost,
 		serviceRegistry: serviceRegistry,
 		hostIP:          hostIP,
 		dockerIP:        dockerZero,
@@ -475,8 +467,6 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("HOST_IP=%s", s.hostIP))
-	args = append(args, "-e")
-	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	args = append(args, "--dns")
 	args = append(args, s.shuttleHost)
 	args = append(args, "-e")
@@ -551,7 +541,6 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 	}
 
 	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.hostIP))
-	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", appCfg.Name))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(appCfg.ID(), 10)))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
