@@ -372,7 +372,7 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 
 	envVars := []string{}
 	for key, value := range appCfg.Env() {
-		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+		envVars = append(envVars, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
 	}
 	envVars = append(envVars, "GALAXY_APP="+appCfg.Name)
 	envVars = append(envVars, "GALAXY_VERSION="+strconv.FormatInt(appCfg.ID(), 10))
@@ -470,7 +470,7 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 		}
 
 		args = append(args, "-e")
-		args = append(args, strings.ToUpper(key)+"="+value)
+		args = append(args, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
 	}
 
 	args = append(args, "-e")
@@ -542,7 +542,7 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 			envVars = append(envVars, strings.ToUpper(key)+"="+env)
 			continue
 		}
-		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+		envVars = append(envVars, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
 	}
 
 	instanceId, err := s.NextInstanceSlot(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
