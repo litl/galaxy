@@ -24,7 +24,7 @@ var blacklistedContainerId = make(map[string]bool)
 type ServiceRuntime struct {
 	dockerClient    *docker.Client
 	authConfig      *auth.ConfigFile
-	shuttleHost     string
+	dns             string
 	serviceRegistry *registry.ServiceRegistry
 	dockerIP        string
 	hostIP          string
@@ -36,18 +36,14 @@ type ContainerEvent struct {
 	ServiceRegistration *registry.ServiceRegistration
 }
 
-func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, hostIP string) *ServiceRuntime {
+func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, dns, hostIP string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
 	}
 
-	if shuttleHost == "" {
-		shuttleHost = dockerZero
-	}
-
 	return &ServiceRuntime{
-		shuttleHost:     shuttleHost,
+		dns:             dns,
 		serviceRegistry: serviceRegistry,
 		hostIP:          hostIP,
 		dockerIP:        dockerZero,
@@ -408,10 +404,11 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 	defer s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 		ID: container.ID,
 	})
-	err = s.ensureDockerClient().StartContainer(container.ID,
-		&docker.HostConfig{
-			Dns: []string{s.shuttleHost},
-		})
+	config := &docker.HostConfig{}
+	if s.dns != "" {
+		config.Dns = []string{s.dns}
+	}
+	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
 	if err != nil {
 		return container, err
@@ -467,8 +464,10 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("HOST_IP=%s", s.hostIP))
-	args = append(args, "--dns")
-	args = append(args, s.shuttleHost)
+	if s.dns != "" {
+		args = append(args, "--dns")
+		args = append(args, s.dns)
+	}
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("GALAXY_APP=%s", appCfg.Name))
 	args = append(args, "-e")
@@ -596,11 +595,14 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 
 	log.Printf("Starting %s version %s running as %s", appCfg.Name, appCfg.Version(), container.ID[0:12])
 
-	err = s.ensureDockerClient().StartContainer(container.ID,
-		&docker.HostConfig{
-			Dns:             []string{s.shuttleHost},
-			PublishAllPorts: true,
-		})
+	config := &docker.HostConfig{
+		PublishAllPorts: true,
+	}
+
+	if s.dns != "" {
+		config.Dns = []string{s.dns}
+	}
+	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
 	if err != nil {
 		return container, err

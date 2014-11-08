@@ -31,7 +31,7 @@ var (
 	pool            string
 	loop            bool
 	hostIP          string
-	shuttleHost     string
+	dns             string
 	debug           bool
 	runOnce         bool
 	version         bool
@@ -57,7 +57,7 @@ func initOrDie() {
 
 	configStore.Connect(redisHost)
 
-	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, hostIP)
+	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, dns, hostIP)
 
 	apps, err := configStore.ListAssignments(env, pool)
 	if err != nil {
@@ -371,7 +371,7 @@ func main() {
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
-	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
+	flag.StringVar(&dns, "dns", "", "DNS addr to use for containers")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version info")
 
