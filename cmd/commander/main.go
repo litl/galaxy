@@ -391,6 +391,9 @@ func main() {
 		println("   app:start       Starts one or more apps")
 		println("   app:stop        Stops one or more apps")
 		println("   config          List config for an app")
+		println("   config:get      Get config values for an app")
+		println("   config:set      Set config values for an app")
+		println("   config:unset    Unset config values for an app")
 		println("   runtime         List container runtime policies")
 		println("   runtime:set     Set container runtime policies")
 		println("   hosts           List hosts in an env and pool")
@@ -679,6 +682,81 @@ func main() {
 		app := configFs.Args()[0]
 
 		err = commander.ConfigList(configStore, app, env)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+	case "config:get":
+		configFs := flag.NewFlagSet("config:get", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app> KEY [KEY]*\n")
+			println("    Get config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() == 0 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigGet(configStore, app, env, configFs.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+	case "config:set":
+		configFs := flag.NewFlagSet("config:set", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app> KEY=VALUE [KEY=VALUE]*\n")
+			println("    Set config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() == 0 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigSet(configStore, app, env, configFs.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+	case "config:unset":
+		configFs := flag.NewFlagSet("config:unset", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app> KEY [KEY]*\n")
+			println("    Unset config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() == 0 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigUnset(configStore, app, env, configFs.Args()[1:])
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
+	"io/ioutil"
+	"os"
 	"sort"
+	"strings"
 )
 
 func ConfigList(configStore *config.Store, app, env string) error {
@@ -34,45 +37,39 @@ func ConfigList(configStore *config.Store, app, env string) error {
 
 func ConfigSet(configStore *config.Store, app, env string, envVars []string) error {
 
-	args := c.Args().Tail()
-	if len(args) == 0 {
+	if len(envVars) == 0 {
 		bytes, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
-			log.Fatalf("ERROR: Unable to read stdin: %s.", err)
-			return
+			return err
 
 		}
-		args = strings.Split(string(bytes), "\n")
+		envVars = strings.Split(string(bytes), "\n")
 	}
 
-	if len(args) == 0 {
-		log.Fatalf("ERROR: No config values specified.")
-		return
+	if len(envVars) == 0 {
+		return fmt.Errorf("no config values specified.")
 	}
 
-	svcCfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
+	svcCfg, err := configStore.GetApp(app, env)
 	if err != nil {
-		log.Fatalf("ERROR: Unable to set config: %s.", err)
-		return
+		return fmt.Errorf("unable to set config: %s.", err)
 	}
 
 	if svcCfg == nil {
-		svcCfg = gconfig.NewAppConfig(app, "")
+		svcCfg = config.NewAppConfig(app, "")
 	}
 
 	updated := false
-	for _, arg := range args {
+	for _, arg := range envVars {
 
 		if strings.TrimSpace(arg) == "" {
 			continue
 		}
 
 		if !strings.Contains(arg, "=") {
-			log.Fatalf("ERROR: bad config variable format: %s", arg)
-			cli.ShowCommandHelp(c, "config")
-			return
-
+			return fmt.Errorf("bad config variable format: %s", arg)
 		}
+
 		sep := strings.Index(arg, "=")
 		k := strings.ToUpper(strings.TrimSpace(arg[0:sep]))
 		v := strings.TrimSpace(arg[sep+1:])
@@ -87,19 +84,72 @@ func ConfigSet(configStore *config.Store, app, env string, envVars []string) err
 	}
 
 	if !updated {
-		log.Errorf("Configuration NOT changed for %s", app)
-		return
+		return fmt.Errorf("configuration NOT changed for %s", app)
 	}
 
-	updated, err = configStore.UpdateApp(svcCfg, utils.GalaxyEnv(c))
+	updated, err = configStore.UpdateApp(svcCfg, env)
 	if err != nil {
-		log.Fatalf("ERROR: Unable to set config: %s.", err)
-		return
+		return fmt.Errorf("unable to set config: %s.", err)
 	}
 
 	if !updated {
-		log.Errorf("Configuration NOT changed for %s", app)
-		return
+		return fmt.Errorf("configuration NOT changed for %s", app)
 	}
 	log.Printf("Configuration changed for %s. v%d\n", app, svcCfg.ID())
+	return nil
+}
+
+func ConfigGet(configStore *config.Store, app, env string, envVars []string) error {
+
+	cfg, err := configStore.GetApp(app, env)
+	if err != nil {
+		return err
+	}
+
+	for _, arg := range envVars {
+		fmt.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
+	}
+	return nil
+}
+
+func ConfigUnset(configStore *config.Store, app, env string, envVars []string) error {
+
+	if len(envVars) == 0 {
+		return fmt.Errorf("no config values specified.")
+	}
+
+	svcCfg, err := configStore.GetApp(app, env)
+	if err != nil {
+		return fmt.Errorf("unable to unset config: %s.", err)
+	}
+
+	updated := false
+	for _, arg := range envVars {
+		k := strings.ToUpper(strings.TrimSpace(arg))
+		if k == "ENV" || svcCfg.EnvGet(k) == "" {
+			log.Warnf("%s cannot be unset.", k)
+			continue
+		}
+
+		log.Printf("%s\n", k)
+		svcCfg.EnvSet(strings.ToUpper(arg), "")
+		updated = true
+	}
+
+	if !updated {
+		return fmt.Errorf("Configuration NOT changed for %s", app)
+	}
+
+	updated, err = configStore.UpdateApp(svcCfg, env)
+	if err != nil {
+		return fmt.Errorf("ERROR: Unable to unset config: %s.", err)
+
+	}
+
+	if !updated {
+		return fmt.Errorf("Configuration NOT changed for %s", app)
+
+	}
+	log.Printf("Configuration changed for %s. v%d.\n", app, svcCfg.ID())
+	return nil
 }

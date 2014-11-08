@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -229,73 +228,12 @@ func configSet(c *cli.Context) {
 	app := ensureAppParam(c, "config:set")
 
 	args := c.Args().Tail()
-	if len(args) == 0 {
-		bytes, err := ioutil.ReadAll(os.Stdin)
-		if err != nil {
-			log.Fatalf("ERROR: Unable to read stdin: %s.", err)
-			return
+	err := commander.ConfigSet(configStore, app, utils.GalaxyEnv(c), args)
 
-		}
-		args = strings.Split(string(bytes), "\n")
-	}
-
-	if len(args) == 0 {
-		log.Fatalf("ERROR: No config values specified.")
-		return
-	}
-
-	svcCfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
 	if err != nil {
-		log.Fatalf("ERROR: Unable to set config: %s.", err)
+		log.Fatalf("ERROR: Unable to update config: %s.", err)
 		return
 	}
-
-	if svcCfg == nil {
-		svcCfg = gconfig.NewAppConfig(app, "")
-	}
-
-	updated := false
-	for _, arg := range args {
-
-		if strings.TrimSpace(arg) == "" {
-			continue
-		}
-
-		if !strings.Contains(arg, "=") {
-			log.Fatalf("ERROR: bad config variable format: %s", arg)
-			cli.ShowCommandHelp(c, "config")
-			return
-
-		}
-		sep := strings.Index(arg, "=")
-		k := strings.ToUpper(strings.TrimSpace(arg[0:sep]))
-		v := strings.TrimSpace(arg[sep+1:])
-		if k == "ENV" {
-			log.Warnf("%s cannot be updated.", k)
-			continue
-		}
-
-		log.Printf("%s=%s\n", k, v)
-		svcCfg.EnvSet(k, v)
-		updated = true
-	}
-
-	if !updated {
-		log.Errorf("Configuration NOT changed for %s", app)
-		return
-	}
-
-	updated, err = configStore.UpdateApp(svcCfg, utils.GalaxyEnv(c))
-	if err != nil {
-		log.Fatalf("ERROR: Unable to set config: %s.", err)
-		return
-	}
-
-	if !updated {
-		log.Errorf("Configuration NOT changed for %s", app)
-		return
-	}
-	log.Printf("Configuration changed for %s. v%d\n", app, svcCfg.ID())
 }
 
 func configUnset(c *cli.Context) {
@@ -303,47 +241,11 @@ func configUnset(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config:unset")
 
-	if len(c.Args().Tail()) == 0 {
-		log.Fatalf("ERROR: No config values specified.")
-		return
-	}
-
-	svcCfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
+	err := commander.ConfigUnset(configStore, app, utils.GalaxyEnv(c), c.Args().Tail())
 	if err != nil {
 		log.Fatalf("ERROR: Unable to unset config: %s.", err)
 		return
 	}
-
-	updated := false
-	for _, arg := range c.Args().Tail() {
-		k := strings.ToUpper(strings.TrimSpace(arg))
-		if k == "ENV" || svcCfg.EnvGet(k) == "" {
-			log.Warnf("%s cannot be unset.", k)
-			continue
-		}
-
-		log.Printf("%s\n", k)
-		svcCfg.EnvSet(strings.ToUpper(arg), "")
-		updated = true
-	}
-
-	if !updated {
-		log.Errorf("Configuration NOT changed for %s", app)
-		return
-	}
-
-	updated, err = configStore.UpdateApp(svcCfg, utils.GalaxyEnv(c))
-	if err != nil {
-		log.Errorf("ERROR: Unable to unset config: %s.", err)
-		return
-	}
-
-	if !updated {
-		log.Errorf("Configuration NOT changed for %s", app)
-		return
-	}
-	log.Printf("Configuration changed for %s. v%d.\n", app, svcCfg.ID())
-
 }
 
 func configGet(c *cli.Context) {
@@ -351,14 +253,11 @@ func configGet(c *cli.Context) {
 	initRegistry(c)
 	app := ensureAppParam(c, "config:get")
 
-	cfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
+	err := commander.ConfigGet(configStore, app, utils.GalaxyEnv(c), c.Args().Tail())
+
 	if err != nil {
 		log.Fatalf("ERROR: Unable to get config: %s.", err)
 		return
-	}
-
-	for _, arg := range c.Args().Tail() {
-		fmt.Printf("%s=%s\n", strings.ToUpper(arg), cfg.Env()[strings.ToUpper(arg)])
 	}
 }
 
