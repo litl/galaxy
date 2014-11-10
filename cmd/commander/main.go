@@ -162,6 +162,12 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 
 func heartbeatHost() {
 	wg.Add(1)
+
+	_, err := configStore.CreatePool(pool, env)
+	if err != nil {
+		log.Fatalf("ERROR: Unabled to create pool %s: %s", pool, err)
+	}
+
 	defer wg.Done()
 	for {
 		configStore.UpdateHost(env, pool, config.HostInfo{
