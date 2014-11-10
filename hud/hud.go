@@ -73,17 +73,13 @@ func main() {
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
-		"",
 		registry.DefaultTTL,
-		"",
 	)
 
 	serviceRegistry.Connect(redisHost)
 
 	Store = config.NewStore(
-		"",
 		registry.DefaultTTL,
-		"",
 	)
 
 	Store.Connect(redisHost)

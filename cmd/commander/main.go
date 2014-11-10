@@ -31,8 +31,7 @@ var (
 	pool            string
 	loop            bool
 	hostIP          string
-	shuttleHost     string
-	statsdHost      string
+	dns             string
 	debug           bool
 	runOnce         bool
 	version         bool
@@ -48,20 +47,17 @@ var (
 func initOrDie() {
 
 	serviceRegistry = registry.NewServiceRegistry(
-		"",
 		registry.DefaultTTL,
-		"",
 	)
 	serviceRegistry.Connect(redisHost)
 
 	configStore = config.NewStore(
-		"",
 		registry.DefaultTTL,
-		"",
 	)
+
 	configStore.Connect(redisHost)
 
-	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, shuttleHost, statsdHost)
+	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, dns, hostIP)
 
 	apps, err := configStore.ListAssignments(env, pool)
 	if err != nil {
@@ -102,7 +98,7 @@ func pullImage(appCfg *config.AppConfig) (*docker.Image, error) {
 
 	log.Printf("Pulling %s version %s\n", appCfg.Name, appCfg.Version())
 	image, err = serviceRuntime.PullImage(appCfg.Version(),
-		appCfg.VersionID(), true)
+		appCfg.VersionID())
 	if image == nil || err != nil {
 		log.Errorf("ERROR: Could not pull image %s: %s",
 			appCfg.Version(), err)
@@ -375,8 +371,7 @@ func main() {
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
-	flag.StringVar(&shuttleHost, "shuttleAddr", "", "IP where containers can reach shuttle proxy. Defaults to docker0 IP.")
-	flag.StringVar(&statsdHost, "statsdAddr", utils.GetEnv("GALAXY_STATSD_HOST", ""), "IP where containers can reach a statsd service. Defaults to docker0 IP:8125.")
+	flag.StringVar(&dns, "dns", "", "DNS addr to use for containers")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version info")
 
@@ -393,6 +388,10 @@ func main() {
 		println("   app:shell       Run a bash shell within an app on this host")
 		println("   app:start       Starts one or more apps")
 		println("   app:stop        Stops one or more apps")
+		println("   config          List config for an app")
+		println("   config:get      Get config values for an app")
+		println("   config:set      Set config values for an app")
+		println("   config:unset    Unset config values for an app")
 		println("   runtime         List container runtime policies")
 		println("   runtime:set     Set container runtime policies")
 		println("   hosts           List hosts in an env and pool")
@@ -511,9 +510,7 @@ func main() {
 		return
 
 	case "app:deploy":
-		var force bool
 		appFs := flag.NewFlagSet("app:delete", flag.ExitOnError)
-		appFs.BoolVar(&force, "force", false, "Force pulling image")
 		appFs.Usage = func() {
 			println("Usage: commander app:deploy [-force] <app> <version>\n")
 			println("    Deploy an app in an environment\n")
@@ -526,7 +523,7 @@ func main() {
 			appFs.Usage()
 			os.Exit(1)
 		}
-		err := commander.AppDeploy(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1], force)
+		err := commander.AppDeploy(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1])
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -660,6 +657,107 @@ func main() {
 			log.Fatalf("ERROR: %s", err)
 		}
 		return
+	case "config":
+		configFs := flag.NewFlagSet("config", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app>\n")
+			println("    List config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() != 1 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigList(configStore, app, env)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+	case "config:get":
+		configFs := flag.NewFlagSet("config:get", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app> KEY [KEY]*\n")
+			println("    Get config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() == 0 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigGet(configStore, app, env, configFs.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+	case "config:set":
+		configFs := flag.NewFlagSet("config:set", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app> KEY=VALUE [KEY=VALUE]*\n")
+			println("    Set config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() == 0 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigSet(configStore, app, env, configFs.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+	case "config:unset":
+		configFs := flag.NewFlagSet("config:unset", flag.ExitOnError)
+		configFs.Usage = func() {
+			println("Usage: commander config <app> KEY [KEY]*\n")
+			println("    Unset config values for an app\n")
+			println("Options:\n")
+			configFs.PrintDefaults()
+		}
+		err := configFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		if configFs.NArg() == 0 {
+			log.Errorf("ERROR: Missing app name")
+			configFs.Usage()
+			os.Exit(1)
+		}
+		app := configFs.Args()[0]
+
+		err = commander.ConfigUnset(configStore, app, env, configFs.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+
 	case "runtime":
 		runtimeFs := flag.NewFlagSet("runtime", flag.ExitOnError)
 		runtimeFs.Usage = func() {

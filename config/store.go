@@ -26,21 +26,17 @@ type HostInfo struct {
 
 type Store struct {
 	Backend      Backend
-	HostIP       string
 	Hostname     string
 	TTL          uint64
-	HostSSHAddr  string
 	OutputBuffer *utils.OutputBuffer
 	pollCh       chan bool
 	redisHost    string
 }
 
-func NewStore(hostIp string, ttl uint64, sshAddr string) *Store {
+func NewStore(ttl uint64) *Store {
 	return &Store{
-		HostIP:      hostIp,
-		TTL:         ttl,
-		HostSSHAddr: sshAddr,
-		pollCh:      make(chan bool),
+		TTL:    ttl,
+		pollCh: make(chan bool),
 	}
 
 }

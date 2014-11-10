@@ -24,9 +24,10 @@ var blacklistedContainerId = make(map[string]bool)
 type ServiceRuntime struct {
 	dockerClient    *docker.Client
 	authConfig      *auth.ConfigFile
-	shuttleHost     string
-	statsdHost      string
+	dns             string
 	serviceRegistry *registry.ServiceRegistry
+	dockerIP        string
+	hostIP          string
 }
 
 type ContainerEvent struct {
@@ -35,27 +36,18 @@ type ContainerEvent struct {
 	ServiceRegistration *registry.ServiceRegistration
 }
 
-func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, shuttleHost, statsdHost string) *ServiceRuntime {
+func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, dns, hostIP string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
 	}
-	if shuttleHost == "" {
-		shuttleHost = dockerZero
-	}
-
-	if statsdHost == "" {
-		statsdHost = dockerZero + ":8125"
-	}
-
-	statsdHost = utils.GetEnv("GALAXY_STATSD_HOST", statsdHost)
 
 	return &ServiceRuntime{
-		shuttleHost:     shuttleHost,
-		statsdHost:      statsdHost,
+		dns:             dns,
 		serviceRegistry: serviceRegistry,
+		hostIP:          hostIP,
+		dockerIP:        dockerZero,
 	}
-
 }
 
 func GetEndpoint() string {
@@ -356,7 +348,7 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
-	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID(), true)
+	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID())
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +360,7 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 
 	envVars := []string{}
 	for key, value := range appCfg.Env() {
-		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+		envVars = append(envVars, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
 	}
 	envVars = append(envVars, "GALAXY_APP="+appCfg.Name)
 	envVars = append(envVars, "GALAXY_VERSION="+strconv.FormatInt(appCfg.ID(), 10))
@@ -412,10 +404,11 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 	defer s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
 		ID: container.ID,
 	})
-	err = s.ensureDockerClient().StartContainer(container.ID,
-		&docker.HostConfig{
-			Dns: []string{s.shuttleHost},
-		})
+	config := &docker.HostConfig{}
+	if s.dns != "" {
+		config.Dns = []string{s.dns}
+	}
+	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
 	if err != nil {
 		return container, err
@@ -450,7 +443,7 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
-	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID(), true)
+	_, err := s.PullImage(appCfg.Version(), appCfg.VersionID())
 	if err != nil {
 		return err
 	}
@@ -466,15 +459,15 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 		}
 
 		args = append(args, "-e")
-		args = append(args, strings.ToUpper(key)+"="+value)
+		args = append(args, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
 	}
 
 	args = append(args, "-e")
-	args = append(args, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
-	args = append(args, "-e")
-	args = append(args, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
-	args = append(args, "--dns")
-	args = append(args, s.shuttleHost)
+	args = append(args, fmt.Sprintf("HOST_IP=%s", s.hostIP))
+	if s.dns != "" {
+		args = append(args, "--dns")
+		args = append(args, s.dns)
+	}
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("GALAXY_APP=%s", appCfg.Name))
 	args = append(args, "-e")
@@ -526,7 +519,7 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 		imgIdRef = appCfg.VersionID()
 	}
 	// see if we have the image locally
-	image, err := s.PullImage(img, imgIdRef, false)
+	image, err := s.PullImage(img, imgIdRef)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +531,7 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 			envVars = append(envVars, strings.ToUpper(key)+"="+env)
 			continue
 		}
-		envVars = append(envVars, strings.ToUpper(key)+"="+value)
+		envVars = append(envVars, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
 	}
 
 	instanceId, err := s.NextInstanceSlot(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
@@ -546,8 +539,7 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 		return nil, err
 	}
 
-	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.shuttleHost))
-	envVars = append(envVars, fmt.Sprintf("STATSD_ADDR=%s", s.statsdHost))
+	envVars = append(envVars, fmt.Sprintf("HOST_IP=%s", s.hostIP))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_APP=%s", appCfg.Name))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_VERSION=%s", strconv.FormatInt(appCfg.ID(), 10)))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
@@ -603,11 +595,14 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 
 	log.Printf("Starting %s version %s running as %s", appCfg.Name, appCfg.Version(), container.ID[0:12])
 
-	err = s.ensureDockerClient().StartContainer(container.ID,
-		&docker.HostConfig{
-			Dns:             []string{s.shuttleHost},
-			PublishAllPorts: true,
-		})
+	config := &docker.HostConfig{
+		PublishAllPorts: true,
+	}
+
+	if s.dns != "" {
+		config.Dns = []string{s.dns}
+	}
+	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
 	if err != nil {
 		return container, err
@@ -665,14 +660,14 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, appCfg *config.AppConfig)
 	return true, container, err
 }
 
-func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Image, error) {
+func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	image, err := s.InspectImage(version)
 
 	if err != nil && err != docker.ErrNoSuchImage {
 		return nil, err
 	}
 
-	if image != nil && image.ID == id && !force {
+	if image != nil && image.ID == id {
 		return image, nil
 	}
 
@@ -734,7 +729,7 @@ func (s *ServiceRuntime) PullImage(version, id string, force bool) (*docker.Imag
 
 }
 
-func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegistration, error) {
+func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*registry.ServiceRegistration, error) {
 	containers, err := s.ManagedContainers()
 	if err != nil {
 		return nil, err
@@ -744,7 +739,7 @@ func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegis
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
-		registration, err := s.serviceRegistry.RegisterService(env, pool, container)
+		registration, err := s.serviceRegistry.RegisterService(env, pool, hostIP, container)
 		if err != nil {
 			log.Printf("ERROR: Could not register %s: %s\n", name, err)
 			continue
@@ -756,7 +751,7 @@ func (s *ServiceRuntime) RegisterAll(env, pool string) ([]*registry.ServiceRegis
 
 }
 
-func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, error) {
+func (s *ServiceRuntime) UnRegisterAll(env, pool, hostIP string) ([]*docker.Container, error) {
 
 	containers, err := s.ManagedContainers()
 	if err != nil {
@@ -767,7 +762,7 @@ func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, e
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
-		_, err = s.serviceRegistry.UnRegisterService(env, pool, container)
+		_, err = s.serviceRegistry.UnRegisterService(env, pool, hostIP, container)
 		if err != nil {
 			log.Printf("ERROR: Could not unregister %s: %s\n", name, err)
 			return removed, err
@@ -780,7 +775,7 @@ func (s *ServiceRuntime) UnRegisterAll(env, pool string) ([]*docker.Container, e
 	return removed, nil
 }
 
-func (s *ServiceRuntime) RegisterEvents(env, pool string, listener chan ContainerEvent) error {
+func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan ContainerEvent) error {
 	go func() {
 		c := make(chan *docker.APIEvents)
 
@@ -826,7 +821,7 @@ func (s *ServiceRuntime) RegisterEvents(env, pool string, listener chan Containe
 
 					name := s.EnvFor(container)["GALAXY_APP"]
 					if name != "" {
-						registration, err := s.serviceRegistry.GetServiceRegistration(env, pool, container)
+						registration, err := s.serviceRegistry.GetServiceRegistration(env, pool, hostIP, container)
 						if err != nil {
 							log.Printf("WARN: Could not find service registration for %s/%s: %s", name, container.ID[:12], err)
 							continue
@@ -925,4 +920,9 @@ func (s *ServiceRuntime) NextInstanceSlot(app, versionId string) (int, error) {
 	}
 
 	return utils.NextSlot(instances), nil
+}
+
+func (s ServiceRuntime) replaceVarEnv(in, hostIp string) string {
+	out := strings.Replace(in, "$HOST_IP", hostIp, -1)
+	return strings.Replace(out, "$DOCKER_IP", s.dockerIP, -1)
 }

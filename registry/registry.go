@@ -26,21 +26,17 @@ const (
 
 type ServiceRegistry struct {
 	backend      RegistryBackend
-	HostIP       string
 	Hostname     string
 	TTL          uint64
-	HostSSHAddr  string
 	OutputBuffer *utils.OutputBuffer
 	pollCh       chan bool
 	redisHost    string
 }
 
-func NewServiceRegistry(hostIp string, ttl uint64, sshAddr string) *ServiceRegistry {
+func NewServiceRegistry(ttl uint64) *ServiceRegistry {
 	return &ServiceRegistry{
-		HostIP:      hostIp,
-		TTL:         ttl,
-		HostSSHAddr: sshAddr,
-		pollCh:      make(chan bool),
+		TTL:    ttl,
+		pollCh: make(chan bool),
 	}
 
 }
@@ -55,7 +51,7 @@ func (r *ServiceRegistry) Connect(redisHost string) {
 	r.backend.Connect()
 }
 
-func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *ServiceRegistration {
+func (r *ServiceRegistry) newServiceRegistration(container *docker.Container, hostIP string) *ServiceRegistration {
 	//FIXME: We're using the first found port and assuming it's tcp.
 	//How should we handle a service that exposes multiple ports
 	//as well as tcp vs udp ports.
@@ -76,7 +72,7 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container) *S
 	}
 
 	if externalPort != "" && internalPort != "" {
-		serviceRegistration.ExternalIP = r.HostIP
+		serviceRegistration.ExternalIP = hostIP
 		serviceRegistration.InternalIP = container.NetworkSettings.IPAddress
 		serviceRegistration.ExternalPort = externalPort
 		serviceRegistration.InternalPort = internalPort
@@ -124,7 +120,7 @@ func (s *ServiceRegistration) InternalAddr() string {
 	return s.addr(s.InternalIP, s.InternalPort)
 }
 
-func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
+func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
 	environment := r.EnvFor(container)
 
 	name := environment["GALAXY_APP"]
@@ -132,9 +128,9 @@ func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Co
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name, container.ID[0:12])
+	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
-	serviceRegistration := r.newServiceRegistration(container)
+	serviceRegistration := r.newServiceRegistration(container, hostIP)
 	serviceRegistration.Name = name
 	serviceRegistration.ImageId = container.Config.Image
 
@@ -183,7 +179,7 @@ func (r *ServiceRegistry) RegisterService(env, pool string, container *docker.Co
 	return serviceRegistration, nil
 }
 
-func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
+func (r *ServiceRegistry) UnRegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
 
 	environment := r.EnvFor(container)
 
@@ -192,9 +188,9 @@ func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	registrationPath := path.Join(env, pool, "hosts", r.HostIP, name, container.ID[0:12])
+	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
-	registration, err := r.GetServiceRegistration(env, pool, container)
+	registration, err := r.GetServiceRegistration(env, pool, hostIP, container)
 	if err != nil {
 		return registration, err
 	}
@@ -211,7 +207,7 @@ func (r *ServiceRegistry) UnRegisterService(env, pool string, container *docker.
 	return registration, nil
 }
 
-func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *docker.Container) (*ServiceRegistration, error) {
+func (r *ServiceRegistry) GetServiceRegistration(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
 
 	environment := r.EnvFor(container)
 
@@ -220,7 +216,7 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *do
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	regPath := path.Join(env, pool, "hosts", r.HostIP, name, container.ID[0:12])
+	regPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
 	existingRegistration := ServiceRegistration{
 		Path: regPath,
@@ -249,9 +245,9 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool string, container *do
 	return nil, nil
 }
 
-func (r *ServiceRegistry) IsRegistered(env, pool string, container *docker.Container) (bool, error) {
+func (r *ServiceRegistry) IsRegistered(env, pool, hostIP string, container *docker.Container) (bool, error) {
 
-	reg, err := r.GetServiceRegistration(env, pool, container)
+	reg, err := r.GetServiceRegistration(env, pool, hostIP, container)
 	return reg != nil, err
 }
 

@@ -27,7 +27,7 @@ func status(c *cli.Context) {
 	for _, container := range containers {
 		name := serviceRuntime.EnvFor(container)["GALAXY_APP"]
 		registered, err := serviceRegistry.GetServiceRegistration(
-			utils.GalaxyEnv(c), utils.GalaxyPool(c), container)
+			utils.GalaxyEnv(c), utils.GalaxyPool(c), c.GlobalString("hostIp"), container)
 		if err != nil {
 			log.Printf("ERROR: Unable to determine status of %s: %s\n",
 				name, err)
@@ -48,6 +48,7 @@ func status(c *cli.Context) {
 
 		} else {
 			outputBuffer.Log(strings.Join([]string{
+				name,
 				container.ID[0:12],
 				container.Image,
 				"",
