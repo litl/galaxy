@@ -25,7 +25,7 @@ func HostsList(configStore *config.Store, env, pool string) error {
 
 		var err error
 		pools := []string{pool}
-		if pool != "" {
+		if pool == "" {
 			pools, err = configStore.ListPools(env)
 			if err != nil {
 				return err
@@ -39,6 +39,14 @@ func HostsList(configStore *config.Store, env, pool string) error {
 				return err
 			}
 
+			if len(hosts) == 0 {
+				columns = append(columns, strings.Join([]string{
+					env,
+					pool,
+					"",
+				}, " | "))
+				continue
+			}
 			for _, p := range hosts {
 				columns = append(columns, strings.Join([]string{
 					env,

@@ -407,18 +407,6 @@ func main() {
 		return
 	}
 
-	if strings.TrimSpace(env) == "" {
-		fmt.Println("Need an env")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if strings.TrimSpace(pool) == "" {
-		fmt.Println("Need a pool")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
 	if debug {
 		log.DefaultLogger.Level = log.DEBUG
 	}
@@ -864,6 +852,18 @@ func main() {
 	default:
 		fmt.Println("Unknown command")
 		flag.Usage()
+		os.Exit(1)
+	}
+
+	if strings.TrimSpace(env) == "" {
+		fmt.Println("Need an env")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if strings.TrimSpace(pool) == "" {
+		fmt.Println("Need a pool")
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
