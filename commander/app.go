@@ -5,6 +5,7 @@ import (
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/runtime"
+	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 	"strings"
 )
@@ -21,11 +22,16 @@ func AppList(configStore *config.Store, env string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | VERSION | PORT "}
+	columns := []string{"ENV | NAME | VERSION | PORT | POOLS "}
 
 	for _, env := range envs {
 
 		appList, err := configStore.ListApps(env)
+		if err != nil {
+			return err
+		}
+
+		pools, err := configStore.ListPools(env)
 		if err != nil {
 			return err
 		}
@@ -35,11 +41,23 @@ func AppList(configStore *config.Store, env string) error {
 			port := app.EnvGet("GALAXY_PORT")
 			versionDeployed := app.Version()
 
+			assignments := []string{}
+			for _, pool := range pools {
+				aa, err := configStore.ListAssignments(env, pool)
+				if err != nil {
+					return err
+				}
+				if utils.StringInSlice(app.Name, aa) {
+					assignments = append(assignments, pool)
+				}
+			}
+
 			columns = append(columns, strings.Join([]string{
 				env,
 				name,
 				versionDeployed,
 				port,
+				strings.Join(assignments, ","),
 			}, " | "))
 		}
 	}
