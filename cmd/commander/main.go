@@ -609,7 +609,7 @@ func main() {
 
 		startFs := flag.NewFlagSet("app:start", flag.ExitOnError)
 		startFs.Usage = func() {
-			println("Usage: commander start [options] [<app>]*\n")
+			println("Usage: commander app:start [options] [<app>]*\n")
 			println("    Starts one or more apps. If no apps are specified, starts all apps.\n")
 			println("Options:\n")
 			startFs.PrintDefaults()
@@ -628,10 +628,27 @@ func main() {
 			}
 		}
 		break
+	case "app:status":
+
+		statusFs := flag.NewFlagSet("app:status", flag.ExitOnError)
+		statusFs.Usage = func() {
+			println("Usage: commander app:status [options] [<app>]*\n")
+			println("    Lists status or running apps.\n")
+			println("Options:\n")
+			statusFs.PrintDefaults()
+		}
+		statusFs.Parse(flag.Args()[1:])
+
+		err := commander.DiscoveryStatus(serviceRuntime, serviceRegistry, env, pool, hostIP)
+		if err != nil {
+			log.Fatalf("ERROR: Unable to list app status: %s", err)
+		}
+		return
+
 	case "app:stop":
 		stopFs := flag.NewFlagSet("app:stop", flag.ExitOnError)
 		stopFs.Usage = func() {
-			println("Usage: commander stop [options] [<app>]*\n")
+			println("Usage: commander app:stop [options] [<app>]*\n")
 			println("    Stops one or more apps. If no apps are specified, stops all apps.\n")
 			println("Options:\n")
 			stopFs.PrintDefaults()
