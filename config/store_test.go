@@ -97,9 +97,9 @@ func TestAssignAppPoolExists(t *testing.T) {
 
 	assertAppCreated(t, r, "app")
 
-	if assigned, err := r.AssignApp("app", "dev", "web"); assigned || err == nil {
+	if assigned, err := r.AssignApp("app", "dev", "web"); !assigned || err != nil {
 		t.Errorf("AssignApp(%q) = %t, %v, want %t, %v", "app", assigned, err,
-			false, errors.New("pool web does not exist"))
+			true, nil)
 	}
 }
 

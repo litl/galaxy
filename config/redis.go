@@ -187,7 +187,22 @@ func (r *RedisBackend) DeletePool(env, pool string) (bool, error) {
 }
 
 func (r *RedisBackend) ListPools(env string) ([]string, error) {
-	return r.Members(path.Join(env, "pools", "*"))
+	key := path.Join(env, "*", "hosts", "*", "info")
+	keys, err := r.Keys(key)
+	if err != nil {
+		return nil, err
+	}
+
+	pools := []string{}
+
+	for _, k := range keys {
+		parts := strings.Split(k, "/")
+		pool := parts[1]
+		if !utils.StringInSlice(pool, pools) {
+			pools = append(pools, pool)
+		}
+	}
+	return pools, nil
 }
 
 func (r *RedisBackend) ListEnvs() ([]string, error) {

@@ -73,10 +73,6 @@ func (r *Store) AssignApp(app, env, pool string) (bool, error) {
 		return false, err
 	}
 
-	if exists, err := r.PoolExists(env, pool); !exists || err != nil {
-		return false, errors.New(fmt.Sprintf("pool %s does not exist", pool))
-	}
-
 	added, err := r.Backend.AssignApp(app, env, pool)
 	if err != nil {
 		return false, err

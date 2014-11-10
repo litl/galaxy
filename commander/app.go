@@ -188,7 +188,7 @@ func AppAssign(configStore *config.Store, app, env, pool string) error {
 	}
 
 	if !exists {
-		return fmt.Errorf("pool %s does not exist.  Create it first.", pool)
+		log.Warnf("WARN: Pool %s does not exist.", pool)
 	}
 
 	created, err := configStore.AssignApp(app, env, pool)
