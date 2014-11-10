@@ -175,3 +175,51 @@ func AppShell(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime,
 	}
 	return nil
 }
+
+func AppAssign(configStore *config.Store, app, env, pool string) error {
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return fmt.Errorf("invalid app name: %s", app)
+	}
+
+	exists, err := configStore.PoolExists(env, pool)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return fmt.Errorf("pool %s does not exist.  Create it first.", pool)
+	}
+
+	created, err := configStore.AssignApp(app, env, pool)
+
+	if err != nil {
+		return err
+	}
+
+	if created {
+		log.Printf("Assigned %s in env %s to pool %s.\n", app, env, pool)
+	} else {
+		log.Printf("%s already assigned to pool %s in env %s.\n", app, pool, env)
+	}
+	return nil
+}
+
+func AppUnassign(configStore *config.Store, app, env, pool string) error {
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return fmt.Errorf("invalid app name: %s", app)
+	}
+
+	deleted, err := configStore.UnassignApp(app, env, pool)
+	if err != nil {
+		return err
+	}
+
+	if deleted {
+		log.Printf("Unassigned %s in env %s from pool %s\n", app, env, pool)
+	} else {
+		log.Printf("%s could not be unassigned.\n", pool)
+	}
+	return nil
+}

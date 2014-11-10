@@ -380,6 +380,7 @@ func main() {
 		println("Available commands are:")
 		println("   agent           Runs commander agent")
 		println("   app             List all apps")
+		println("   app:assign      Assign an app to a pool")
 		println("   app:create      Create an app")
 		println("   app:deploy      Deploy an app")
 		println("   app:delete      Delete an app")
@@ -465,6 +466,27 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 		err := commander.AppList(configStore, env)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+
+	case "app:assign":
+		appFs := flag.NewFlagSet("app:assign", flag.ExitOnError)
+		appFs.Usage = func() {
+			println("Usage: commander app:assign <app>\n")
+			println("    Assign an app to a pool\n")
+			println("Options:\n")
+			appFs.PrintDefaults()
+		}
+		appFs.Parse(flag.Args()[1:])
+
+		if appFs.NArg() != 1 {
+			appFs.Usage()
+			os.Exit(1)
+		}
+
+		err := commander.AppAssign(configStore, appFs.Args()[0], env, pool)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -639,6 +661,27 @@ func main() {
 			log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
 		}
 		return
+	case "app:unassign":
+		appFs := flag.NewFlagSet("app:unassign", flag.ExitOnError)
+		appFs.Usage = func() {
+			println("Usage: commander app:unassign <app>\n")
+			println("    Unassign an app to a pool\n")
+			println("Options:\n")
+			appFs.PrintDefaults()
+		}
+		appFs.Parse(flag.Args()[1:])
+
+		if appFs.NArg() != 1 {
+			appFs.Usage()
+			os.Exit(1)
+		}
+
+		err := commander.AppUnassign(configStore, appFs.Args()[0], env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+
 	case "hosts":
 		hostFs := flag.NewFlagSet("hosts", flag.ExitOnError)
 		hostFs.Usage = func() {
