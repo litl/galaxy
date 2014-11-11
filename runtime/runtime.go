@@ -237,6 +237,51 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	})*/
 }
 
+func (s *ServiceRuntime) StopOldVersion(appCfg *config.AppConfig, limit int) error {
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return err
+	}
+
+	stopped := 0
+
+	for _, container := range containers {
+
+		if stopped == limit {
+			return nil
+		}
+
+		env := s.EnvFor(container)
+		// Container name does match one that would be started w/ this service config
+		if env["GALAXY_APP"] != appCfg.Name {
+			continue
+		}
+
+		image, err := s.InspectImage(container.Image)
+		if err != nil {
+			log.Errorf("ERROR: Unable to inspect image: %s", container.Image)
+			continue
+		}
+
+		if image == nil {
+			log.Errorf("ERROR: Image for container %s does not exist!", container.ID[0:12])
+			continue
+
+		}
+
+		version := env["GALAXY_VERSION"]
+
+		imageDiffers := image.ID != appCfg.VersionID() && appCfg.VersionID() != ""
+		versionDiffers := version != strconv.FormatInt(appCfg.ID(), 10) && version != ""
+
+		if imageDiffers || versionDiffers {
+			s.stopContainer(container)
+			stopped = stopped + 1
+		}
+	}
+	return nil
+}
+
 func (s *ServiceRuntime) StopAllButCurrentVersion(appCfg *config.AppConfig) error {
 	containers, err := s.ManagedContainers()
 	if err != nil {

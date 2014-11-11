@@ -140,11 +140,12 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 		}
 
 		log.Printf("Started %s version %s as %s\n", appCfg.Name, appCfg.Version(), container.ID[0:12])
-	}
 
-	err = serviceRuntime.StopAllButCurrentVersion(appCfg)
-	if err != nil {
-		log.Errorf("ERROR: Could not stop containers: %s", err)
+		err = serviceRuntime.StopOldVersion(appCfg, 1)
+		if err != nil {
+			log.Errorf("ERROR: Could not stop containers: %s", err)
+		}
+
 	}
 
 	running, err = serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
