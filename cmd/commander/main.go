@@ -17,6 +17,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander"
 	"github.com/litl/galaxy/config"
+	"github.com/litl/galaxy/discovery"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -32,6 +33,7 @@ var (
 	loop            bool
 	hostIP          string
 	dns             string
+	shuttleAddr     string
 	debug           bool
 	runOnce         bool
 	version         bool
@@ -186,6 +188,7 @@ func deregisterHost(signals chan os.Signal) {
 	configStore.DeleteHost(env, pool, config.HostInfo{
 		HostIP: hostIP,
 	})
+	discovery.Unregister(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr)
 	os.Exit(0)
 }
 
@@ -377,6 +380,7 @@ func main() {
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
+	flag.StringVar(&shuttleAddr, "shuttle-addr", "", "Shuttle API addr (127.0.0.1:9090)")
 	flag.StringVar(&dns, "dns", "", "DNS addr to use for containers")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version info")
@@ -639,7 +643,7 @@ func main() {
 		}
 		statusFs.Parse(flag.Args()[1:])
 
-		err := commander.DiscoveryStatus(serviceRuntime, serviceRegistry, env, pool, hostIP)
+		err := discovery.Status(serviceRuntime, serviceRegistry, env, pool, hostIP)
 		if err != nil {
 			log.Fatalf("ERROR: Unable to list app status: %s", err)
 		}
@@ -912,6 +916,7 @@ func main() {
 
 	if loop {
 
+		go discovery.Register(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr)
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 

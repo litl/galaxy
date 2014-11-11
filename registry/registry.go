@@ -255,7 +255,7 @@ func (r *ServiceRegistry) IsRegistered(env, pool, hostIP string, container *dock
 func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, error) {
 
 	// TODO: convert to scan
-	keys, err := r.backend.Keys(path.Join(env, "*", "hosts", "*", "*"))
+	keys, err := r.backend.Keys(path.Join(env, "*", "hosts", "*", "*", "*"))
 	if err != nil {
 		return nil, err
 	}

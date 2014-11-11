@@ -1,112 +1,164 @@
-package main
+package discovery
 
 import (
-	"os"
-
-	"github.com/codegangsta/cli"
-	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
+	shuttle "github.com/litl/galaxy/shuttle/client"
 	"github.com/litl/galaxy/utils"
+	"github.com/ryanuber/columnize"
+	"os"
+	"strings"
+	"time"
 )
 
-var (
-	client          *docker.Client
-	serviceRegistry *registry.ServiceRegistry
-	serviceRuntime  *runtime.ServiceRuntime
-	outputBuffer    *utils.OutputBuffer
-	buildVersion    string
-)
+func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, pool, hostIP string) error {
 
-func initOrDie(c *cli.Context) {
-	var err error
-	endpoint := runtime.GetEndpoint()
-	client, err = docker.NewClient(endpoint)
-
-	// Don't log timestamps, etc. if running interactively
-	if !c.Bool("loop") {
-		log.DefaultLogger.SetFlags(0)
-	}
-
+	containers, err := serviceRuntime.ManagedContainers()
 	if err != nil {
-		log.Fatalf("ERROR: %s", err)
+		panic(err)
 	}
 
-	if utils.GalaxyEnv(c) == "" {
-		log.Fatalln("ERROR: env not set.  Pass -env or set GALAXY_ENV.")
+	columns := []string{
+		"APP | CONTAINER ID | IMAGE | EXTERNAL | INTERNAL | PORT | CREATED | EXPIRES"}
+
+	for _, container := range containers {
+		name := serviceRuntime.EnvFor(container)["GALAXY_APP"]
+		registered, err := serviceRegistry.GetServiceRegistration(
+			env, pool, hostIP, container)
+		if err != nil {
+			return err
+		}
+
+		if registered != nil {
+			columns = append(columns,
+				strings.Join([]string{
+					registered.Name,
+					registered.ContainerID[0:12],
+					registered.Image,
+					registered.ExternalAddr(),
+					registered.InternalAddr(),
+					registered.Port,
+					utils.HumanDuration(time.Now().UTC().Sub(registered.StartedAt)) + " ago",
+					"In " + utils.HumanDuration(registered.Expires.Sub(time.Now().UTC())),
+				}, " | "))
+
+		} else {
+			columns = append(columns,
+				strings.Join([]string{
+					name,
+					container.ID[0:12],
+					container.Image,
+					"",
+					"",
+					"",
+					utils.HumanDuration(time.Now().Sub(container.Created)) + " ago",
+					"",
+				}, " | "))
+		}
+
 	}
 
-	if utils.GalaxyPool(c) == "" {
-		log.Fatalln("ERROR: pool not set.  Pass -pool or set GALAXY_POOL.")
+	result, _ := columnize.SimpleFormat(columns)
+	log.Println(result)
+	return nil
+}
+
+func Unregister(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry,
+	env, pool, hostIP, shuttleAddr string) {
+	unregisterShuttle(serviceRegistry, env, hostIP, shuttleAddr)
+	serviceRuntime.UnRegisterAll(env, pool, hostIP)
+	os.Exit(0)
+}
+
+func RegisterAll(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, pool, hostIP, shuttleAddr string, loggedOnce bool) {
+	columns := []string{"CONTAINER ID | IMAGE | EXTERNAL | INTERNAL | CREATED | EXPIRES"}
+
+	registrations, err := serviceRuntime.RegisterAll(env, pool, hostIP)
+	if err != nil {
+		log.Errorf("ERROR: Unable to register containers: %s", err)
+		return
 	}
 
-	serviceRegistry = registry.NewServiceRegistry(
-		uint64(c.Int("ttl")),
-	)
-
-	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
-
-	serviceRuntime = runtime.NewServiceRuntime(
-		serviceRegistry,
-		c.GlobalString("shuttleAddr"),
-		c.GlobalString("hostIp"),
-	)
-
-	outputBuffer = &utils.OutputBuffer{}
-	serviceRegistry.OutputBuffer = outputBuffer
-
-	if c.Bool("loop") {
-		log.Printf("Starting discovery %s", buildVersion)
-		log.Printf("Using env = %s, pool = %s, HostIp = %s",
-			utils.GalaxyEnv(c), utils.GalaxyPool(c),
-			c.GlobalString("hostIp"))
+	fn := log.Debugf
+	if !loggedOnce {
+		fn = log.Printf
 	}
 
-	if c.GlobalBool("debug") {
-		log.DefaultLogger.Level = log.DEBUG
+	for _, registration := range registrations {
+		if !loggedOnce || time.Now().Unix()%60 < 10 {
+			fn("Registered %s running as %s for %s%s", strings.TrimPrefix(registration.ContainerName, "/"),
+				registration.ContainerID[0:12], registration.Name, locationAt(registration))
+		}
+
+		columns = append(columns, strings.Join([]string{
+			registration.ContainerID[0:12],
+			registration.Image,
+			registration.ExternalAddr(),
+			registration.InternalAddr(),
+			utils.HumanDuration(time.Now().Sub(registration.StartedAt)) + " ago",
+			"In " + utils.HumanDuration(registration.Expires.Sub(time.Now().UTC())),
+		}, " | "))
+
+	}
+
+	registerShuttle(serviceRegistry, env, shuttleAddr)
+}
+
+func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, pool, hostIP, shuttleAddr string) {
+
+	if shuttleAddr != "" {
+		client = shuttle.NewClient(shuttleAddr)
+	}
+
+	RegisterAll(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr, false)
+
+	containerEvents := make(chan runtime.ContainerEvent)
+	err := serviceRuntime.RegisterEvents(env, pool, hostIP, containerEvents)
+	if err != nil {
+		log.Printf("ERROR: Unable to register docker event listener: %s", err)
+	}
+
+	for {
+
+		select {
+		case ce := <-containerEvents:
+			switch ce.Status {
+			case "start":
+				reg, err := serviceRegistry.RegisterService(env, pool, hostIP, ce.Container)
+				if err != nil {
+					log.Errorf("ERROR: Unable to register container: %s", err)
+					continue
+				}
+
+				log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
+					reg.ContainerID[0:12], reg.Name, locationAt(reg))
+				registerShuttle(serviceRegistry, env, shuttleAddr)
+			case "die", "stop":
+				reg, err := serviceRegistry.UnRegisterService(env, pool, hostIP, ce.Container)
+				if err != nil {
+					log.Errorf("ERROR: Unable to unregister container: %s", err)
+					continue
+				}
+
+				if reg != nil {
+					log.Printf("Unregistered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
+						reg.ContainerID[0:12], reg.Name, locationAt(reg))
+				}
+				pruneShuttleBackends(serviceRuntime, serviceRegistry, env, shuttleAddr)
+			}
+
+		case <-time.After(10 * time.Second):
+			RegisterAll(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr, true)
+			pruneShuttleBackends(serviceRuntime, serviceRegistry, env, shuttleAddr)
+		}
 	}
 }
 
-func main() {
-
-	app := cli.NewApp()
-	app.Name = "discovery"
-	app.Usage = "discovery service registration"
-	app.Version = buildVersion
-	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "redis", Value: utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
-		cli.StringFlag{Name: "env", Value: utils.DefaultEnv, Usage: "environment (dev, test, prod, etc.)"},
-		cli.StringFlag{Name: "pool", Value: utils.DefaultPool, Usage: "pool (web, worker, etc.)"},
-		cli.StringFlag{Name: "hostIp", Value: "127.0.0.1", Usage: "hosts external IP"},
-		cli.StringFlag{Name: "shuttleAddr", Value: "127.0.0.1:9090", Usage: "shuttle http address"},
-		cli.BoolFlag{Name: "debug", Usage: "enbable debug logging"},
+func locationAt(reg *registry.ServiceRegistration) string {
+	location := reg.ExternalAddr()
+	if location != "" {
+		location = " at " + location
 	}
-
-	app.Commands = []cli.Command{
-		{
-			Name:        "register",
-			Usage:       "discovers and registers running containers",
-			Action:      register,
-			Description: "register [options]",
-			Flags: []cli.Flag{
-				cli.IntFlag{Name: "ttl", Value: registry.DefaultTTL, Usage: "TTL (s) for service registrations"},
-				cli.BoolFlag{Name: "loop", Usage: "Continuously register containers"},
-			},
-		},
-		{
-			Name:        "unregister",
-			Usage:       "discovers and unregisters running containers",
-			Action:      unregister,
-			Description: "unregister [options]",
-		},
-		{
-			Name:        "status",
-			Usage:       "Lists the registration status of running containers",
-			Action:      status,
-			Description: "status",
-		},
-	}
-
-	app.Run(os.Args)
+	return location
 }

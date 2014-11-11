@@ -1,110 +1,26 @@
-package main
+package discovery
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 
-	"github.com/codegangsta/cli"
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/registry"
+	"github.com/litl/galaxy/runtime"
+
 	shuttle "github.com/litl/galaxy/shuttle/client"
-	"github.com/litl/galaxy/utils"
 )
 
-func getShuttleConfig(c *cli.Context) (*shuttle.Config, error) {
+var (
+	client *shuttle.Client
+)
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/_config", c.GlobalString("shuttleAddr")), nil)
-	if err != nil {
-		return nil, err
-	}
+func registerShuttle(serviceRegistry *registry.ServiceRegistry, env, shuttleAddr string) {
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	config := &shuttle.Config{}
-	err = json.Unmarshal(body, config)
-	if err != nil {
-		return nil, err
-	}
-
-	return config, nil
-}
-
-func pruneShuttleBackends(c *cli.Context) {
-	config, err := getShuttleConfig(c)
-	if err != nil {
-		log.Errorf("ERROR: Unable to get shuttle config: %s", err)
+	if client == nil {
 		return
 	}
 
-	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
-	if err != nil {
-		log.Errorf("ERROR: Unable to list registrations: %s", err)
-		return
-	}
-
-	containers, err := serviceRuntime.ManagedContainers()
-	if err != nil {
-		log.Errorf("ERROR: Unable to list galaxy containers: %s", err)
-		return
-	}
-
-	for _, service := range config.Services {
-
-		// Remove services that no longer exist
-		appRunning := false
-		for _, container := range containers {
-			if serviceRuntime.EnvFor(container)["GALAXY_APP"] == service.Name {
-				appRunning = true
-				break
-			}
-		}
-
-		if !appRunning {
-			err := unregisterShuttleService(c, &service)
-			if err != nil {
-				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", service.Name, err)
-			}
-			log.Printf("Unregisterred shuttle service %s", service.Name)
-			continue
-		}
-
-		for _, backend := range service.Backends {
-			backendExists := false
-			for _, r := range registrations {
-				if backend.Name == r.ContainerID[0:12] {
-					backendExists = true
-					break
-				}
-			}
-
-			if !backendExists {
-				err := unregisterShuttleBackend(c, service.Name, backend.Name)
-				if err != nil {
-					log.Errorf("ERROR: Unable to remove backend %s from shuttle: %s", backend.Name, err)
-				}
-				log.Printf("Unregisterred shuttle backend %s", backend.Name)
-			}
-
-		}
-
-	}
-}
-
-func registerShuttle(c *cli.Context) {
-
-	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
+	registrations, err := serviceRegistry.ListRegistrations(env)
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -155,31 +71,21 @@ func registerShuttle(c *cli.Context) {
 	}
 
 	for k, service := range backends {
-
-		js, err := json.Marshal(service)
+		err := client.UpdateService(k, service)
 		if err != nil {
-			log.Printf("ERROR: Marshaling service to JSON: %s", err)
-			continue
+			log.Errorf("ERROR: Unable to register shuttle service: %s", err)
 		}
-
-		resp, err := httpClient.Post(fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), k), "application/json",
-			bytes.NewBuffer(js))
-		if err != nil {
-			log.Errorf("ERROR: Registerring backend with shuttle: %s", err)
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			log.Errorf("ERROR: Failed to register service with shuttle: %s", resp.Status)
-		}
-		resp.Body.Close()
 	}
 
 }
 
-func unregisterShuttle(c *cli.Context) {
+func unregisterShuttle(serviceRegistry *registry.ServiceRegistry, env, hostIP, shuttleAddr string) {
 
-	registrations, err := serviceRegistry.ListRegistrations(utils.GalaxyEnv(c))
+	if client == nil {
+		return
+	}
+
+	registrations, err := serviceRegistry.ListRegistrations(env)
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -190,7 +96,7 @@ func unregisterShuttle(c *cli.Context) {
 	for _, r := range registrations {
 
 		// Registration for a container on a different host? Skip it.
-		if r.ExternalIP != c.GlobalString("hostIp") {
+		if r.ExternalIP != hostIP {
 			continue
 		}
 
@@ -219,7 +125,7 @@ func unregisterShuttle(c *cli.Context) {
 
 	for _, service := range backends {
 
-		err := unregisterShuttleService(c, service)
+		err := client.UnregisterService(service)
 		if err != nil {
 			log.Errorf("ERROR: Unable to remove shuttle service: %s", err)
 		}
@@ -227,43 +133,67 @@ func unregisterShuttle(c *cli.Context) {
 
 }
 
-func unregisterShuttleService(c *cli.Context, service *shuttle.ServiceConfig) error {
-	js, err := json.Marshal(service)
+func pruneShuttleBackends(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, shuttleAddr string) {
+	if client == nil {
+		return
+	}
+
+	config, err := client.GetConfig()
 	if err != nil {
-		return err
+		log.Errorf("ERROR: Unable to get shuttle config: %s", err)
+		return
 	}
 
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s", c.GlobalString("shuttleAddr"), service.Name), bytes.NewBuffer(js))
+	registrations, err := serviceRegistry.ListRegistrations(env)
 	if err != nil {
-		return err
+		log.Errorf("ERROR: Unable to list registrations: %s", err)
+		return
 	}
 
-	resp, err := httpClient.Do(req)
+	containers, err := serviceRuntime.ManagedContainers()
 	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.New(fmt.Sprintf("failed to unregister service: %s", resp.Status))
-	}
-	return nil
-}
-
-func unregisterShuttleBackend(c *cli.Context, service, backend string) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s/%s", c.GlobalString("shuttleAddr"), service, backend), nil)
-	if err != nil {
-		return err
+		log.Errorf("ERROR: Unable to list galaxy containers: %s", err)
+		return
 	}
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	for _, service := range config.Services {
 
-	if resp.StatusCode != http.StatusOK {
-		return errors.New(fmt.Sprintf("failed to unregister backend: %s", resp.Status))
+		// Remove services that no longer exist
+		appRunning := false
+		for _, container := range containers {
+			if serviceRuntime.EnvFor(container)["GALAXY_APP"] == service.Name {
+				appRunning = true
+				break
+			}
+		}
+
+		if !appRunning {
+			err := client.UnregisterService(&service)
+			if err != nil {
+				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", service.Name, err)
+			}
+			log.Printf("Unregisterred shuttle service %s", service.Name)
+			continue
+		}
+
+		for _, backend := range service.Backends {
+			backendExists := false
+			for _, r := range registrations {
+				if backend.Name == r.ContainerID[0:12] {
+					backendExists = true
+					break
+				}
+			}
+
+			if !backendExists {
+				err := client.UnregisterBackend(service.Name, backend.Name)
+				if err != nil {
+					log.Errorf("ERROR: Unable to remove backend %s from shuttle: %s", backend.Name, err)
+				}
+				log.Printf("Unregisterred shuttle backend %s", backend.Name)
+			}
+
+		}
+
 	}
-	return nil
 }
