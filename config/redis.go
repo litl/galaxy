@@ -187,6 +187,9 @@ func (r *RedisBackend) DeletePool(env, pool string) (bool, error) {
 }
 
 func (r *RedisBackend) ListPools(env string) ([]string, error) {
+	// This is the host entry created by commander
+	// when it starts up.  It can dynamically create
+	// a pool
 	key := path.Join(env, "*", "hosts", "*", "info")
 	keys, err := r.Keys(key)
 	if err != nil {
@@ -202,6 +205,29 @@ func (r *RedisBackend) ListPools(env string) ([]string, error) {
 			pools = append(pools, pool)
 		}
 	}
+
+	// This is the pools that have been manaully assigned
+	// apps.  It's possible to assign an app to a pool that
+	// has no running hosts so we add these to the pools
+	// list as well.
+	key = path.Join(env, "pools", "*")
+	keys, err = r.Keys(key)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, k := range keys {
+		parts := strings.Split(k, "/")
+		pool := parts[2]
+
+		if pool == "*" {
+			continue
+		}
+		if !utils.StringInSlice(pool, pools) {
+			pools = append(pools, pool)
+		}
+	}
+
 	return pools, nil
 }
 

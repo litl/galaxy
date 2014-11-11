@@ -22,7 +22,7 @@ func AppList(configStore *config.Store, env string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | VERSION | PORT | POOLS "}
+	columns := []string{"NAME | ENV | VERSION | IMAGE ID | PORT | POOLS "}
 
 	for _, env := range envs {
 
@@ -40,6 +40,10 @@ func AppList(configStore *config.Store, env string) error {
 			name := app.Name
 			port := app.EnvGet("GALAXY_PORT")
 			versionDeployed := app.Version()
+			versionID := app.VersionID()
+			if len(versionID) > 12 {
+				versionID = versionID[:12]
+			}
 
 			assignments := []string{}
 			for _, pool := range pools {
@@ -53,9 +57,10 @@ func AppList(configStore *config.Store, env string) error {
 			}
 
 			columns = append(columns, strings.Join([]string{
-				env,
 				name,
+				env,
 				versionDeployed,
+				versionID,
 				port,
 				strings.Join(assignments, ","),
 			}, " | "))
