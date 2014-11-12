@@ -5,6 +5,7 @@ import (
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/runtime"
+	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 	"strings"
 )
@@ -21,7 +22,7 @@ func AppList(configStore *config.Store, env string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | VERSION | PORT "}
+	columns := []string{"NAME | ENV | VERSION | IMAGE ID | PORT | POOLS "}
 
 	for _, env := range envs {
 
@@ -30,16 +31,38 @@ func AppList(configStore *config.Store, env string) error {
 			return err
 		}
 
+		pools, err := configStore.ListPools(env)
+		if err != nil {
+			return err
+		}
+
 		for _, app := range appList {
 			name := app.Name
 			port := app.EnvGet("GALAXY_PORT")
 			versionDeployed := app.Version()
+			versionID := app.VersionID()
+			if len(versionID) > 12 {
+				versionID = versionID[:12]
+			}
+
+			assignments := []string{}
+			for _, pool := range pools {
+				aa, err := configStore.ListAssignments(env, pool)
+				if err != nil {
+					return err
+				}
+				if utils.StringInSlice(app.Name, aa) {
+					assignments = append(assignments, pool)
+				}
+			}
 
 			columns = append(columns, strings.Join([]string{
-				env,
 				name,
+				env,
 				versionDeployed,
+				versionID,
 				port,
+				strings.Join(assignments, ","),
 			}, " | "))
 		}
 	}
@@ -154,6 +177,54 @@ func AppShell(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime,
 	err = serviceRuntime.StartInteractive(env, appCfg)
 	if err != nil {
 		return fmt.Errorf("could not start container: %s", err)
+	}
+	return nil
+}
+
+func AppAssign(configStore *config.Store, app, env, pool string) error {
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return fmt.Errorf("invalid app name: %s", app)
+	}
+
+	exists, err := configStore.PoolExists(env, pool)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		log.Warnf("WARN: Pool %s does not exist.", pool)
+	}
+
+	created, err := configStore.AssignApp(app, env, pool)
+
+	if err != nil {
+		return err
+	}
+
+	if created {
+		log.Printf("Assigned %s in env %s to pool %s.\n", app, env, pool)
+	} else {
+		log.Printf("%s already assigned to pool %s in env %s.\n", app, pool, env)
+	}
+	return nil
+}
+
+func AppUnassign(configStore *config.Store, app, env, pool string) error {
+	// Don't allow deleting runtime hosts entries
+	if app == "hosts" || app == "pools" {
+		return fmt.Errorf("invalid app name: %s", app)
+	}
+
+	deleted, err := configStore.UnassignApp(app, env, pool)
+	if err != nil {
+		return err
+	}
+
+	if deleted {
+		log.Printf("Unassigned %s in env %s from pool %s\n", app, env, pool)
+	} else {
+		log.Printf("%s could not be unassigned.\n", pool)
 	}
 	return nil
 }

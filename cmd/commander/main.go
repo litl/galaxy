@@ -17,6 +17,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/commander"
 	"github.com/litl/galaxy/config"
+	"github.com/litl/galaxy/discovery"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -32,6 +33,7 @@ var (
 	loop            bool
 	hostIP          string
 	dns             string
+	shuttleAddr     string
 	debug           bool
 	runOnce         bool
 	version         bool
@@ -138,11 +140,12 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 		}
 
 		log.Printf("Started %s version %s as %s\n", appCfg.Name, appCfg.Version(), container.ID[0:12])
-	}
 
-	err = serviceRuntime.StopAllButCurrentVersion(appCfg)
-	if err != nil {
-		log.Errorf("ERROR: Could not stop containers: %s", err)
+		err = serviceRuntime.StopOldVersion(appCfg, 1)
+		if err != nil {
+			log.Errorf("ERROR: Could not stop containers: %s", err)
+		}
+
 	}
 
 	running, err = serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
@@ -162,6 +165,12 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 
 func heartbeatHost() {
 	wg.Add(1)
+
+	_, err := configStore.CreatePool(pool, env)
+	if err != nil {
+		log.Fatalf("ERROR: Unabled to create pool %s: %s", pool, err)
+	}
+
 	defer wg.Done()
 	for {
 		configStore.UpdateHost(env, pool, config.HostInfo{
@@ -180,6 +189,7 @@ func deregisterHost(signals chan os.Signal) {
 	configStore.DeleteHost(env, pool, config.HostInfo{
 		HostIP: hostIP,
 	})
+	discovery.Unregister(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr)
 	os.Exit(0)
 }
 
@@ -371,6 +381,7 @@ func main() {
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
+	flag.StringVar(&shuttleAddr, "shuttle-addr", "", "Shuttle API addr (127.0.0.1:9090)")
 	flag.StringVar(&dns, "dns", "", "DNS addr to use for containers")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version info")
@@ -380,6 +391,7 @@ func main() {
 		println("Available commands are:")
 		println("   agent           Runs commander agent")
 		println("   app             List all apps")
+		println("   app:assign      Assign an app to a pool")
 		println("   app:create      Create an app")
 		println("   app:deploy      Deploy an app")
 		println("   app:delete      Delete an app")
@@ -404,18 +416,6 @@ func main() {
 	if version {
 		fmt.Println(buildVersion)
 		return
-	}
-
-	if strings.TrimSpace(env) == "" {
-		fmt.Println("Need an env")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if strings.TrimSpace(pool) == "" {
-		fmt.Println("Need a pool")
-		flag.PrintDefaults()
-		os.Exit(1)
 	}
 
 	if debug {
@@ -465,6 +465,27 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 		err := commander.AppList(configStore, env)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+
+	case "app:assign":
+		appFs := flag.NewFlagSet("app:assign", flag.ExitOnError)
+		appFs.Usage = func() {
+			println("Usage: commander app:assign <app>\n")
+			println("    Assign an app to a pool\n")
+			println("Options:\n")
+			appFs.PrintDefaults()
+		}
+		appFs.Parse(flag.Args()[1:])
+
+		if appFs.NArg() != 1 {
+			appFs.Usage()
+			os.Exit(1)
+		}
+
+		err := commander.AppAssign(configStore, appFs.Args()[0], env, pool)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -593,7 +614,7 @@ func main() {
 
 		startFs := flag.NewFlagSet("app:start", flag.ExitOnError)
 		startFs.Usage = func() {
-			println("Usage: commander start [options] [<app>]*\n")
+			println("Usage: commander app:start [options] [<app>]*\n")
 			println("    Starts one or more apps. If no apps are specified, starts all apps.\n")
 			println("Options:\n")
 			startFs.PrintDefaults()
@@ -612,10 +633,27 @@ func main() {
 			}
 		}
 		break
+	case "app:status":
+
+		statusFs := flag.NewFlagSet("app:status", flag.ExitOnError)
+		statusFs.Usage = func() {
+			println("Usage: commander app:status [options] [<app>]*\n")
+			println("    Lists status or running apps.\n")
+			println("Options:\n")
+			statusFs.PrintDefaults()
+		}
+		statusFs.Parse(flag.Args()[1:])
+
+		err := discovery.Status(serviceRuntime, serviceRegistry, env, pool, hostIP)
+		if err != nil {
+			log.Fatalf("ERROR: Unable to list app status: %s", err)
+		}
+		return
+
 	case "app:stop":
 		stopFs := flag.NewFlagSet("app:stop", flag.ExitOnError)
 		stopFs.Usage = func() {
-			println("Usage: commander stop [options] [<app>]*\n")
+			println("Usage: commander app:stop [options] [<app>]*\n")
 			println("    Stops one or more apps. If no apps are specified, stops all apps.\n")
 			println("Options:\n")
 			stopFs.PrintDefaults()
@@ -639,6 +677,27 @@ func main() {
 			log.Fatalf("ERROR: Unable able to stop all containers: %s", err)
 		}
 		return
+	case "app:unassign":
+		appFs := flag.NewFlagSet("app:unassign", flag.ExitOnError)
+		appFs.Usage = func() {
+			println("Usage: commander app:unassign <app>\n")
+			println("    Unassign an app to a pool\n")
+			println("Options:\n")
+			appFs.PrintDefaults()
+		}
+		appFs.Parse(flag.Args()[1:])
+
+		if appFs.NArg() != 1 {
+			appFs.Usage()
+			os.Exit(1)
+		}
+
+		err := commander.AppUnassign(configStore, appFs.Args()[0], env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+		return
+
 	case "hosts":
 		hostFs := flag.NewFlagSet("hosts", flag.ExitOnError)
 		hostFs.Usage = func() {
@@ -824,6 +883,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	if strings.TrimSpace(env) == "" {
+		fmt.Println("Need an env")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if strings.TrimSpace(pool) == "" {
+		fmt.Println("Need a pool")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
 	log.Printf("Starting commander %s", buildVersion)
 	log.Printf("Using env = %s, pool = %s",
 		env, pool)
@@ -846,6 +917,7 @@ func main() {
 
 	if loop {
 
+		go discovery.Register(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr)
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 

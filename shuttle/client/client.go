@@ -1,8 +1,14 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"reflect"
+	"time"
 )
 
 var (
@@ -10,6 +16,11 @@ var (
 	Status400s = []int{400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418}
 	Status500s = []int{500, 501, 502, 503, 504, 505}
 )
+
+type Client struct {
+	httpClient  *http.Client
+	shuttleAddr string
+}
 
 // Global config which applies to all Services
 type Config struct {
@@ -167,4 +178,101 @@ func (s ServiceConfig) DeepEqual(other ServiceConfig) bool {
 	}
 
 	return true
+}
+
+func NewClient(addr string) *Client {
+	transport := &http.Transport{ResponseHeaderTimeout: 2 * time.Second}
+	httpClient := &http.Client{Transport: transport}
+	return &Client{
+		httpClient:  httpClient,
+		shuttleAddr: addr,
+	}
+}
+
+func (c *Client) GetConfig() (*Config, error) {
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/_config", c.shuttleAddr), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	config := &Config{}
+	err = json.Unmarshal(body, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+func (c *Client) UpdateService(name string, service *ServiceConfig) error {
+
+	js, err := json.Marshal(service)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Post(fmt.Sprintf("http://%s/%s", c.shuttleAddr, name), "application/json",
+		bytes.NewBuffer(js))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to register service with shuttle: %s", resp.Status)
+	}
+	return nil
+}
+
+func (c *Client) UnregisterService(service *ServiceConfig) error {
+	js, err := json.Marshal(service)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s", c.shuttleAddr, service.Name), bytes.NewBuffer(js))
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("failed to unregister service: %s", resp.Status))
+	}
+	return nil
+}
+
+func (c *Client) UnregisterBackend(service, backend string) error {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/%s/%s", c.shuttleAddr, service, backend), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("failed to unregister backend: %s", resp.Status))
+	}
+	return nil
 }

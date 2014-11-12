@@ -129,7 +129,7 @@ func (s *AppConfig) GetProcesses(pool string) int {
 	key := fmt.Sprintf("%s-ps", pool)
 	ps := s.runtimeVMap.Get(key)
 	if ps == "" {
-		return 0
+		return -1
 	}
 	count, _ := strconv.ParseInt(ps, 10, 16)
 	return int(count)

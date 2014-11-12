@@ -285,32 +285,9 @@ func poolAssign(c *cli.Context) {
 
 	app := ensureAppParam(c, "pool:assign")
 
-	// Don't allow deleting runtime hosts entries
-	if app == "hosts" || app == "pools" {
-		return
-	}
-
-	exists, err := configStore.PoolExists(utils.GalaxyEnv(c), utils.GalaxyPool(c))
+	err := commander.AppAssign(configStore, app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	if err != nil {
-		log.Fatalf("ERROR: Could not assign app: %s", err)
-		return
-	}
-
-	if !exists {
-		log.Fatalf("ERROR: Pool %s does not exist.  Create it first.", utils.GalaxyPool(c))
-		return
-	}
-
-	created, err := configStore.AssignApp(app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
-
-	if err != nil {
-		log.Fatalf("ERROR: Could not assign app: %s", err)
-		return
-	}
-	if created {
-		log.Printf("Assigned %s in env %s to pool %s.\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
-	} else {
-		log.Printf("%s already assigned to pool %s in env %s.\n", app, utils.GalaxyPool(c), utils.GalaxyEnv(c))
+		log.Fatalf("ERROR: %s", err)
 	}
 }
 
@@ -325,21 +302,9 @@ func poolUnassign(c *cli.Context) {
 		log.Fatal("ERROR: app name missing")
 	}
 
-	// Don't allow deleting runtime hosts entries
-	if app == "hosts" || app == "pools" {
-		return
-	}
-
-	deleted, err := configStore.UnassignApp(app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
+	err := commander.AppUnassign(configStore, app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	if err != nil {
-		log.Fatalf("ERROR: Could not unassign app: %s", err)
-		return
-	}
-
-	if deleted {
-		log.Printf("Unassigned %s in env %s from pool %s\n", app, utils.GalaxyEnv(c), utils.GalaxyPool(c))
-	} else {
-		log.Printf("%s could not be unassigned.\n", utils.GalaxyPool(c))
+		log.Fatalf("ERROR: %s", err)
 	}
 }
 
