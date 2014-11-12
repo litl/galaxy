@@ -17,8 +17,6 @@ var (
 	httpRouter *HostRouter
 )
 
-type RequestLogger struct{}
-
 // This works along with the ServiceRegistry, and the individual Services to
 // route http requests based on the Host header. The Resgistry hold the mapping
 // of VHost names to individual services, and each service has it's own
@@ -136,8 +134,7 @@ func (r *HostRouter) Stop() {
 	r.listener.Close()
 }
 
-func startHTTPServer() {
-	//FIXME: this global wg?
+func startHTTPServer(wg *sync.WaitGroup) {
 	defer wg.Done()
 	httpRouter = NewHostRouter()
 	httpRouter.Start(nil)

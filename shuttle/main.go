@@ -31,7 +31,9 @@ var (
 	// version flags
 	version      bool
 	buildVersion string
-	wg           sync.WaitGroup
+
+	// SSL Certificate directory
+	certDir string
 )
 
 func init() {
@@ -58,8 +60,10 @@ func main() {
 
 	log.Printf("Starting shuttle %s", buildVersion)
 	loadConfig()
+
+	var wg sync.WaitGroup
 	wg.Add(2)
-	go startAdminHTTPServer()
-	go startHTTPServer()
+	go startAdminHTTPServer(&wg)
+	go startHTTPServer(&wg)
 	wg.Wait()
 }

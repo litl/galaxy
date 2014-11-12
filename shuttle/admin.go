@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/shuttle/client"
@@ -197,7 +198,7 @@ func addHandlers() {
 	http.Handle("/", r)
 }
 
-func startAdminHTTPServer() {
+func startAdminHTTPServer(wg *sync.WaitGroup) {
 	defer wg.Done()
 	addHandlers()
 	log.Println("Admin server listening on", adminListenAddr)
