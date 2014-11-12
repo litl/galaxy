@@ -46,6 +46,15 @@ func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	reqId := genId()
 	req.Header.Set("X-Request-Id", reqId)
 
+	if r.SSLOnly {
+		if req.TLS != nil || req.Header.Get("X-Forwarded-Proto") != "https" {
+			//TODO: verify RequestURI
+			redirLoc := "https://" + req.Host + req.RequestURI
+			http.Redirect(w, req, redirLoc, http.StatusMovedPermanently)
+			return
+		}
+	}
+
 	var err error
 	host := req.Host
 	if strings.Contains(host, ":") {
@@ -132,18 +141,9 @@ func startHTTPServer(wg *sync.WaitGroup) {
 	}
 
 	httpRouter = NewHostRouter(httpServer)
+	httpRouter.SSLOnly = sslOnly
+
 	httpRouter.Start(nil)
-}
-
-func sslRedirect(pr *ProxyRequest) bool {
-	if sslOnly && pr.Request.Header.Get("X-Forwarded-Proto") != "https" {
-		//TODO: verify RequestURI
-		redirLoc := "https://" + pr.Request.Host + pr.Request.RequestURI
-		http.Redirect(pr.ResponseWriter, pr.Request, redirLoc, http.StatusMovedPermanently)
-		return false
-	}
-
-	return true
 }
 
 type ErrorPage struct {

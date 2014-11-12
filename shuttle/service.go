@@ -122,7 +122,6 @@ func NewService(cfg client.ServiceConfig) *Service {
 		req.URL.Scheme = "http"
 	}
 
-	s.httpProxy.OnRequest = []ProxyCallback{sslRedirect}
 	s.httpProxy.OnResponse = []ProxyCallback{logProxyRequest, s.errStats, s.errorPages.CheckResponse}
 
 	if s.CheckInterval == 0 {
