@@ -172,7 +172,9 @@ func (s *ServiceRegistry) UpdateConfig(cfg client.Config) error {
 	}
 
 	invalidPorts := []string{
-		listenAddr[strings.Index(listenAddr, ":")+1:],
+		// FIXME: lookup bound addresses soume other way.  We may have multiple
+		//        http listeners, as well as all listening Services.
+		// listenAddr[strings.Index(listenAddr, ":")+1:],
 		adminListenAddr[strings.Index(adminListenAddr, ":")+1:],
 	}
 

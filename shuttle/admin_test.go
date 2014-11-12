@@ -29,7 +29,11 @@ func (s *HTTPSuite) SetUpSuite(c *C) {
 	addHandlers()
 	s.httpSvr = httptest.NewServer(nil)
 
-	httpRouter = NewHostRouter()
+	httpServer := &http.Server{
+		Addr: httpAddr,
+	}
+
+	httpRouter = NewHostRouter(httpServer)
 	ready := make(chan bool)
 	go httpRouter.Start(ready)
 	<-ready
@@ -224,7 +228,7 @@ func (s *HTTPSuite) TestRouter(c *C) {
 	}
 
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+listenAddr+"/addr", "test-vhost", srv.addr, 200, c)
+		checkHTTP("http://"+httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
 	}
 }
 
@@ -272,7 +276,7 @@ func (s *HTTPSuite) TestAddRemoveVHosts(c *C) {
 
 	// check responses from this new vhost
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+listenAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+		checkHTTP("http://"+httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
 	}
 }
 
@@ -314,8 +318,8 @@ func (s *HTTPSuite) TestMultiServiceVHost(c *C) {
 	}
 
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+listenAddr+"/addr", "test-vhost", srv.addr, 200, c)
-		checkHTTP("http://"+listenAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+		checkHTTP("http://"+httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
+		checkHTTP("http://"+httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
 	}
 }
 
@@ -455,14 +459,14 @@ func (s *HTTPSuite) TestErrorPage(c *C) {
 	}
 
 	// check that the normal response comes from srv1
-	checkHTTP("http://"+listenAddr+"/addr", "test-vhost", okServer.addr, 200, c)
+	checkHTTP("http://"+httpAddr+"/addr", "test-vhost", okServer.addr, 200, c)
 	// verify that an unregistered error doesn't give the cached page
-	checkHTTP("http://"+listenAddr+"/error?code=504", "test-vhost", okServer.addr, 504, c)
+	checkHTTP("http://"+httpAddr+"/error?code=504", "test-vhost", okServer.addr, 504, c)
 	// now see if the registered error comes from srv2
-	checkHTTP("http://"+listenAddr+"/error?code=503", "test-vhost", errServer.addr, 503, c)
+	checkHTTP("http://"+httpAddr+"/error?code=503", "test-vhost", errServer.addr, 503, c)
 
 	// now check that we got the header cached in the error page as well
-	req, err := http.NewRequest("GET", "http://"+listenAddr+"/error?code=503", nil)
+	req, err := http.NewRequest("GET", "http://"+httpAddr+"/error?code=503", nil)
 	if err != nil {
 		c.Fatal(err)
 	}
