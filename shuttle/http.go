@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -31,12 +33,17 @@ type HostRouter struct {
 	// automatically redirect to https
 	SSLOnly bool
 
+	// HTTP/HTTPS
+	Scheme string
+
 	// track our listener so we can kill the server
 	listener net.Listener
 }
 
 func NewHostRouter(httpServer *http.Server) *HostRouter {
-	r := &HostRouter{}
+	r := &HostRouter{
+		Scheme: "http",
+	}
 	httpServer.Handler = r
 	r.server = httpServer
 	return r
@@ -57,6 +64,7 @@ func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	var err error
 	host := req.Host
+
 	if strings.Contains(host, ":") {
 		host, _, err = net.SplitHostPort(req.Host)
 		if err != nil {
@@ -113,16 +121,22 @@ func (r *HostRouter) Start(ready chan bool) {
 		r.Unlock()
 		return
 	}
+
+	listener := r.listener
+	if r.Scheme == "https" {
+		listener = tls.NewListener(listener, r.server.TLSConfig)
+	}
+
 	r.Unlock()
 
-	log.Printf("HTTP server listening at %s", r.server.Addr)
+	log.Printf("%s server listening at %s", r.Scheme, r.server.Addr)
 	if ready != nil {
 		close(ready)
 	}
 
 	// This will log a closed connection error every time we Stop
 	// but that's mostly a testing issue.
-	log.Errorf("%s", r.server.Serve(r.listener))
+	log.Errorf("%s", r.server.Serve(listener))
 }
 
 func (r *HostRouter) Stop() {
@@ -141,6 +155,92 @@ func startHTTPServer(wg *sync.WaitGroup) {
 	}
 
 	httpRouter = NewHostRouter(httpServer)
+	httpRouter.SSLOnly = sslOnly
+
+	httpRouter.Start(nil)
+}
+
+// find certs in and is the named directory, and match them up by their base
+// name using '.pem' and '.key' as extensions.
+func loadCerts(certDir string) (*tls.Config, error) {
+	abs, err := filepath.Abs(certDir)
+	if err != nil {
+		return nil, err
+	}
+
+	dir, err := ioutil.ReadDir(abs)
+	if err != nil {
+		return nil, err
+	}
+
+	// [cert, key] pairs
+	pairs := make(map[string][2]string)
+
+	for _, f := range dir {
+		name := f.Name()
+		if strings.HasSuffix(name, ".pem") {
+			p := pairs[name[:len(name)-4]]
+			p[0] = filepath.Join(abs, name)
+			pairs[name[:len(name)-4]] = p
+		}
+		if strings.HasSuffix(name, ".key") {
+			p := pairs[name[:len(name)-4]]
+			p[1] = filepath.Join(abs, name)
+			pairs[name[:len(name)-4]] = p
+		}
+	}
+
+	tlsCfg := &tls.Config{
+		NextProtos: []string{"http/1.1"},
+	}
+
+	for key, pair := range pairs {
+		if pair[0] == "" {
+			log.Errorf("missing cert for key: %s", pair[1])
+			continue
+		}
+		if pair[1] == "" {
+			log.Errorf("missing key for cert: %s", pair[0])
+			continue
+		}
+
+		cert, err := tls.LoadX509KeyPair(pair[0], pair[1])
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		tlsCfg.Certificates = append(tlsCfg.Certificates, cert)
+		log.Debugf("loaded X509KeyPair for %s", key)
+	}
+
+	if len(tlsCfg.Certificates) == 0 {
+		return nil, fmt.Errorf("no tls certificates loaded")
+	}
+
+	tlsCfg.BuildNameToCertificate()
+	return tlsCfg, nil
+}
+
+func startHTTPSServer(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	tlsCfg, err := loadCerts(certDir)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	//TODO: configure these timeouts somewhere
+	httpsServer := &http.Server{
+		Addr:           httpsAddr,
+		ReadTimeout:    10 * time.Minute,
+		WriteTimeout:   10 * time.Minute,
+		MaxHeaderBytes: 1 << 20,
+		TLSConfig:      tlsCfg,
+	}
+
+	httpRouter = NewHostRouter(httpsServer)
+	httpRouter.Scheme = "https"
 	httpRouter.SSLOnly = sslOnly
 
 	httpRouter.Start(nil)

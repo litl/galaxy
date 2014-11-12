@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,8 @@ type HTTPSuite struct {
 	servers        []*testServer
 	backendServers []*testHTTPServer
 	httpSvr        *httptest.Server
+	httpAddr       string
+	httpsAddr      string
 }
 
 var _ = Suite(&HTTPSuite{})
@@ -30,13 +33,38 @@ func (s *HTTPSuite) SetUpSuite(c *C) {
 	s.httpSvr = httptest.NewServer(nil)
 
 	httpServer := &http.Server{
-		Addr: httpAddr,
+		Addr: "127.0.0.1:0",
 	}
 
 	httpRouter = NewHostRouter(httpServer)
-	ready := make(chan bool)
-	go httpRouter.Start(ready)
-	<-ready
+	httpReady := make(chan bool)
+	go httpRouter.Start(httpReady)
+	<-httpReady
+
+	// now build an HTTPS server
+	tlsCfg, err := loadCerts("./testdata")
+	if err != nil {
+		c.Fatal(err)
+		return
+	}
+
+	//TODO: configure these timeouts somewhere
+	httpsServer := &http.Server{
+		Addr:      "127.0.0.1:0",
+		TLSConfig: tlsCfg,
+	}
+
+	httpsRouter := NewHostRouter(httpsServer)
+	httpsRouter.Scheme = "https"
+	httpsRouter.SSLOnly = sslOnly
+
+	httpsReady := make(chan bool)
+	go httpsRouter.Start(httpsReady)
+	<-httpsReady
+
+	// assign the test router's addr to the glolbal
+	s.httpAddr = httpRouter.listener.Addr().String()
+	fmt.Println("****", s.httpAddr)
 }
 
 func (s *HTTPSuite) TearDownSuite(c *C) {
@@ -228,7 +256,7 @@ func (s *HTTPSuite) TestRouter(c *C) {
 	}
 
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
 	}
 }
 
@@ -276,7 +304,7 @@ func (s *HTTPSuite) TestAddRemoveVHosts(c *C) {
 
 	// check responses from this new vhost
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
 	}
 }
 
@@ -318,8 +346,8 @@ func (s *HTTPSuite) TestMultiServiceVHost(c *C) {
 	}
 
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
 	}
 }
 
@@ -459,14 +487,14 @@ func (s *HTTPSuite) TestErrorPage(c *C) {
 	}
 
 	// check that the normal response comes from srv1
-	checkHTTP("http://"+httpAddr+"/addr", "test-vhost", okServer.addr, 200, c)
+	checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost", okServer.addr, 200, c)
 	// verify that an unregistered error doesn't give the cached page
-	checkHTTP("http://"+httpAddr+"/error?code=504", "test-vhost", okServer.addr, 504, c)
+	checkHTTP("http://"+s.httpAddr+"/error?code=504", "test-vhost", okServer.addr, 504, c)
 	// now see if the registered error comes from srv2
-	checkHTTP("http://"+httpAddr+"/error?code=503", "test-vhost", errServer.addr, 503, c)
+	checkHTTP("http://"+s.httpAddr+"/error?code=503", "test-vhost", errServer.addr, 503, c)
 
 	// now check that we got the header cached in the error page as well
-	req, err := http.NewRequest("GET", "http://"+httpAddr+"/error?code=503", nil)
+	req, err := http.NewRequest("GET", "http://"+s.httpAddr+"/error?code=503", nil)
 	if err != nil {
 		c.Fatal(err)
 	}
