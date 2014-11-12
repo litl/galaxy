@@ -16,8 +16,9 @@ var (
 	// The default config is loaded if this file does not exist.
 	stateConfig string
 
-	// Listen address for the http server.
-	listenAddr string
+	// Listen addressed for the http servers.
+	httpAddr  string
+	httpsAddr string
 
 	// Listen address for the http server.
 	adminListenAddr string
@@ -31,14 +32,18 @@ var (
 	// version flags
 	version      bool
 	buildVersion string
-	wg           sync.WaitGroup
+
+	// SSL Certificate directory
+	certDir string
 )
 
 func init() {
-	flag.StringVar(&listenAddr, "http", "127.0.0.1:8080", "http server address")
+	flag.StringVar(&httpAddr, "http", "127.0.0.1:8080", "http server address")
+	flag.StringVar(&httpsAddr, "https", "127.0.0.1:8443", "https server address")
 	flag.StringVar(&adminListenAddr, "admin", "127.0.0.1:9090", "admin http server address")
 	flag.StringVar(&defaultConfig, "config", "", "default config file")
 	flag.StringVar(&stateConfig, "state", "", "updated config which reflects the internal state")
+	flag.StringVar(&certDir, "certs", "./", "directory containing SSL Certficates and Keys")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version")
 	flag.BoolVar(&sslOnly, "sslOnly", false, "require SSL")
@@ -58,8 +63,10 @@ func main() {
 
 	log.Printf("Starting shuttle %s", buildVersion)
 	loadConfig()
+
+	var wg sync.WaitGroup
 	wg.Add(2)
-	go startAdminHTTPServer()
-	go startHTTPServer()
+	go startAdminHTTPServer(&wg)
+	go startHTTPServer(&wg)
 	wg.Wait()
 }

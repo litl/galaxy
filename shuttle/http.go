@@ -17,8 +17,6 @@ var (
 	httpRouter *HostRouter
 )
 
-type RequestLogger struct{}
-
 // This works along with the ServiceRegistry, and the individual Services to
 // route http requests based on the Host header. The Resgistry hold the mapping
 // of VHost names to individual services, and each service has it's own
@@ -30,17 +28,32 @@ type HostRouter struct {
 	// the http frontend
 	server *http.Server
 
+	// automatically redirect to https
+	SSLOnly bool
+
 	// track our listener so we can kill the server
 	listener net.Listener
 }
 
-func NewHostRouter() *HostRouter {
-	return &HostRouter{}
+func NewHostRouter(httpServer *http.Server) *HostRouter {
+	r := &HostRouter{}
+	httpServer.Handler = r
+	r.server = httpServer
+	return r
 }
 
 func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	reqId := genId()
 	req.Header.Set("X-Request-Id", reqId)
+
+	if r.SSLOnly {
+		if req.TLS != nil || req.Header.Get("X-Forwarded-Proto") != "https" {
+			//TODO: verify RequestURI
+			redirLoc := "https://" + req.Host + req.RequestURI
+			http.Redirect(w, req, redirLoc, http.StatusMovedPermanently)
+			return
+		}
+	}
 
 	var err error
 	host := req.Host
@@ -63,9 +76,6 @@ func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
-	r.Lock()
-	defer r.Unlock()
-
 	if Registry.VHostsLen() == 0 {
 		http.Error(w, "no backends available", http.StatusServiceUnavailable)
 		return
@@ -96,33 +106,16 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 func (r *HostRouter) Start(ready chan bool) {
 	//FIXME: poor locking strategy
 	r.Lock()
-
-	log.Printf("HTTP server listening at %s", listenAddr)
-
-	// Proxy acts as http handler:
-	// These timeouts for for overall request duration. They don't effect
-	// keepalive, but will close an overly slow request.
-	r.server = &http.Server{
-		Addr:           listenAddr,
-		Handler:        r,
-		ReadTimeout:    10 * time.Minute,
-		WriteTimeout:   10 * time.Minute,
-		MaxHeaderBytes: 1 << 20,
-	}
-
 	var err error
-
-	// These timeouts are for each individual Read/Write operation
-	// These will close keepalive connections too.
-	// TODO: configure timeout somewhere
-	r.listener, err = newTimeoutListener("tcp", listenAddr, 300*time.Second)
+	r.listener, err = newTimeoutListener("tcp", r.server.Addr, 300*time.Second)
 	if err != nil {
 		log.Errorf("%s", err)
 		r.Unlock()
 		return
 	}
-
 	r.Unlock()
+
+	log.Printf("HTTP server listening at %s", r.server.Addr)
 	if ready != nil {
 		close(ready)
 	}
@@ -136,22 +129,21 @@ func (r *HostRouter) Stop() {
 	r.listener.Close()
 }
 
-func startHTTPServer() {
-	//FIXME: this global wg?
+func startHTTPServer(wg *sync.WaitGroup) {
 	defer wg.Done()
-	httpRouter = NewHostRouter()
-	httpRouter.Start(nil)
-}
 
-func sslRedirect(pr *ProxyRequest) bool {
-	if sslOnly && pr.Request.Header.Get("X-Forwarded-Proto") != "https" {
-		//TODO: verify RequestURI
-		redirLoc := "https://" + pr.Request.Host + pr.Request.RequestURI
-		http.Redirect(pr.ResponseWriter, pr.Request, redirLoc, http.StatusMovedPermanently)
-		return false
+	//TODO: configure these timeouts somewhere
+	httpServer := &http.Server{
+		Addr:           httpAddr,
+		ReadTimeout:    10 * time.Minute,
+		WriteTimeout:   10 * time.Minute,
+		MaxHeaderBytes: 1 << 20,
 	}
 
-	return true
+	httpRouter = NewHostRouter(httpServer)
+	httpRouter.SSLOnly = sslOnly
+
+	httpRouter.Start(nil)
 }
 
 type ErrorPage struct {

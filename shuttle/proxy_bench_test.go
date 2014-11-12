@@ -24,7 +24,11 @@ func setupBench(b *testing.B) {
 
 	benchServer = httptest.NewServer(nil)
 
-	benchRouter = NewHostRouter()
+	httpServer := &http.Server{
+		Addr: httpAddr,
+	}
+
+	benchRouter = NewHostRouter(httpServer)
 	ready := make(chan bool)
 	go benchRouter.Start(ready)
 	<-ready
@@ -128,7 +132,7 @@ func BenchmarkHTTPProxy(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	req, err := http.NewRequest("GET", "http://"+listenAddr+"/addr", nil)
+	req, err := http.NewRequest("GET", "http://"+httpAddr+"/addr", nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -176,7 +180,7 @@ func BenchmarkHTTPProxyKeepalive(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	req, err := http.NewRequest("GET", "http://"+listenAddr+"/addr", nil)
+	req, err := http.NewRequest("GET", "http://"+httpAddr+"/addr", nil)
 	if err != nil {
 		b.Fatal(err)
 	}
