@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -210,6 +211,16 @@ func NewHTTPTestServer(addr string, c fataler) (*testHTTPServer, error) {
 	return s, nil
 }
 
+// Dialer that always resolves to 127.0.0.1
+func localDial(netw, addr string) (net.Conn, error) {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	return net.Dial("tcp", "127.0.0.1:"+port)
+}
+
 // Connect to http server, and check response for value
 func checkHTTP(url, host, expected string, status int, c Tester) {
 	req, err := http.NewRequest("GET", url, nil)
@@ -219,13 +230,32 @@ func checkHTTP(url, host, expected string, status int, c Tester) {
 
 	req.Host = host
 
-	c.Log("GET ", req.Host, req.URL.Path)
+	// Load our test certs as our RootCAs, so we can verify that we connect
+	// with the correct Cert in an HTTPSRouter
+	certs := x509.NewCertPool()
+	pemData, err := ioutil.ReadFile("testdata/vhost1.pem")
+	if err != nil {
+		c.Fatal(err)
+	}
+	certs.AppendCertsFromPEM(pemData)
+	pemData, err = ioutil.ReadFile("testdata/vhost2.pem")
+	if err != nil {
+		c.Fatal(err)
+	}
+	certs.AppendCertsFromPEM(pemData)
 
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: true,
+	client := &http.Client{
+		Transport: &http.Transport{
+			Dial: localDial,
+			TLSClientConfig: &tls.Config{
+				RootCAs: certs,
+			},
+		},
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	c.Log("GET ", req.Host, req.URL.Path)
+
+	resp, err := client.Do(req)
 	if err != nil {
 		c.Fatal(err)
 	}

@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -17,7 +19,9 @@ type HTTPSuite struct {
 	backendServers []*testHTTPServer
 	httpSvr        *httptest.Server
 	httpAddr       string
+	httpPort       string
 	httpsAddr      string
+	httpsPort      string
 }
 
 var _ = Suite(&HTTPSuite{})
@@ -47,7 +51,6 @@ func (s *HTTPSuite) SetUpSuite(c *C) {
 		return
 	}
 
-	//TODO: configure these timeouts somewhere
 	httpsServer := &http.Server{
 		Addr:      "127.0.0.1:0",
 		TLSConfig: tlsCfg,
@@ -63,7 +66,9 @@ func (s *HTTPSuite) SetUpSuite(c *C) {
 
 	// assign the test router's addr to the glolbal
 	s.httpAddr = httpRouter.listener.Addr().String()
+	s.httpPort = fmt.Sprintf("%d", httpRouter.listener.Addr().(*net.TCPAddr).Port)
 	s.httpsAddr = httpsRouter.listener.Addr().String()
+	s.httpsPort = fmt.Sprintf("%d", httpsRouter.listener.Addr().(*net.TCPAddr).Port)
 }
 
 func (s *HTTPSuite) TearDownSuite(c *C) {
@@ -610,7 +615,7 @@ func (s *HTTPSuite) TestGlobalDefaults(c *C) {
 	c.Assert(globalCfg.DialTimeout, Equals, service.DialTimeout)
 }
 
-// TEst that we can router to Vhosts based on SNI
+// Test that we can route to Vhosts based on SNI
 func (s *HTTPSuite) TestHTTPSRouter(c *C) {
 	srv1 := s.backendServers[0]
 	srv2 := s.backendServers[1]
@@ -643,11 +648,11 @@ func (s *HTTPSuite) TestHTTPSRouter(c *C) {
 		c.Fatal(err)
 	}
 
-	// our router has 2 certs, each with name.test and alt.name.test as DNS names.
-	checkHTTP("https://"+s.httpsAddr+"/addr", "vhost1.test", srv1.addr, 200, c)
-	checkHTTP("https://"+s.httpsAddr+"/addr", "alt.vhost1.test", srv1.addr, 200, c)
+	// Our router has 2 certs, each with name.test and alt.name.test as DNS names.
+	// checkHTTP has a fake dialer that resolves everything to 127.0.0.1.
+	checkHTTP("https://vhost1.test:"+s.httpsPort+"/addr", "vhost1.test", srv1.addr, 200, c)
+	checkHTTP("https://alt.vhost1.test:"+s.httpsPort+"/addr", "alt.vhost1.test", srv1.addr, 200, c)
 
-	checkHTTP("https://"+s.httpsAddr+"/addr", "vhost2.test", srv2.addr, 200, c)
-	checkHTTP("https://"+s.httpsAddr+"/addr", "alt.vhost2.test", srv2.addr, 200, c)
-
+	checkHTTP("https://vhost2.test:"+s.httpsPort+"/addr", "vhost2.test", srv2.addr, 200, c)
+	checkHTTP("https://alt.vhost2.test:"+s.httpsPort+"/addr", "alt.vhost2.test", srv2.addr, 200, c)
 }
