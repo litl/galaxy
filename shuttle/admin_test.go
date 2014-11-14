@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -64,7 +63,7 @@ func (s *HTTPSuite) SetUpSuite(c *C) {
 
 	// assign the test router's addr to the glolbal
 	s.httpAddr = httpRouter.listener.Addr().String()
-	fmt.Println("****", s.httpAddr)
+	s.httpsAddr = httpsRouter.listener.Addr().String()
 }
 
 func (s *HTTPSuite) TearDownSuite(c *C) {
@@ -609,4 +608,46 @@ func (s *HTTPSuite) TestGlobalDefaults(c *C) {
 	c.Assert(globalCfg.ClientTimeout, Equals, service.ClientTimeout)
 	c.Assert(globalCfg.ServerTimeout, Equals, service.ServerTimeout)
 	c.Assert(globalCfg.DialTimeout, Equals, service.DialTimeout)
+}
+
+// TEst that we can router to Vhosts based on SNI
+func (s *HTTPSuite) TestHTTPSRouter(c *C) {
+	srv1 := s.backendServers[0]
+	srv2 := s.backendServers[1]
+
+	svcCfgOne := client.ServiceConfig{
+		Name:         "VHostTest1",
+		Addr:         "127.0.0.1:9000",
+		VirtualHosts: []string{"vhost1.test", "alt.vhost1.test"},
+		Backends: []client.BackendConfig{
+			{Addr: srv1.addr},
+		},
+	}
+
+	svcCfgTwo := client.ServiceConfig{
+		Name:         "VHostTest2",
+		Addr:         "127.0.0.1:9001",
+		VirtualHosts: []string{"vhost2.test", "alt.vhost2.test"},
+		Backends: []client.BackendConfig{
+			{Addr: srv2.addr},
+		},
+	}
+
+	err := Registry.AddService(svcCfgOne)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	err = Registry.AddService(svcCfgTwo)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// our router has 2 certs, each with name.test and alt.name.test as DNS names.
+	checkHTTP("https://"+s.httpsAddr+"/addr", "vhost1.test", srv1.addr, 200, c)
+	checkHTTP("https://"+s.httpsAddr+"/addr", "alt.vhost1.test", srv1.addr, 200, c)
+
+	checkHTTP("https://"+s.httpsAddr+"/addr", "vhost2.test", srv2.addr, 200, c)
+	checkHTTP("https://"+s.httpsAddr+"/addr", "alt.vhost2.test", srv2.addr, 200, c)
+
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -219,6 +220,10 @@ func checkHTTP(url, host, expected string, status int, c Tester) {
 	req.Host = host
 
 	c.Log("GET ", req.Host, req.URL.Path)
+
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
