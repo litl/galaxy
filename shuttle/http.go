@@ -218,6 +218,7 @@ func loadCerts(certDir string) (*tls.Config, error) {
 	}
 
 	tlsCfg.BuildNameToCertificate()
+
 	return tlsCfg, nil
 }
 

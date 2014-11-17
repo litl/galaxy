@@ -623,7 +623,7 @@ func (s *HTTPSuite) TestHTTPSRouter(c *C) {
 	svcCfgOne := client.ServiceConfig{
 		Name:         "VHostTest1",
 		Addr:         "127.0.0.1:9000",
-		VirtualHosts: []string{"vhost1.test", "alt.vhost1.test"},
+		VirtualHosts: []string{"vhost1.test", "alt.vhost1.test", "star.vhost1.test"},
 		Backends: []client.BackendConfig{
 			{Addr: srv1.addr},
 		},
@@ -632,7 +632,7 @@ func (s *HTTPSuite) TestHTTPSRouter(c *C) {
 	svcCfgTwo := client.ServiceConfig{
 		Name:         "VHostTest2",
 		Addr:         "127.0.0.1:9001",
-		VirtualHosts: []string{"vhost2.test", "alt.vhost2.test"},
+		VirtualHosts: []string{"vhost2.test", "alt.vhost2.test", "star.vhost2.test"},
 		Backends: []client.BackendConfig{
 			{Addr: srv2.addr},
 		},
@@ -652,7 +652,9 @@ func (s *HTTPSuite) TestHTTPSRouter(c *C) {
 	// checkHTTP has a fake dialer that resolves everything to 127.0.0.1.
 	checkHTTP("https://vhost1.test:"+s.httpsPort+"/addr", "vhost1.test", srv1.addr, 200, c)
 	checkHTTP("https://alt.vhost1.test:"+s.httpsPort+"/addr", "alt.vhost1.test", srv1.addr, 200, c)
+	checkHTTP("https://star.vhost1.test:"+s.httpsPort+"/addr", "star.vhost1.test", srv1.addr, 200, c)
 
 	checkHTTP("https://vhost2.test:"+s.httpsPort+"/addr", "vhost2.test", srv2.addr, 200, c)
 	checkHTTP("https://alt.vhost2.test:"+s.httpsPort+"/addr", "alt.vhost2.test", srv2.addr, 200, c)
+	checkHTTP("https://star.vhost2.test:"+s.httpsPort+"/addr", "star.vhost2.test", srv2.addr, 200, c)
 }
