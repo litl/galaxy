@@ -38,14 +38,16 @@ var (
 )
 
 func init() {
-	flag.StringVar(&httpAddr, "http", "127.0.0.1:8080", "http server address")
-	flag.StringVar(&httpsAddr, "https", "127.0.0.1:8443", "https server address")
+	flag.StringVar(&httpAddr, "http", "", "http server address")
+	flag.StringVar(&httpsAddr, "https", "", "https server address")
 	flag.StringVar(&adminListenAddr, "admin", "127.0.0.1:9090", "admin http server address")
 	flag.StringVar(&defaultConfig, "config", "", "default config file")
 	flag.StringVar(&stateConfig, "state", "", "updated config which reflects the internal state")
 	flag.StringVar(&certDir, "certs", "./", "directory containing SSL Certficates and Keys")
 	flag.BoolVar(&debug, "debug", false, "verbose logging")
 	flag.BoolVar(&version, "v", false, "display version")
+
+	// FIXME: we may only want this for one HTTPRouter
 	flag.BoolVar(&sslOnly, "sslOnly", false, "require SSL")
 
 	flag.Parse()
@@ -65,8 +67,17 @@ func main() {
 	loadConfig()
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(1)
 	go startAdminHTTPServer(&wg)
-	go startHTTPServer(&wg)
+
+	if httpAddr != "" {
+		wg.Add(1)
+		go startHTTPServer(&wg)
+	}
+
+	if httpsAddr != "" {
+		wg.Add(1)
+		go startHTTPSServer(&wg)
+	}
 	wg.Wait()
 }

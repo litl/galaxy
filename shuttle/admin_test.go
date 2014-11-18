@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -16,6 +18,10 @@ type HTTPSuite struct {
 	servers        []*testServer
 	backendServers []*testHTTPServer
 	httpSvr        *httptest.Server
+	httpAddr       string
+	httpPort       string
+	httpsAddr      string
+	httpsPort      string
 }
 
 var _ = Suite(&HTTPSuite{})
@@ -30,13 +36,39 @@ func (s *HTTPSuite) SetUpSuite(c *C) {
 	s.httpSvr = httptest.NewServer(nil)
 
 	httpServer := &http.Server{
-		Addr: httpAddr,
+		Addr: "127.0.0.1:0",
 	}
 
 	httpRouter = NewHostRouter(httpServer)
-	ready := make(chan bool)
-	go httpRouter.Start(ready)
-	<-ready
+	httpReady := make(chan bool)
+	go httpRouter.Start(httpReady)
+	<-httpReady
+
+	// now build an HTTPS server
+	tlsCfg, err := loadCerts("./testdata")
+	if err != nil {
+		c.Fatal(err)
+		return
+	}
+
+	httpsServer := &http.Server{
+		Addr:      "127.0.0.1:0",
+		TLSConfig: tlsCfg,
+	}
+
+	httpsRouter := NewHostRouter(httpsServer)
+	httpsRouter.Scheme = "https"
+	httpsRouter.SSLOnly = sslOnly
+
+	httpsReady := make(chan bool)
+	go httpsRouter.Start(httpsReady)
+	<-httpsReady
+
+	// assign the test router's addr to the glolbal
+	s.httpAddr = httpRouter.listener.Addr().String()
+	s.httpPort = fmt.Sprintf("%d", httpRouter.listener.Addr().(*net.TCPAddr).Port)
+	s.httpsAddr = httpsRouter.listener.Addr().String()
+	s.httpsPort = fmt.Sprintf("%d", httpsRouter.listener.Addr().(*net.TCPAddr).Port)
 }
 
 func (s *HTTPSuite) TearDownSuite(c *C) {
@@ -228,7 +260,7 @@ func (s *HTTPSuite) TestRouter(c *C) {
 	}
 
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
 	}
 }
 
@@ -276,7 +308,7 @@ func (s *HTTPSuite) TestAddRemoveVHosts(c *C) {
 
 	// check responses from this new vhost
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
 	}
 }
 
@@ -318,8 +350,8 @@ func (s *HTTPSuite) TestMultiServiceVHost(c *C) {
 	}
 
 	for _, srv := range s.backendServers {
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
-		checkHTTP("http://"+httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost", srv.addr, 200, c)
+		checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost-2", srv.addr, 200, c)
 	}
 }
 
@@ -459,14 +491,14 @@ func (s *HTTPSuite) TestErrorPage(c *C) {
 	}
 
 	// check that the normal response comes from srv1
-	checkHTTP("http://"+httpAddr+"/addr", "test-vhost", okServer.addr, 200, c)
+	checkHTTP("http://"+s.httpAddr+"/addr", "test-vhost", okServer.addr, 200, c)
 	// verify that an unregistered error doesn't give the cached page
-	checkHTTP("http://"+httpAddr+"/error?code=504", "test-vhost", okServer.addr, 504, c)
+	checkHTTP("http://"+s.httpAddr+"/error?code=504", "test-vhost", okServer.addr, 504, c)
 	// now see if the registered error comes from srv2
-	checkHTTP("http://"+httpAddr+"/error?code=503", "test-vhost", errServer.addr, 503, c)
+	checkHTTP("http://"+s.httpAddr+"/error?code=503", "test-vhost", errServer.addr, 503, c)
 
 	// now check that we got the header cached in the error page as well
-	req, err := http.NewRequest("GET", "http://"+httpAddr+"/error?code=503", nil)
+	req, err := http.NewRequest("GET", "http://"+s.httpAddr+"/error?code=503", nil)
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -581,4 +613,48 @@ func (s *HTTPSuite) TestGlobalDefaults(c *C) {
 	c.Assert(globalCfg.ClientTimeout, Equals, service.ClientTimeout)
 	c.Assert(globalCfg.ServerTimeout, Equals, service.ServerTimeout)
 	c.Assert(globalCfg.DialTimeout, Equals, service.DialTimeout)
+}
+
+// Test that we can route to Vhosts based on SNI
+func (s *HTTPSuite) TestHTTPSRouter(c *C) {
+	srv1 := s.backendServers[0]
+	srv2 := s.backendServers[1]
+
+	svcCfgOne := client.ServiceConfig{
+		Name:         "VHostTest1",
+		Addr:         "127.0.0.1:9000",
+		VirtualHosts: []string{"vhost1.test", "alt.vhost1.test", "star.vhost1.test"},
+		Backends: []client.BackendConfig{
+			{Addr: srv1.addr},
+		},
+	}
+
+	svcCfgTwo := client.ServiceConfig{
+		Name:         "VHostTest2",
+		Addr:         "127.0.0.1:9001",
+		VirtualHosts: []string{"vhost2.test", "alt.vhost2.test", "star.vhost2.test"},
+		Backends: []client.BackendConfig{
+			{Addr: srv2.addr},
+		},
+	}
+
+	err := Registry.AddService(svcCfgOne)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	err = Registry.AddService(svcCfgTwo)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	// Our router has 2 certs, each with name.test and alt.name.test as DNS names.
+	// checkHTTP has a fake dialer that resolves everything to 127.0.0.1.
+	checkHTTP("https://vhost1.test:"+s.httpsPort+"/addr", "vhost1.test", srv1.addr, 200, c)
+	checkHTTP("https://alt.vhost1.test:"+s.httpsPort+"/addr", "alt.vhost1.test", srv1.addr, 200, c)
+	checkHTTP("https://star.vhost1.test:"+s.httpsPort+"/addr", "star.vhost1.test", srv1.addr, 200, c)
+
+	checkHTTP("https://vhost2.test:"+s.httpsPort+"/addr", "vhost2.test", srv2.addr, 200, c)
+	checkHTTP("https://alt.vhost2.test:"+s.httpsPort+"/addr", "alt.vhost2.test", srv2.addr, 200, c)
+	checkHTTP("https://star.vhost2.test:"+s.httpsPort+"/addr", "star.vhost2.test", srv2.addr, 200, c)
 }
