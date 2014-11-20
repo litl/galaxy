@@ -8,6 +8,7 @@ import (
 	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -265,7 +266,8 @@ func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, 
 
 		val, err := r.backend.Get(key, "location")
 		if err != nil {
-			return nil, err
+			log.Warnf("WARN: Unable to get location for %s: %s", key, err)
+			continue
 		}
 
 		svcReg := ServiceRegistration{
@@ -273,7 +275,8 @@ func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, 
 		}
 		err = json.Unmarshal([]byte(val), &svcReg)
 		if err != nil {
-			return nil, err
+			log.Warnf("WARN: Unable to unmarshal JSON for %s: %s", key, err)
+			continue
 		}
 
 		svcReg.Path = key
