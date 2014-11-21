@@ -499,6 +499,7 @@ func main() {
 		cli.StringFlag{Name: "policy", Usage: "stack policy"},
 		cli.StringFlag{Name: "region", Usage: "aws region"},
 		cli.StringFlag{Name: "template", Usage: "provide a template file"},
+		cli.StringFlag{Name: "http-health-check", Usage: "ELB health check address", Value: "HTTP:9090/_config"},
 		cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
 		cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
 		cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
