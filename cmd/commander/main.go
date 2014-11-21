@@ -81,6 +81,22 @@ func initOrDie() {
 	go deregisterHost(signalsChan)
 }
 
+func ensureEnv() {
+	if strings.TrimSpace(env) == "" {
+		fmt.Println("Need an env")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+}
+
+func ensurePool() {
+	if strings.TrimSpace(pool) == "" {
+		fmt.Println("Need a pool")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+}
+
 func pullImageAsync(appCfg config.AppConfig, errChan chan error) {
 	// err logged via pullImage
 	_, err := pullImage(&appCfg)
@@ -444,6 +460,9 @@ func main() {
 		}
 		agentFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+		ensurePool()
+
 		hosts, err := configStore.ListHosts(env, pool)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -480,6 +499,9 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+		ensurePool()
+
 		if appFs.NArg() != 1 {
 			appFs.Usage()
 			os.Exit(1)
@@ -500,10 +522,13 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+
 		if appFs.NArg() == 0 {
 			appFs.Usage()
 			os.Exit(1)
 		}
+
 		err := commander.AppCreate(configStore, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -520,10 +545,13 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+
 		if appFs.NArg() == 0 {
 			appFs.Usage()
 			os.Exit(1)
 		}
+
 		err := commander.AppDelete(configStore, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -540,10 +568,13 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+
 		if appFs.NArg() != 2 {
 			appFs.Usage()
 			os.Exit(1)
 		}
+
 		err := commander.AppDeploy(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1])
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -560,10 +591,13 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+
 		if appFs.NArg() == 0 {
 			appFs.Usage()
 			os.Exit(1)
 		}
+
 		err := commander.AppRestart(configStore, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -580,10 +614,13 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+
 		if appFs.NArg() < 2 {
 			appFs.Usage()
 			os.Exit(1)
 		}
+
 		err := commander.AppRun(configStore, serviceRuntime, appFs.Args()[0], env, appFs.Args()[1:])
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -600,10 +637,13 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+
 		if appFs.NArg() != 1 {
 			appFs.Usage()
 			os.Exit(1)
 		}
+
 		err := commander.AppShell(configStore, serviceRuntime, appFs.Args()[0], env)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -638,11 +678,14 @@ func main() {
 		statusFs := flag.NewFlagSet("app:status", flag.ExitOnError)
 		statusFs.Usage = func() {
 			println("Usage: commander app:status [options] [<app>]*\n")
-			println("    Lists status or running apps.\n")
+			println("    Lists status of running apps.\n")
 			println("Options:\n")
 			statusFs.PrintDefaults()
 		}
 		statusFs.Parse(flag.Args()[1:])
+
+		ensureEnv()
+		ensurePool()
 
 		err := discovery.Status(serviceRuntime, serviceRegistry, env, pool, hostIP)
 		if err != nil {
@@ -687,6 +730,9 @@ func main() {
 		}
 		appFs.Parse(flag.Args()[1:])
 
+		ensureEnv()
+		ensurePool()
+
 		if appFs.NArg() != 1 {
 			appFs.Usage()
 			os.Exit(1)
@@ -711,6 +757,9 @@ func main() {
 			log.Fatalf("ERROR: Bad command line options: %s", err)
 		}
 
+		ensureEnv()
+		ensurePool()
+
 		err = commander.HostsList(configStore, env, pool)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -728,6 +777,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("ERROR: Bad command line options: %s", err)
 		}
+
+		ensureEnv()
 
 		if configFs.NArg() != 1 {
 			log.Errorf("ERROR: Missing app name")
@@ -754,6 +805,8 @@ func main() {
 			log.Fatalf("ERROR: Bad command line options: %s", err)
 		}
 
+		ensureEnv()
+
 		if configFs.NArg() == 0 {
 			log.Errorf("ERROR: Missing app name")
 			configFs.Usage()
@@ -779,6 +832,8 @@ func main() {
 			log.Fatalf("ERROR: Bad command line options: %s", err)
 		}
 
+		ensureEnv()
+
 		if configFs.NArg() == 0 {
 			log.Errorf("ERROR: Missing app name")
 			configFs.Usage()
@@ -803,6 +858,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("ERROR: Bad command line options: %s", err)
 		}
+
+		ensureEnv()
 
 		if configFs.NArg() == 0 {
 			log.Errorf("ERROR: Missing app name")
@@ -857,6 +914,9 @@ func main() {
 			log.Fatalf("ERROR: Bad command line options: %s", err)
 		}
 
+		ensureEnv()
+		ensurePool()
+
 		if runtimeFs.NArg() != 1 {
 			runtimeFs.Usage()
 			os.Exit(1)
@@ -883,21 +943,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if strings.TrimSpace(env) == "" {
-		fmt.Println("Need an env")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if strings.TrimSpace(pool) == "" {
-		fmt.Println("Need a pool")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
+	ensureEnv()
+	ensurePool()
 
 	log.Printf("Starting commander %s", buildVersion)
-	log.Printf("Using env = %s, pool = %s",
-		env, pool)
+	log.Printf("Using env = %s, pool = %s, host-ip = %s",
+		env, pool, hostIP)
 
 	go heartbeatHost()
 
