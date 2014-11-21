@@ -935,6 +935,12 @@ func (s *ServiceRuntime) instanceIds(app, versionId string) ([]int, error) {
 
 	instances := []int{}
 	for _, c := range containers {
+		ga := s.EnvFor(c)["GALAXY_APP"]
+
+		if ga != app {
+			continue
+		}
+
 		gi := s.EnvFor(c)["GALAXY_INSTANCE"]
 		gv := s.EnvFor(c)["GALAXY_VERSION"]
 		if gi != "" {
