@@ -73,7 +73,7 @@ func (v *VirtualHost) Add(svc *Service) {
 	// TODO: is this the best place to log these?
 	svcCfg := svc.Config()
 	for _, backend := range svcCfg.Backends {
-		log.Printf("Adding HTTP endpoint http://%s to %s", backend.Addr, v.Name)
+		log.Printf("Adding backend http://%s to VirtualHost %s", backend.Addr, v.Name)
 	}
 	v.services = append(v.services, svc)
 }
@@ -100,7 +100,7 @@ func (v *VirtualHost) Remove(svc *Service) {
 
 	// Now removing this Service
 	for _, backend := range svcCfg.Backends {
-		log.Printf("Removing HTTP endpoint http://%s from %s", backend.Addr, v.Name)
+		log.Printf("Removing backend http://%s from VirtualHost %s", backend.Addr, v.Name)
 	}
 
 	v.services = append(v.services[:found], v.services[found+1:]...)
@@ -258,6 +258,7 @@ func (s *ServiceRegistry) AddService(svcCfg client.ServiceConfig) error {
 
 	s.svcs[service.Name] = service
 
+	svcCfg.VirtualHosts = filter(svcCfg.VirtualHosts, "")
 	for _, name := range svcCfg.VirtualHosts {
 		vhost := s.vhosts[name]
 		if vhost == nil {
@@ -339,7 +340,7 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		service.errorPages.Update(newCfg.ErrorPages)
 	}
 
-	s.updateVHosts(service, newCfg.VirtualHosts)
+	s.updateVHosts(service, filter(newCfg.VirtualHosts, ""))
 
 	return nil
 }

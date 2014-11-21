@@ -23,3 +23,18 @@ func genId() string {
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
 }
+
+// remove matching strings from a []string
+func filter(a []string, m string) []string {
+	removed := 0
+	for i := 0; i < len(a); i++ {
+		if removed > 0 {
+			a[i-removed] = a[i]
+		}
+		if a[i] == m {
+			removed++
+		}
+
+	}
+	return a[:len(a)-removed]
+}
