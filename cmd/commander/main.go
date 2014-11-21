@@ -968,7 +968,7 @@ func main() {
 
 	if loop {
 
-		go discovery.Register(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr)
+		go discovery.Register(serviceRuntime, serviceRegistry, configStore, env, pool, hostIP, shuttleAddr)
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 

@@ -192,7 +192,7 @@ func (r *ServiceRegistry) UnRegisterService(env, pool, hostIP string, container 
 	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
 	registration, err := r.GetServiceRegistration(env, pool, hostIP, container)
-	if err != nil {
+	if err != nil || registration == nil {
 		return registration, err
 	}
 

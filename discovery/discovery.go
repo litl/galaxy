@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
@@ -105,7 +106,8 @@ func RegisterAll(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *regist
 	registerShuttle(serviceRegistry, env, shuttleAddr)
 }
 
-func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, pool, hostIP, shuttleAddr string) {
+func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, configStore *config.Store,
+	env, pool, hostIP, shuttleAddr string) {
 
 	if shuttleAddr != "" {
 		client = shuttle.NewClient(shuttleAddr)
@@ -145,12 +147,12 @@ func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.
 					log.Printf("Unregistered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
 						reg.ContainerID[0:12], reg.Name, locationAt(reg))
 				}
-				pruneShuttleBackends(serviceRuntime, serviceRegistry, env, shuttleAddr)
+				pruneShuttleBackends(configStore, serviceRegistry, env, shuttleAddr)
 			}
 
 		case <-time.After(10 * time.Second):
 			RegisterAll(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr, true)
-			pruneShuttleBackends(serviceRuntime, serviceRegistry, env, shuttleAddr)
+			pruneShuttleBackends(configStore, serviceRegistry, env, shuttleAddr)
 		}
 	}
 }

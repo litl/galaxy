@@ -3,9 +3,9 @@ package discovery
 import (
 	"fmt"
 
+	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
-	"github.com/litl/galaxy/runtime"
 
 	shuttle "github.com/litl/galaxy/shuttle/client"
 )
@@ -133,7 +133,7 @@ func unregisterShuttle(serviceRegistry *registry.ServiceRegistry, env, hostIP, s
 
 }
 
-func pruneShuttleBackends(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, shuttleAddr string) {
+func pruneShuttleBackends(configStore *config.Store, serviceRegistry *registry.ServiceRegistry, env, shuttleAddr string) {
 	if client == nil {
 		return
 	}
@@ -150,24 +150,15 @@ func pruneShuttleBackends(serviceRuntime *runtime.ServiceRuntime, serviceRegistr
 		return
 	}
 
-	containers, err := serviceRuntime.ManagedContainers()
-	if err != nil {
-		log.Errorf("ERROR: Unable to list galaxy containers: %s", err)
-		return
-	}
-
 	for _, service := range config.Services {
 
-		// Remove services that no longer exist
-		appRunning := false
-		for _, container := range containers {
-			if serviceRuntime.EnvFor(container)["GALAXY_APP"] == service.Name {
-				appRunning = true
-				break
-			}
+		app, err := configStore.GetApp(service.Name, env)
+		if err != nil {
+			log.Errorf("ERROR: Unable to load app %s: %s", app, err)
+			continue
 		}
 
-		if !appRunning {
+		if app == nil {
 			err := client.UnregisterService(&service)
 			if err != nil {
 				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", service.Name, err)
@@ -192,8 +183,6 @@ func pruneShuttleBackends(serviceRuntime *runtime.ServiceRuntime, serviceRegistr
 				}
 				log.Printf("Unregisterred shuttle backend %s", backend.Name)
 			}
-
 		}
-
 	}
 }
