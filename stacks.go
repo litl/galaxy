@@ -533,7 +533,7 @@ func stackCreatePool(c *cli.Context) {
 			resources.SecurityGroups["defaultSG"],
 		}
 
-		elb.Properties.HealthCheck.Target = fmt.Sprintf("HTTP:%d/", httpPort)
+		elb.Properties.HealthCheck.Target = c.String("http-health-check")
 
 		elb.AddListener(80, "HTTP", httpPort, "HTTP", "", nil)
 
@@ -719,6 +719,11 @@ func stackUpdatePool(c *cli.Context) {
 			if httpPort > 0 {
 				l.InstancePort = httpPort
 			}
+		}
+
+		healthCheck := c.String("http-health-check")
+		if healthCheck != "" && healthCheck != elb.Properties.HealthCheck.Target {
+			elb.Properties.HealthCheck.Target = healthCheck
 		}
 
 		// always make sure the ELB is in the same subnets as the ASG
