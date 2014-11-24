@@ -125,10 +125,10 @@ func GalaxyPool(c *cli.Context) string {
 }
 
 func GalaxyRedisHost(c *cli.Context) string {
-	if c.GlobalString("redis") != DefaultRedisHost {
-		return strings.TrimSpace(c.GlobalString("redis"))
+	if c.GlobalString("registry") != DefaultRedisHost {
+		return strings.TrimSpace(c.GlobalString("registry"))
 	}
-	return strings.TrimSpace(GetEnv("GALAXY_REDIS_HOST", c.GlobalString("redis")))
+	return strings.TrimSpace(GetEnv("GALAXY_REGISTRY_URL", c.GlobalString("registry")))
 }
 
 // NextSlot finds the first available index in an array of integers

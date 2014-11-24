@@ -3,6 +3,7 @@ package registry
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ type ServiceRegistry struct {
 	TTL          uint64
 	OutputBuffer *utils.OutputBuffer
 	pollCh       chan bool
-	redisHost    string
+	registryURL  string
 }
 
 func NewServiceRegistry(ttl uint64) *ServiceRegistry {
@@ -43,13 +44,22 @@ func NewServiceRegistry(ttl uint64) *ServiceRegistry {
 }
 
 // Build the Redis Pool
-func (r *ServiceRegistry) Connect(redisHost string) {
+func (r *ServiceRegistry) Connect(registryURL string) {
 
-	r.redisHost = redisHost
-	r.backend = &RedisBackend{
-		RedisHost: redisHost,
+	r.registryURL = registryURL
+	u, err := url.Parse(registryURL)
+	if err != nil {
+		log.Fatalf("ERROR: Unable to parse %s", err)
 	}
-	r.backend.Connect()
+
+	if strings.ToLower(u.Scheme) == "redis" {
+		r.backend = &RedisBackend{
+			RedisHost: u.Host,
+		}
+		r.backend.Connect()
+	} else {
+		log.Fatalf("ERROR: Unsupported registry backend: %s", u)
+	}
 }
 
 func (r *ServiceRegistry) newServiceRegistration(container *docker.Container, hostIP string) *ServiceRegistration {

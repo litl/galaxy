@@ -27,9 +27,9 @@ import (
 var (
 	stopCutoff      int64
 	apps            []string
-	redisHost       string
 	env             string
 	pool            string
+	registryURL     string
 	loop            bool
 	hostIP          string
 	dns             string
@@ -51,13 +51,13 @@ func initOrDie() {
 	serviceRegistry = registry.NewServiceRegistry(
 		registry.DefaultTTL,
 	)
-	serviceRegistry.Connect(redisHost)
+	serviceRegistry.Connect(registryURL)
 
 	configStore = config.NewStore(
 		registry.DefaultTTL,
 	)
 
-	configStore.Connect(redisHost)
+	configStore.Connect(registryURL)
 
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, dns, hostIP)
 
@@ -393,7 +393,8 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 
 func main() {
 	flag.Int64Var(&stopCutoff, "cutoff", 10, "Seconds to wait before stopping old containers")
-	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
+	flag.StringVar(&registryURL, "registry", utils.GetEnv("GALAXY_REGISTRY_URL",
+		"redis://"+utils.DefaultRedisHost), "registry URL")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
@@ -947,8 +948,8 @@ func main() {
 	ensurePool()
 
 	log.Printf("Starting commander %s", buildVersion)
-	log.Printf("Using env = %s, pool = %s, host-ip = %s",
-		env, pool, hostIP)
+	log.Printf("Using env = %s, pool = %s, host-ip = %s, registry = %s",
+		env, pool, hostIP, registryURL)
 
 	go heartbeatHost()
 
