@@ -203,7 +203,8 @@ func appShell(c *cli.Context) {
 
 	app := ensureAppParam(c, "app:shell")
 
-	err := commander.AppShell(configStore, serviceRuntime, app, utils.GalaxyEnv(c))
+	err := commander.AppShell(configStore, serviceRuntime, app,
+		utils.GalaxyEnv(c), utils.GalaxyPool(c))
 	if err != nil {
 		log.Fatalf("ERROR: %s", err)
 	}

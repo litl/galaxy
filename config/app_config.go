@@ -139,7 +139,20 @@ func (s *AppConfig) RuntimePools() []string {
 	keys := s.runtimeVMap.Keys()
 	pools := []string{}
 	for _, k := range keys {
-		pools = append(pools, k[:strings.Index(k, "-")])
+		pool := k[:strings.Index(k, "-")]
+		if !utils.StringInSlice(pool, pools) {
+			pools = append(pools, pool)
+		}
 	}
 	return pools
+}
+
+func (s *AppConfig) SetMemory(pool string, mem string) {
+	key := fmt.Sprintf("%s-mem", pool)
+	s.runtimeVMap.Set(key, mem)
+}
+
+func (s *AppConfig) GetMemory(pool string) string {
+	key := fmt.Sprintf("%s-mem", pool)
+	return s.runtimeVMap.Get(key)
 }

@@ -9,7 +9,8 @@ import (
 )
 
 type RuntimeOptions struct {
-	Ps int
+	Ps     int
+	Memory string
 }
 
 func RuntimeList(configStore *config.Store, app, env, pool string) error {
@@ -24,7 +25,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | POOL | PS "}
+	columns := []string{"ENV | NAME | POOL | PS | MEM "}
 
 	for _, env := range envs {
 
@@ -47,12 +48,14 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 
 				name := appCfg.Name
 				ps := appCfg.GetProcesses(p)
+				mem := appCfg.GetMemory(p)
 
 				columns = append(columns, strings.Join([]string{
 					env,
 					name,
 					p,
 					strconv.FormatInt(int64(ps), 10),
+					mem,
 				}, " | "))
 			}
 		}
@@ -70,8 +73,12 @@ func RuntimeSet(configStore *config.Store, app, env, pool string, options Runtim
 		return false, err
 	}
 
-	if options.Ps != cfg.GetProcesses(pool) {
+	if options.Ps != 0 && options.Ps != cfg.GetProcesses(pool) {
 		cfg.SetProcesses(pool, options.Ps)
+	}
+
+	if options.Memory != "" && options.Memory != cfg.GetMemory(pool) {
+		cfg.SetMemory(pool, options.Memory)
 	}
 
 	return configStore.UpdateApp(cfg, env)

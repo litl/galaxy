@@ -149,7 +149,7 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 	}
 
 	for i := 0; i < desired-running; i++ {
-		container, err := serviceRuntime.Start(env, appCfg)
+		container, err := serviceRuntime.Start(env, pool, appCfg)
 		if err != nil {
 			log.Errorf("ERROR: Could not start containers: %s", err)
 			return
@@ -639,13 +639,14 @@ func main() {
 		appFs.Parse(flag.Args()[1:])
 
 		ensureEnv()
+		ensurePool()
 
 		if appFs.NArg() != 1 {
 			appFs.Usage()
 			os.Exit(1)
 		}
 
-		err := commander.AppShell(configStore, serviceRuntime, appFs.Args()[0], env)
+		err := commander.AppShell(configStore, serviceRuntime, appFs.Args()[0], env, pool)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -901,8 +902,10 @@ func main() {
 
 	case "runtime:set":
 		var ps int
+		var m string
 		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
 		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
+		runtimeFs.StringVar(&m, "m", "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
 		runtimeFs.Usage = func() {
 			println("Usage: commander runtime:set [-ps 1] <app>\n")
 			println("    Set container runtime policies\n")
@@ -925,8 +928,14 @@ func main() {
 
 		app := runtimeFs.Args()[0]
 
+		_, err = utils.ParseMemory(m)
+		if err != nil {
+			log.Fatalf("ERROR: Bad memory option %s: %s", m, err)
+		}
+
 		updated, err := commander.RuntimeSet(configStore, app, env, pool, commander.RuntimeOptions{
-			Ps: ps,
+			Ps:     ps,
+			Memory: m,
 		})
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)

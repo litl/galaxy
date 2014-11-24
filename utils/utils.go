@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"github.com/codegangsta/cli"
+	"strconv"
 	"strings"
 	"time"
 
@@ -142,4 +143,36 @@ RESTART:
 		}
 	}
 	return free
+}
+
+func ParseMemory(mem string) (int64, error) {
+	if mem == "" {
+		return 0, nil
+	}
+
+	multiplier := int64(1)
+	if strings.HasSuffix(mem, "b") {
+		mem = mem[:len(mem)-1]
+	}
+
+	if strings.HasSuffix(mem, "k") {
+		multiplier = int64(1024)
+		mem = mem[:len(mem)-1]
+	}
+
+	if strings.HasSuffix(mem, "m") {
+		multiplier = int64(1024) * int64(1024)
+		mem = mem[:len(mem)-1]
+	}
+
+	if strings.HasSuffix(mem, "g") {
+		multiplier = int64(1024) * int64(1024) * int64(1024)
+		mem = mem[:len(mem)-1]
+	}
+
+	i, err := strconv.ParseInt(mem, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return i * multiplier, nil
 }

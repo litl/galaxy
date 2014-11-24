@@ -168,13 +168,13 @@ func AppRun(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, a
 	return nil
 }
 
-func AppShell(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env string) error {
+func AppShell(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env, pool string) error {
 	appCfg, err := configStore.GetApp(app, env)
 	if err != nil {
 		return fmt.Errorf("unable to run command: %s.", err)
 	}
 
-	err = serviceRuntime.StartInteractive(env, appCfg)
+	err = serviceRuntime.StartInteractive(env, pool, appCfg)
 	if err != nil {
 		return fmt.Errorf("could not start container: %s", err)
 	}
