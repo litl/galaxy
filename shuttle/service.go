@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -261,7 +262,8 @@ func (s *Service) add(backend *Backend) {
 	s.Lock()
 	defer s.Unlock()
 
-	log.Printf("Adding %s backend %s for %s at %s", backend.Network, backend.Addr, s.Name, s.Addr)
+	log.Printf("Adding %s backend %s for %s at %s", strings.ToUpper(backend.Network),
+		backend.Addr, s.Name, s.Addr)
 	backend.up = true
 	backend.rwTimeout = s.ServerTimeout
 	backend.dialTimeout = s.DialTimeout

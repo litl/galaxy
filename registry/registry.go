@@ -136,7 +136,9 @@ func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *d
 	serviceRegistration.ImageId = container.Config.Image
 
 	vhosts := environment["VIRTUAL_HOST"]
-	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
+	if strings.TrimSpace(vhosts) != "" {
+		serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
+	}
 
 	errorPages := make(map[string]string)
 
@@ -155,8 +157,6 @@ func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *d
 	if len(errorPages) > 0 {
 		serviceRegistration.ErrorPages = errorPages
 	}
-
-	serviceRegistration.VirtualHosts = strings.Split(vhosts, ",")
 
 	serviceRegistration.Port = environment["GALAXY_PORT"]
 
@@ -192,7 +192,7 @@ func (r *ServiceRegistry) UnRegisterService(env, pool, hostIP string, container 
 	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
 	registration, err := r.GetServiceRegistration(env, pool, hostIP, container)
-	if err != nil {
+	if err != nil || registration == nil {
 		return registration, err
 	}
 
