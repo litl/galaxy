@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 )
 
 // marshal whatever we've got with out default indentation
@@ -22,4 +23,19 @@ func genId() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
+}
+
+// remove empty strings from a []string
+func filterEmpty(a []string) []string {
+	removed := 0
+	for i := 0; i < len(a); i++ {
+		if removed > 0 {
+			a[i-removed] = a[i]
+		}
+		if len(strings.TrimSpace(a[i])) == 0 {
+			removed++
+		}
+
+	}
+	return a[:len(a)-removed]
 }
