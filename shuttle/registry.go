@@ -258,7 +258,7 @@ func (s *ServiceRegistry) AddService(svcCfg client.ServiceConfig) error {
 
 	s.svcs[service.Name] = service
 
-	svcCfg.VirtualHosts = filter(svcCfg.VirtualHosts, "")
+	svcCfg.VirtualHosts = filterEmpty(svcCfg.VirtualHosts)
 	for _, name := range svcCfg.VirtualHosts {
 		vhost := s.vhosts[name]
 		if vhost == nil {
@@ -340,7 +340,7 @@ func (s *ServiceRegistry) UpdateService(newCfg client.ServiceConfig) error {
 		service.errorPages.Update(newCfg.ErrorPages)
 	}
 
-	s.updateVHosts(service, filter(newCfg.VirtualHosts, ""))
+	s.updateVHosts(service, filterEmpty(newCfg.VirtualHosts))
 
 	return nil
 }
