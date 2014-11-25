@@ -18,7 +18,7 @@ var (
 	statsPrefix     string
 	env             string
 	pool            string
-	redisHost       string
+	registryURL     string
 	debug           bool
 	version         bool
 	buildVersion    string
@@ -47,7 +47,7 @@ func main() {
 	flag.StringVar(&statsPrefix, "statsPrefix", "", "Global prefix for all stats")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
-	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", ""), "redis host")
+	flag.StringVar(&registryURL, "registry", utils.GetEnv("GALAXY_REGISTRY_URL", ""), "registry URL")
 	flag.BoolVar(&debug, "debug", false, "Enables debug build")
 	flag.BoolVar(&version, "v", false, "display version info")
 
@@ -76,13 +76,13 @@ func main() {
 		registry.DefaultTTL,
 	)
 
-	serviceRegistry.Connect(redisHost)
+	serviceRegistry.Connect(registryURL)
 
 	Store = config.NewStore(
 		registry.DefaultTTL,
 	)
 
-	Store.Connect(redisHost)
+	Store.Connect(registryURL)
 
 	stats = NewTSCollection()
 	tscChan := make(chan *TSCollection, 100)
