@@ -21,12 +21,6 @@ func (s *SliceVar) String() string {
 	return strings.Join(*s, ",")
 }
 
-const (
-	DefaultRedisHost = "127.0.0.1:6379"
-	DefaultEnv       = ""
-	DefaultPool      = ""
-)
-
 type OutputBuffer struct {
 	Output []string
 }
@@ -112,24 +106,25 @@ func HomeDir() string {
 }
 
 func GalaxyEnv(c *cli.Context) string {
-	if c.GlobalString("env") != DefaultEnv {
+	if c.GlobalString("env") != "" {
 		return strings.TrimSpace(c.GlobalString("env"))
 	}
-	return strings.TrimSpace(GetEnv("GALAXY_ENV", c.GlobalString("env")))
+	return strings.TrimSpace(GetEnv("GALAXY_ENV", ""))
 }
 
 func GalaxyPool(c *cli.Context) string {
-	if c.GlobalString("pool") != DefaultPool {
+	if c.GlobalString("pool") != "" {
 		return strings.TrimSpace(c.GlobalString("pool"))
 	}
-	return strings.TrimSpace(GetEnv("GALAXY_POOL", c.GlobalString("pool")))
+	return strings.TrimSpace(GetEnv("GALAXY_POOL", ""))
 }
 
 func GalaxyRedisHost(c *cli.Context) string {
-	if c.GlobalString("registry") != DefaultRedisHost {
+	if c.GlobalString("registry") != "" {
 		return strings.TrimSpace(c.GlobalString("registry"))
 	}
-	return strings.TrimSpace(GetEnv("GALAXY_REGISTRY_URL", c.GlobalString("registry")))
+
+	return strings.TrimSpace(GetEnv("GALAXY_REGISTRY_URL", ""))
 }
 
 // NextSlot finds the first available index in an array of integers
