@@ -48,6 +48,10 @@ var (
 
 func initOrDie() {
 
+	if registryURL == "" {
+		log.Fatalf("ERROR: Registry URL not specified")
+	}
+
 	serviceRegistry = registry.NewServiceRegistry(
 		registry.DefaultTTL,
 	)
@@ -393,8 +397,7 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 
 func main() {
 	flag.Int64Var(&stopCutoff, "cutoff", 10, "Seconds to wait before stopping old containers")
-	flag.StringVar(&registryURL, "registry", utils.GetEnv("GALAXY_REGISTRY_URL",
-		"redis://"+utils.DefaultRedisHost), "registry URL")
+	flag.StringVar(&registryURL, "registry", utils.GetEnv("GALAXY_REGISTRY_URL", ""), "registry URL")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")

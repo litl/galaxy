@@ -520,7 +520,7 @@ func main() {
 	app.Usage = "galaxy cli"
 	app.Version = buildVersion
 	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "registry", Value: "redis://" + utils.DefaultRedisHost, Usage: "host:port[,host:port,..]"},
+		cli.StringFlag{Name: "registry", Value: "", Usage: "host:port[,host:port,..]"},
 		cli.StringFlag{Name: "env", Value: "", Usage: "environment (dev, test, prod, etc.)"},
 		cli.StringFlag{Name: "pool", Value: "", Usage: "pool (web, worker, etc.)"},
 	}
