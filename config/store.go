@@ -3,8 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
-
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
+	"net/url"
+	"strings"
 )
 
 /*
@@ -30,7 +32,7 @@ type Store struct {
 	TTL          uint64
 	OutputBuffer *utils.OutputBuffer
 	pollCh       chan bool
-	redisHost    string
+	registryURL  string
 }
 
 func NewStore(ttl uint64) *Store {
@@ -42,13 +44,22 @@ func NewStore(ttl uint64) *Store {
 }
 
 // Build the Redis Pool
-func (r *Store) Connect(redisHost string) {
+func (r *Store) Connect(registryURL string) {
 
-	r.redisHost = redisHost
-	r.Backend = &RedisBackend{
-		RedisHost: redisHost,
+	r.registryURL = registryURL
+	u, err := url.Parse(registryURL)
+	if err != nil {
+		log.Fatalf("ERROR: Unable to parse %s", err)
 	}
-	r.Backend.Connect()
+
+	if strings.ToLower(u.Scheme) == "redis" {
+		r.Backend = &RedisBackend{
+			RedisHost: u.Host,
+		}
+		r.Backend.Connect()
+	} else {
+		log.Fatalf("ERROR: Unsupported registry backend: %s", u)
+	}
 }
 
 func (r *Store) PoolExists(env, pool string) (bool, error) {

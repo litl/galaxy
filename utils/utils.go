@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"github.com/codegangsta/cli"
+	"strconv"
 	"strings"
 	"time"
 
@@ -125,10 +126,10 @@ func GalaxyPool(c *cli.Context) string {
 }
 
 func GalaxyRedisHost(c *cli.Context) string {
-	if c.GlobalString("redis") != DefaultRedisHost {
-		return strings.TrimSpace(c.GlobalString("redis"))
+	if c.GlobalString("registry") != DefaultRedisHost {
+		return strings.TrimSpace(c.GlobalString("registry"))
 	}
-	return strings.TrimSpace(GetEnv("GALAXY_REDIS_HOST", c.GlobalString("redis")))
+	return strings.TrimSpace(GetEnv("GALAXY_REGISTRY_URL", c.GlobalString("registry")))
 }
 
 // NextSlot finds the first available index in an array of integers
@@ -142,4 +143,36 @@ RESTART:
 		}
 	}
 	return free
+}
+
+func ParseMemory(mem string) (int64, error) {
+	if mem == "" {
+		return 0, nil
+	}
+
+	multiplier := int64(1)
+	if strings.HasSuffix(mem, "b") {
+		mem = mem[:len(mem)-1]
+	}
+
+	if strings.HasSuffix(mem, "k") {
+		multiplier = int64(1024)
+		mem = mem[:len(mem)-1]
+	}
+
+	if strings.HasSuffix(mem, "m") {
+		multiplier = int64(1024) * int64(1024)
+		mem = mem[:len(mem)-1]
+	}
+
+	if strings.HasSuffix(mem, "g") {
+		multiplier = int64(1024) * int64(1024) * int64(1024)
+		mem = mem[:len(mem)-1]
+	}
+
+	i, err := strconv.ParseInt(mem, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return i * multiplier, nil
 }

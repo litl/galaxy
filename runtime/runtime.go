@@ -484,7 +484,7 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 	return container, err
 }
 
-func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) error {
+func (s *ServiceRuntime) StartInteractive(env, pool string, appCfg *config.AppConfig) error {
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
@@ -534,6 +534,12 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 	args = append(args, "-e")
 	args = append(args, fmt.Sprintf("PUBLIC_HOSTNAME=%s", publicDns))
 
+	mem := appCfg.GetMemory(pool)
+	if mem != "" {
+		args = append(args, "-m")
+		args = append(args, mem)
+	}
+
 	args = append(args, []string{"-t", appCfg.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
 	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", appCfg.Version(), "/bin/bash")
@@ -555,7 +561,7 @@ func (s *ServiceRuntime) StartInteractive(env string, appCfg *config.AppConfig) 
 	return err
 }
 
-func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Container, error) {
+func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*docker.Container, error) {
 
 	img := appCfg.Version()
 
@@ -625,13 +631,25 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 	}
 
 	if container == nil {
+
+		config := &docker.Config{
+			Image: img,
+			Env:   envVars,
+		}
+
+		mem := appCfg.GetMemory(pool)
+		if mem != "" {
+			m, err := utils.ParseMemory(mem)
+			if err != nil {
+				return nil, err
+			}
+			config.Memory = m
+		}
+
 		log.Printf("Creating %s version %s", appCfg.Name, appCfg.Version())
 		container, err = s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
-			Name: containerName,
-			Config: &docker.Config{
-				Image: img,
-				Env:   envVars,
-			},
+			Name:   containerName,
+			Config: config,
 		})
 		if err != nil {
 			return nil, err
@@ -666,7 +684,7 @@ func (s *ServiceRuntime) Start(env string, appCfg *config.AppConfig) (*docker.Co
 
 }
 
-func (s *ServiceRuntime) StartIfNotRunning(env string, appCfg *config.AppConfig) (bool, *docker.Container, error) {
+func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg *config.AppConfig) (bool, *docker.Container, error) {
 
 	containers, err := s.ManagedContainers()
 	if err != nil {
@@ -701,7 +719,7 @@ func (s *ServiceRuntime) StartIfNotRunning(env string, appCfg *config.AppConfig)
 		return false, nil, err
 	}
 
-	container, err := s.Start(env, appCfg)
+	container, err := s.Start(env, pool, appCfg)
 	return true, container, err
 }
 

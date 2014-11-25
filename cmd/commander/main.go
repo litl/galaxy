@@ -27,9 +27,9 @@ import (
 var (
 	stopCutoff      int64
 	apps            []string
-	redisHost       string
 	env             string
 	pool            string
+	registryURL     string
 	loop            bool
 	hostIP          string
 	dns             string
@@ -51,13 +51,13 @@ func initOrDie() {
 	serviceRegistry = registry.NewServiceRegistry(
 		registry.DefaultTTL,
 	)
-	serviceRegistry.Connect(redisHost)
+	serviceRegistry.Connect(registryURL)
 
 	configStore = config.NewStore(
 		registry.DefaultTTL,
 	)
 
-	configStore.Connect(redisHost)
+	configStore.Connect(registryURL)
 
 	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, dns, hostIP)
 
@@ -149,7 +149,7 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 	}
 
 	for i := 0; i < desired-running; i++ {
-		container, err := serviceRuntime.Start(env, appCfg)
+		container, err := serviceRuntime.Start(env, pool, appCfg)
 		if err != nil {
 			log.Errorf("ERROR: Could not start containers: %s", err)
 			return
@@ -393,7 +393,8 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 
 func main() {
 	flag.Int64Var(&stopCutoff, "cutoff", 10, "Seconds to wait before stopping old containers")
-	flag.StringVar(&redisHost, "redis", utils.GetEnv("GALAXY_REDIS_HOST", utils.DefaultRedisHost), "redis host")
+	flag.StringVar(&registryURL, "registry", utils.GetEnv("GALAXY_REGISTRY_URL",
+		"redis://"+utils.DefaultRedisHost), "registry URL")
 	flag.StringVar(&env, "env", utils.GetEnv("GALAXY_ENV", ""), "Environment namespace")
 	flag.StringVar(&pool, "pool", utils.GetEnv("GALAXY_POOL", ""), "Pool namespace")
 	flag.StringVar(&hostIP, "host-ip", "127.0.0.1", "Host IP")
@@ -638,13 +639,14 @@ func main() {
 		appFs.Parse(flag.Args()[1:])
 
 		ensureEnv()
+		ensurePool()
 
 		if appFs.NArg() != 1 {
 			appFs.Usage()
 			os.Exit(1)
 		}
 
-		err := commander.AppShell(configStore, serviceRuntime, appFs.Args()[0], env)
+		err := commander.AppShell(configStore, serviceRuntime, appFs.Args()[0], env, pool)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}
@@ -900,8 +902,10 @@ func main() {
 
 	case "runtime:set":
 		var ps int
+		var m string
 		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
 		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
+		runtimeFs.StringVar(&m, "m", "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
 		runtimeFs.Usage = func() {
 			println("Usage: commander runtime:set [-ps 1] <app>\n")
 			println("    Set container runtime policies\n")
@@ -924,8 +928,14 @@ func main() {
 
 		app := runtimeFs.Args()[0]
 
+		_, err = utils.ParseMemory(m)
+		if err != nil {
+			log.Fatalf("ERROR: Bad memory option %s: %s", m, err)
+		}
+
 		updated, err := commander.RuntimeSet(configStore, app, env, pool, commander.RuntimeOptions{
-			Ps: ps,
+			Ps:     ps,
+			Memory: m,
 		})
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -947,8 +957,8 @@ func main() {
 	ensurePool()
 
 	log.Printf("Starting commander %s", buildVersion)
-	log.Printf("Using env = %s, pool = %s, host-ip = %s",
-		env, pool, hostIP)
+	log.Printf("Using env = %s, pool = %s, host-ip = %s, registry = %s",
+		env, pool, hostIP, registryURL)
 
 	go heartbeatHost()
 

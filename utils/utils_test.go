@@ -99,3 +99,71 @@ func TestNextSlotEnd(t *testing.T) {
 		t.Fatal("Expected 4")
 	}
 }
+
+func TestParseMemBlank(t *testing.T) {
+	i, err := ParseMemory("")
+	if err != nil {
+		t.Fatalf("Expected 0. Got %s", err)
+	}
+
+	if i != 0 {
+		t.Fatal("Expected 0")
+	}
+}
+
+func TestParseMemNaN(t *testing.T) {
+	_, err := ParseMemory("abc")
+	if err == nil {
+		t.Fatalf("Expected error. Got %s", nil)
+	}
+}
+
+func TestParseMemBasic(t *testing.T) {
+	i, err := ParseMemory("1024")
+	if err != nil {
+		t.Fatalf("Expected 1024. Got %s", err)
+	}
+	if i != 1024 {
+		t.Fatal("Expected 1024")
+	}
+}
+
+func TestParseMemByteSuffix(t *testing.T) {
+	i, err := ParseMemory("2048b")
+	if err != nil {
+		t.Fatalf("Expected 2048. Got %s", err)
+	}
+	if i != 2048 {
+		t.Fatal("Expected 2048")
+	}
+}
+
+func TestParseMemKiloSuffix(t *testing.T) {
+	i, err := ParseMemory("2k")
+	if err != nil {
+		t.Fatalf("Expected 2048. Got %s", err)
+	}
+	if i != 2048 {
+		t.Fatal("Expected 2048")
+	}
+}
+
+func TestParseMemMegSuffix(t *testing.T) {
+	i, err := ParseMemory("3m")
+	if err != nil {
+		t.Fatalf("Expected 3145728. Got %s", err)
+	}
+	if i != 3145728 {
+		t.Fatal("Expected 3145728")
+	}
+}
+
+func TestParseMemGigSuffix(t *testing.T) {
+	i, err := ParseMemory("4g")
+	if err != nil {
+		t.Fatalf("Expected 4294967296. Got %s", err)
+	}
+	if i != 4294967296 {
+		t.Fatal("Expected 4294967296")
+	}
+}

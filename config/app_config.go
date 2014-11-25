@@ -104,6 +104,7 @@ func (s *AppConfig) ID() int64 {
 		s.environmentVMap,
 		s.versionVMap,
 		s.portsVMap,
+		s.runtimeVMap,
 	} {
 		if vmap.LatestVersion() > id {
 			id = vmap.LatestVersion()
@@ -122,7 +123,7 @@ func (s *AppConfig) nextID() int64 {
 
 func (s *AppConfig) SetProcesses(pool string, count int) {
 	key := fmt.Sprintf("%s-ps", pool)
-	s.runtimeVMap.Set(key, strconv.FormatInt(int64(count), 10))
+	s.runtimeVMap.SetVersion(key, strconv.FormatInt(int64(count), 10), s.nextID())
 }
 
 func (s *AppConfig) GetProcesses(pool string) int {
@@ -139,7 +140,20 @@ func (s *AppConfig) RuntimePools() []string {
 	keys := s.runtimeVMap.Keys()
 	pools := []string{}
 	for _, k := range keys {
-		pools = append(pools, k[:strings.Index(k, "-")])
+		pool := k[:strings.Index(k, "-")]
+		if !utils.StringInSlice(pool, pools) {
+			pools = append(pools, pool)
+		}
 	}
 	return pools
+}
+
+func (s *AppConfig) SetMemory(pool string, mem string) {
+	key := fmt.Sprintf("%s-mem", pool)
+	s.runtimeVMap.Set(key, mem)
+}
+
+func (s *AppConfig) GetMemory(pool string) string {
+	key := fmt.Sprintf("%s-mem", pool)
+	return s.runtimeVMap.Get(key)
 }
