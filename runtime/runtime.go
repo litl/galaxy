@@ -375,7 +375,7 @@ func (s *ServiceRuntime) StopAll(env string) error {
 }
 
 func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
-	imgs, err := s.ensureDockerClient().ListImages(true)
+	imgs, err := s.ensureDockerClient().ListImages(docker.ListImagesOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
@@ -451,7 +451,7 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 	})
 	config := &docker.HostConfig{}
 	if s.dns != "" {
-		config.Dns = []string{s.dns}
+		config.DNS = []string{s.dns}
 	}
 	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
@@ -663,7 +663,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 	}
 
 	if s.dns != "" {
-		config.Dns = []string{s.dns}
+		config.DNS = []string{s.dns}
 	}
 	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
