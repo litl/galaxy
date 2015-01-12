@@ -80,12 +80,12 @@ func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	r.adminHandler(w, req)
+	r.noHostHandler(w, req)
 }
 
-func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
+func (r *HostRouter) noHostHandler(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
 	if Registry.VHostsLen() == 0 {
-		http.Error(w, "no backends available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -103,7 +103,6 @@ func (r *HostRouter) adminHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n")
-	return
 }
 
 // TODO: collect more stats?
