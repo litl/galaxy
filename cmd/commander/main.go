@@ -908,9 +908,12 @@ func main() {
 	case "runtime:set":
 		var ps int
 		var m string
+		var c string
 		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
 		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
 		runtimeFs.StringVar(&m, "m", "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
+		runtimeFs.StringVar(&c, "c", "", "CPU shares (relative weight)")
+
 		runtimeFs.Usage = func() {
 			println("Usage: commander runtime:set [-ps 1] <app>\n")
 			println("    Set container runtime policies\n")
@@ -939,8 +942,9 @@ func main() {
 		}
 
 		updated, err := commander.RuntimeSet(configStore, app, env, pool, commander.RuntimeOptions{
-			Ps:     ps,
-			Memory: m,
+			Ps:        ps,
+			Memory:    m,
+			CPUShares: c,
 		})
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
