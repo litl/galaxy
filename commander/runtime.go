@@ -1,16 +1,18 @@
 package commander
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/ryanuber/columnize"
-	"strconv"
-	"strings"
 )
 
 type RuntimeOptions struct {
-	Ps     int
-	Memory string
+	Ps        int
+	Memory    string
+	CPUShares string
 }
 
 func RuntimeList(configStore *config.Store, app, env, pool string) error {

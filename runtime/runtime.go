@@ -540,6 +540,12 @@ func (s *ServiceRuntime) StartInteractive(env, pool string, appCfg *config.AppCo
 		args = append(args, mem)
 	}
 
+	cpu := appCfg.GetCPUShares(pool)
+	if cpu != "" {
+		args = append(args, "-c")
+		args = append(args, cpu)
+	}
+
 	args = append(args, []string{"-t", appCfg.Version(), "/bin/bash"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
 	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", appCfg.Version(), "/bin/bash")
@@ -644,6 +650,13 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 				return nil, err
 			}
 			config.Memory = m
+		}
+
+		cpu := appCfg.GetCPUShares(pool)
+		if cpu != "" {
+			if c, err := strconv.Atoi(cpu); err == nil {
+				config.CPUShares = int64(c)
+			}
 		}
 
 		log.Printf("Creating %s version %s", appCfg.Name, appCfg.Version())

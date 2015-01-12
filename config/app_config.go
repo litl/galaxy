@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
-	"github.com/litl/galaxy/utils"
 	"strconv"
 	"strings"
+
+	"github.com/litl/galaxy/utils"
 )
 
 type AppConfig struct {
@@ -155,5 +156,15 @@ func (s *AppConfig) SetMemory(pool string, mem string) {
 
 func (s *AppConfig) GetMemory(pool string) string {
 	key := fmt.Sprintf("%s-mem", pool)
+	return s.runtimeVMap.Get(key)
+}
+
+func (s *AppConfig) SetCPUShares(pool string, cpu string) {
+	key := fmt.Sprintf("%s-cpu", pool)
+	s.runtimeVMap.Set(key, cpu)
+}
+
+func (s *AppConfig) GetCPUShares(pool string) string {
+	key := fmt.Sprintf("%s-cpu", pool)
 	return s.runtimeVMap.Get(key)
 }
