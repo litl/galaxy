@@ -49,7 +49,7 @@ var (
 func initOrDie() {
 
 	if registryURL == "" {
-		log.Fatalf("ERROR: Registry URL not specified")
+		log.Fatalf("ERROR: Registry URL not specified. Use '-registry redis://127.0.0.1:6379' or set 'GALAXY_REGISTRY_URL'")
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
@@ -448,8 +448,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	initOrDie()
 	log.DefaultLogger.SetFlags(0)
+	initOrDie()
 
 	switch flag.Args()[0] {
 	case "agent":
