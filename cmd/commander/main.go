@@ -918,11 +918,13 @@ func main() {
 		var m string
 		var c string
 		var vhost string
+		var port string
 		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
 		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
 		runtimeFs.StringVar(&m, "m", "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
 		runtimeFs.StringVar(&c, "c", "", "CPU shares (relative weight)")
 		runtimeFs.StringVar(&vhost, "vhost", "", "Virtual host for HTTP routing")
+		runtimeFs.StringVar(&port, "port", "", "Service port for service discovery")
 
 		runtimeFs.Usage = func() {
 			println("Usage: commander runtime:set [-ps 1] <app>\n")
@@ -959,6 +961,7 @@ func main() {
 			Memory:      m,
 			CPUShares:   c,
 			VirtualHost: vhost,
+			Port:        port,
 		})
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
