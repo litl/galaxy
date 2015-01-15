@@ -917,10 +917,12 @@ func main() {
 		var ps int
 		var m string
 		var c string
+		var vhost string
 		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
 		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
 		runtimeFs.StringVar(&m, "m", "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
 		runtimeFs.StringVar(&c, "c", "", "CPU shares (relative weight)")
+		runtimeFs.StringVar(&vhost, "vhost", "", "Virtual host for HTTP routing")
 
 		runtimeFs.Usage = func() {
 			println("Usage: commander runtime:set [-ps 1] <app>\n")
@@ -935,7 +937,10 @@ func main() {
 		}
 
 		ensureEnv()
-		ensurePool()
+
+		if ps != 0 || m != "" || c != "" {
+			ensurePool()
+		}
 
 		if runtimeFs.NArg() != 1 {
 			runtimeFs.Usage()
@@ -950,9 +955,10 @@ func main() {
 		}
 
 		updated, err := commander.RuntimeSet(configStore, app, env, pool, commander.RuntimeOptions{
-			Ps:        ps,
-			Memory:    m,
-			CPUShares: c,
+			Ps:          ps,
+			Memory:      m,
+			CPUShares:   c,
+			VirtualHost: vhost,
 		})
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -961,7 +967,12 @@ func main() {
 		if !updated {
 			log.Fatalf("ERROR: Failed to set runtime options.")
 		}
-		log.Printf("Runtime options update for %s in %s running on %s", app, env, pool)
+
+		if pool != "" {
+			log.Printf("Runtime options updated for %s in %s running on %s", app, env, pool)
+		} else {
+			log.Printf("Runtime options updated for %s in %s", app, env)
+		}
 		return
 
 	default:

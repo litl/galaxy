@@ -6,13 +6,15 @@ import (
 
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
 
 type RuntimeOptions struct {
-	Ps        int
-	Memory    string
-	CPUShares string
+	Ps          int
+	Memory      string
+	CPUShares   string
+	VirtualHost string
 }
 
 func RuntimeList(configStore *config.Store, app, env, pool string) error {
@@ -27,7 +29,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | POOL | PS | MEM "}
+	columns := []string{"ENV | NAME | POOL | PS | MEM | VHOSTS"}
 
 	for _, env := range envs {
 
@@ -58,6 +60,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 					p,
 					strconv.FormatInt(int64(ps), 10),
 					mem,
+					appCfg.Env()["VIRTUAL_HOST"],
 				}, " | "))
 			}
 		}
@@ -81,6 +84,12 @@ func RuntimeSet(configStore *config.Store, app, env, pool string, options Runtim
 
 	if options.Memory != "" && options.Memory != cfg.GetMemory(pool) {
 		cfg.SetMemory(pool, options.Memory)
+	}
+
+	vhosts := strings.Split(cfg.Env()["VIRTUAL_HOST"], ",")
+	if options.VirtualHost != "" && !utils.StringInSlice(options.VirtualHost, vhosts) {
+		vhosts = append(vhosts, options.VirtualHost)
+		cfg.EnvSet("VIRTUAL_HOST", strings.Join(vhosts, ","))
 	}
 
 	return configStore.UpdateApp(cfg, env)
