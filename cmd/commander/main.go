@@ -927,7 +927,7 @@ func main() {
 		runtimeFs.StringVar(&port, "port", "", "Service port for service discovery")
 
 		runtimeFs.Usage = func() {
-			println("Usage: commander runtime:set [-ps 1] <app>\n")
+			println("Usage: commander runtime:set [-ps 1] [-m 100m] [-c 512] [-vhost x.y.z] [-port 8000] <app>\n")
 			println("    Set container runtime policies\n")
 			println("Options:\n")
 			runtimeFs.PrintDefaults()
