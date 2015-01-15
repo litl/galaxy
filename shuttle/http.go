@@ -110,7 +110,7 @@ func (r *HostRouter) Start(ready chan bool) {
 
 	r.Unlock()
 
-	log.Printf("%s server listening at %s", r.Scheme, r.server.Addr)
+	log.Printf("%s server listening at %s", strings.ToUpper(r.Scheme), r.server.Addr)
 	if ready != nil {
 		close(ready)
 	}
