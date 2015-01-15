@@ -86,18 +86,25 @@ func initOrDie() {
 }
 
 func ensureEnv() {
+	envs, err := configStore.ListEnvs()
+	if err != nil {
+		log.Fatalf("ERROR: Could not check envs: %s", err)
+	}
+
 	if strings.TrimSpace(env) == "" {
-		fmt.Println("Need an env")
-		flag.PrintDefaults()
-		os.Exit(1)
+		log.Fatalf("ERROR: Need an env.  Use '-env <env>'. Existing envs are: %s.", strings.Join(envs, ","))
 	}
 }
 
 func ensurePool() {
+
+	pools, err := configStore.ListPools(env)
+	if err != nil {
+		log.Fatalf("ERROR: Could not check pools: %s", err)
+	}
+
 	if strings.TrimSpace(pool) == "" {
-		fmt.Println("Need a pool")
-		flag.PrintDefaults()
-		os.Exit(1)
+		log.Fatalf("ERROR: Need a pool.  Use '-pool <pool>'. Existing pools are: %s", strings.Join(pools, ","))
 	}
 }
 
@@ -774,8 +781,9 @@ func main() {
 		return
 	case "config":
 		configFs := flag.NewFlagSet("config", flag.ExitOnError)
+		usage := "Usage: commander config <app>"
 		configFs.Usage = func() {
-			println("Usage: commander config <app>\n")
+			println(usage)
 			println("    List config values for an app\n")
 			println("Options:\n")
 			configFs.PrintDefaults()
@@ -788,8 +796,8 @@ func main() {
 		ensureEnv()
 
 		if configFs.NArg() != 1 {
-			log.Errorf("ERROR: Missing app name")
-			configFs.Usage()
+			log.Error("ERROR: Missing app name argument")
+			log.Printf("Usage: %s", usage)
 			os.Exit(1)
 		}
 		app := configFs.Args()[0]
