@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -85,24 +84,7 @@ func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (r *HostRouter) noHostHandler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
-	if Registry.VHostsLen() == 0 {
-		return
-	}
-
-	// TODO: better status lines
-	stats := Registry.Stats()
-	for _, svc := range stats {
-		if len(svc.VirtualHosts) == 0 {
-			continue
-		}
-		fmt.Fprintf(w, "%v\n", svc.VirtualHosts)
-		for _, b := range svc.Backends {
-			js, _ := json.Marshal(b)
-			fmt.Fprintf(w, "\t%s\n", string(js))
-		}
-	}
-
-	fmt.Fprintf(w, "\n")
+	fmt.Fprintln(w, "Not found")
 }
 
 // TODO: collect more stats?
