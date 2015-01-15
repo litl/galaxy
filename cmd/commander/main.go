@@ -172,7 +172,6 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 		if err != nil {
 			log.Errorf("ERROR: Could not stop containers: %s", err)
 		}
-
 	}
 
 	running, err = serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
@@ -963,6 +962,76 @@ func main() {
 			VirtualHost: vhost,
 			Port:        port,
 		})
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+
+		if !updated {
+			log.Fatalf("ERROR: Failed to set runtime options.")
+		}
+
+		if pool != "" {
+			log.Printf("Runtime options updated for %s in %s running on %s", app, env, pool)
+		} else {
+			log.Printf("Runtime options updated for %s in %s", app, env)
+		}
+		return
+
+	case "runtime:unset":
+		var ps, m, c, port bool
+		var vhost string
+		runtimeFs := flag.NewFlagSet("runtime:unset", flag.ExitOnError)
+		runtimeFs.BoolVar(&ps, "ps", false, "Number of instances to run across all hosts")
+		runtimeFs.BoolVar(&m, "m", false, "Memory limit")
+		runtimeFs.BoolVar(&c, "c", false, "CPU shares (relative weight)")
+		runtimeFs.StringVar(&vhost, "vhost", "", "Virtual host for HTTP routing")
+		runtimeFs.BoolVar(&port, "port", false, "Service port for service discovery")
+
+		runtimeFs.Usage = func() {
+			println("Usage: commander runtime:unset [-ps] [-m] [-c] [-vhost x.y.z] [-port] <app>\n")
+			println("    Reset and removes container runtime policies to defaults\n")
+			println("Options:\n")
+			runtimeFs.PrintDefaults()
+		}
+
+		err := runtimeFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		ensureEnv()
+
+		if ps || m || c {
+			ensurePool()
+		}
+
+		if runtimeFs.NArg() != 1 {
+			runtimeFs.Usage()
+			os.Exit(1)
+		}
+
+		app := runtimeFs.Args()[0]
+
+		options := commander.RuntimeOptions{
+			VirtualHost: vhost,
+		}
+		if ps {
+			options.Ps = -1
+		}
+
+		if m {
+			options.Memory = "-"
+		}
+
+		if c {
+			options.CPUShares = "-"
+		}
+
+		if port {
+			options.Port = "-"
+		}
+
+		updated, err := commander.RuntimeUnset(configStore, app, env, pool, options)
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
 		}

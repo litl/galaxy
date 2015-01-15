@@ -100,3 +100,31 @@ func RuntimeSet(configStore *config.Store, app, env, pool string, options Runtim
 
 	return configStore.UpdateApp(cfg, env)
 }
+
+func RuntimeUnset(configStore *config.Store, app, env, pool string, options RuntimeOptions) (bool, error) {
+
+	cfg, err := configStore.GetApp(app, env)
+	if err != nil {
+		return false, err
+	}
+
+	if options.Ps != 0 {
+		cfg.SetProcesses(pool, -1)
+	}
+
+	if options.Memory != "" {
+		cfg.SetMemory(pool, "")
+	}
+
+	vhosts := strings.Split(cfg.Env()["VIRTUAL_HOST"], ",")
+	if options.VirtualHost != "" && utils.StringInSlice(options.VirtualHost, vhosts) {
+		vhosts = utils.RemoveStringInSlice(options.VirtualHost, vhosts)
+		cfg.EnvSet("VIRTUAL_HOST", strings.Join(vhosts, ","))
+	}
+
+	if options.Port != "" {
+		cfg.EnvSet("GALAXY_PORT", "")
+	}
+
+	return configStore.UpdateApp(cfg, env)
+}
