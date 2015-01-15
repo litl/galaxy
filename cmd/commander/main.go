@@ -966,8 +966,8 @@ func main() {
 	ensurePool()
 
 	log.Printf("Starting commander %s", buildVersion)
-	log.Printf("Using env = %s, pool = %s, host-ip = %s, registry = %s",
-		env, pool, hostIP, registryURL)
+	log.Printf("env=%s pool=%s host-ip=%s registry=%s shuttle-addr=%s dns=%s cutoff=%ds",
+		env, pool, hostIP, registryURL, shuttleAddr, dns, stopCutoff)
 
 	go heartbeatHost()
 
