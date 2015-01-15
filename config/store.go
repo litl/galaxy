@@ -79,6 +79,26 @@ func (r *Store) ListAssignments(env, pool string) ([]string, error) {
 	return r.Backend.ListAssignments(env, pool)
 }
 
+func (r *Store) ListAssignedPools(env, app string) ([]string, error) {
+	pools, err := r.ListPools(env)
+	if err != nil {
+		return nil, err
+	}
+
+	assignments := []string{}
+	for _, pool := range pools {
+		apps, err := r.ListAssignments(env, pool)
+		if err != nil {
+			return nil, err
+		}
+
+		if utils.StringInSlice(app, apps) && !utils.StringInSlice(pool, assignments) {
+			assignments = append(assignments, pool)
+		}
+	}
+	return assignments, nil
+}
+
 func (r *Store) AssignApp(app, env, pool string) (bool, error) {
 	if exists, err := r.AppExists(app, env); !exists || err != nil {
 		return false, err
