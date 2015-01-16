@@ -7,6 +7,7 @@ import (
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
+	"strconv"
 	"strings"
 )
 
@@ -22,7 +23,7 @@ func AppList(configStore *config.Store, env string) error {
 		}
 	}
 
-	columns := []string{"NAME | ENV | VERSION | IMAGE ID | PORT | POOLS "}
+	columns := []string{"NAME | ENV | VERSION | IMAGE ID | CONFIG | POOLS "}
 
 	for _, env := range envs {
 
@@ -38,7 +39,6 @@ func AppList(configStore *config.Store, env string) error {
 
 		for _, app := range appList {
 			name := app.Name
-			port := app.EnvGet("GALAXY_PORT")
 			versionDeployed := app.Version()
 			versionID := app.VersionID()
 			if len(versionID) > 12 {
@@ -61,7 +61,7 @@ func AppList(configStore *config.Store, env string) error {
 				env,
 				versionDeployed,
 				versionID,
-				port,
+				strconv.FormatInt(app.ID(), 10),
 				strings.Join(assignments, ","),
 			}, " | "))
 		}
