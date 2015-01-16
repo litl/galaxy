@@ -21,7 +21,7 @@ func ConfigList(configStore *config.Store, app, env string) error {
 		return fmt.Errorf("unable to list config for %s.", app)
 	}
 
-	keys := sort.StringSlice{}
+	keys := sort.StringSlice{"ENV"}
 	for k, _ := range cfg.Env() {
 		keys = append(keys, k)
 	}
@@ -29,6 +29,10 @@ func ConfigList(configStore *config.Store, app, env string) error {
 	keys.Sort()
 
 	for _, k := range keys {
+		if k == "ENV" {
+			log.Printf("%s=%s\n", k, env)
+			continue
+		}
 		log.Printf("%s=%s\n", k, cfg.Env()[k])
 	}
 

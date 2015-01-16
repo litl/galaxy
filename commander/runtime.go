@@ -6,13 +6,16 @@ import (
 
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
 
 type RuntimeOptions struct {
-	Ps        int
-	Memory    string
-	CPUShares string
+	Ps          int
+	Memory      string
+	CPUShares   string
+	VirtualHost string
+	Port        string
 }
 
 func RuntimeList(configStore *config.Store, app, env, pool string) error {
@@ -27,7 +30,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | POOL | PS | MEM "}
+	columns := []string{"ENV | NAME | POOL | PS | MEM | VHOSTS | PORT"}
 
 	for _, env := range envs {
 
@@ -58,6 +61,8 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 					p,
 					strconv.FormatInt(int64(ps), 10),
 					mem,
+					appCfg.Env()["VIRTUAL_HOST"],
+					appCfg.Env()["GALAXY_PORT"],
 				}, " | "))
 			}
 		}
@@ -81,6 +86,44 @@ func RuntimeSet(configStore *config.Store, app, env, pool string, options Runtim
 
 	if options.Memory != "" && options.Memory != cfg.GetMemory(pool) {
 		cfg.SetMemory(pool, options.Memory)
+	}
+
+	vhosts := strings.Split(cfg.Env()["VIRTUAL_HOST"], ",")
+	if options.VirtualHost != "" && !utils.StringInSlice(options.VirtualHost, vhosts) {
+		vhosts = append(vhosts, options.VirtualHost)
+		cfg.EnvSet("VIRTUAL_HOST", strings.Join(vhosts, ","))
+	}
+
+	if options.Port != "" {
+		cfg.EnvSet("GALAXY_PORT", options.Port)
+	}
+
+	return configStore.UpdateApp(cfg, env)
+}
+
+func RuntimeUnset(configStore *config.Store, app, env, pool string, options RuntimeOptions) (bool, error) {
+
+	cfg, err := configStore.GetApp(app, env)
+	if err != nil {
+		return false, err
+	}
+
+	if options.Ps != 0 {
+		cfg.SetProcesses(pool, -1)
+	}
+
+	if options.Memory != "" {
+		cfg.SetMemory(pool, "")
+	}
+
+	vhosts := strings.Split(cfg.Env()["VIRTUAL_HOST"], ",")
+	if options.VirtualHost != "" && utils.StringInSlice(options.VirtualHost, vhosts) {
+		vhosts = utils.RemoveStringInSlice(options.VirtualHost, vhosts)
+		cfg.EnvSet("VIRTUAL_HOST", strings.Join(vhosts, ","))
+	}
+
+	if options.Port != "" {
+		cfg.EnvSet("GALAXY_PORT", "")
 	}
 
 	return configStore.UpdateApp(cfg, env)

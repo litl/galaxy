@@ -158,7 +158,13 @@ func pruneShuttleBackends(configStore *config.Store, serviceRegistry *registry.S
 			continue
 		}
 
-		if app == nil {
+		pools, err := configStore.ListAssignedPools(env, service.Name)
+		if err != nil {
+			log.Errorf("ERROR: Unable to list pool assignments for %s: %s", service.Name, err)
+			continue
+		}
+
+		if app == nil || len(pools) == 0 {
 			err := client.UnregisterService(&service)
 			if err != nil {
 				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", service.Name, err)

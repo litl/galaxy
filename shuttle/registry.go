@@ -193,7 +193,7 @@ func (s *ServiceRegistry) UpdateConfig(cfg client.Config) error {
 		// Add a new service, or update an existing one.
 		if Registry.GetService(svc.Name) == nil {
 			if err := Registry.AddService(svc); err != nil {
-				log.Errorln("Unablbe to add service %s: %s", svc.Name, err.Error())
+				log.Errorln("Unable to add service %s: %s", svc.Name, err.Error())
 				errors.Add(err)
 				continue
 			}

@@ -151,7 +151,7 @@ func (s *AppConfig) RuntimePools() []string {
 
 func (s *AppConfig) SetMemory(pool string, mem string) {
 	key := fmt.Sprintf("%s-mem", pool)
-	s.runtimeVMap.Set(key, mem)
+	s.runtimeVMap.SetVersion(key, mem, s.nextID())
 }
 
 func (s *AppConfig) GetMemory(pool string) string {
@@ -161,7 +161,7 @@ func (s *AppConfig) GetMemory(pool string) string {
 
 func (s *AppConfig) SetCPUShares(pool string, cpu string) {
 	key := fmt.Sprintf("%s-cpu", pool)
-	s.runtimeVMap.Set(key, cpu)
+	s.runtimeVMap.SetVersion(key, cpu, s.nextID())
 }
 
 func (s *AppConfig) GetCPUShares(pool string) string {

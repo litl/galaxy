@@ -49,7 +49,7 @@ var (
 func initOrDie() {
 
 	if registryURL == "" {
-		log.Fatalf("ERROR: Registry URL not specified")
+		log.Fatalf("ERROR: Registry URL not specified. Use '-registry redis://127.0.0.1:6379' or set 'GALAXY_REGISTRY_URL'")
 	}
 
 	serviceRegistry = registry.NewServiceRegistry(
@@ -86,18 +86,25 @@ func initOrDie() {
 }
 
 func ensureEnv() {
+	envs, err := configStore.ListEnvs()
+	if err != nil {
+		log.Fatalf("ERROR: Could not check envs: %s", err)
+	}
+
 	if strings.TrimSpace(env) == "" {
-		fmt.Println("Need an env")
-		flag.PrintDefaults()
-		os.Exit(1)
+		log.Fatalf("ERROR: Need an env.  Use '-env <env>'. Existing envs are: %s.", strings.Join(envs, ","))
 	}
 }
 
 func ensurePool() {
+
+	pools, err := configStore.ListPools(env)
+	if err != nil {
+		log.Fatalf("ERROR: Could not check pools: %s", err)
+	}
+
 	if strings.TrimSpace(pool) == "" {
-		fmt.Println("Need a pool")
-		flag.PrintDefaults()
-		os.Exit(1)
+		log.Fatalf("ERROR: Need a pool.  Use '-pool <pool>'. Existing pools are: %s", strings.Join(pools, ","))
 	}
 }
 
@@ -165,7 +172,6 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 		if err != nil {
 			log.Errorf("ERROR: Could not stop containers: %s", err)
 		}
-
 	}
 
 	running, err = serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
@@ -179,6 +185,11 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 		if err != nil {
 			log.Errorf("ERROR: Could not stop container: %s", err)
 		}
+	}
+
+	err = serviceRuntime.StopAllButCurrentVersion(appCfg)
+	if err != nil {
+		log.Errorf("ERROR: Could not stop old containers: %s", err)
 	}
 
 }
@@ -448,8 +459,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	initOrDie()
 	log.DefaultLogger.SetFlags(0)
+	initOrDie()
 
 	switch flag.Args()[0] {
 	case "agent":
@@ -774,8 +785,9 @@ func main() {
 		return
 	case "config":
 		configFs := flag.NewFlagSet("config", flag.ExitOnError)
+		usage := "Usage: commander config <app>"
 		configFs.Usage = func() {
-			println("Usage: commander config <app>\n")
+			println(usage)
 			println("    List config values for an app\n")
 			println("Options:\n")
 			configFs.PrintDefaults()
@@ -788,8 +800,8 @@ func main() {
 		ensureEnv()
 
 		if configFs.NArg() != 1 {
-			log.Errorf("ERROR: Missing app name")
-			configFs.Usage()
+			log.Error("ERROR: Missing app name argument")
+			log.Printf("Usage: %s", usage)
 			os.Exit(1)
 		}
 		app := configFs.Args()[0]
@@ -909,13 +921,17 @@ func main() {
 		var ps int
 		var m string
 		var c string
+		var vhost string
+		var port string
 		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
 		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
 		runtimeFs.StringVar(&m, "m", "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
 		runtimeFs.StringVar(&c, "c", "", "CPU shares (relative weight)")
+		runtimeFs.StringVar(&vhost, "vhost", "", "Virtual host for HTTP routing")
+		runtimeFs.StringVar(&port, "port", "", "Service port for service discovery")
 
 		runtimeFs.Usage = func() {
-			println("Usage: commander runtime:set [-ps 1] <app>\n")
+			println("Usage: commander runtime:set [-ps 1] [-m 100m] [-c 512] [-vhost x.y.z] [-port 8000] <app>\n")
 			println("    Set container runtime policies\n")
 			println("Options:\n")
 			runtimeFs.PrintDefaults()
@@ -927,7 +943,10 @@ func main() {
 		}
 
 		ensureEnv()
-		ensurePool()
+
+		if ps != 0 || m != "" || c != "" {
+			ensurePool()
+		}
 
 		if runtimeFs.NArg() != 1 {
 			runtimeFs.Usage()
@@ -942,9 +961,11 @@ func main() {
 		}
 
 		updated, err := commander.RuntimeSet(configStore, app, env, pool, commander.RuntimeOptions{
-			Ps:        ps,
-			Memory:    m,
-			CPUShares: c,
+			Ps:          ps,
+			Memory:      m,
+			CPUShares:   c,
+			VirtualHost: vhost,
+			Port:        port,
 		})
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)
@@ -953,7 +974,82 @@ func main() {
 		if !updated {
 			log.Fatalf("ERROR: Failed to set runtime options.")
 		}
-		log.Printf("Runtime options update for %s in %s running on %s", app, env, pool)
+
+		if pool != "" {
+			log.Printf("Runtime options updated for %s in %s running on %s", app, env, pool)
+		} else {
+			log.Printf("Runtime options updated for %s in %s", app, env)
+		}
+		return
+
+	case "runtime:unset":
+		var ps, m, c, port bool
+		var vhost string
+		runtimeFs := flag.NewFlagSet("runtime:unset", flag.ExitOnError)
+		runtimeFs.BoolVar(&ps, "ps", false, "Number of instances to run across all hosts")
+		runtimeFs.BoolVar(&m, "m", false, "Memory limit")
+		runtimeFs.BoolVar(&c, "c", false, "CPU shares (relative weight)")
+		runtimeFs.StringVar(&vhost, "vhost", "", "Virtual host for HTTP routing")
+		runtimeFs.BoolVar(&port, "port", false, "Service port for service discovery")
+
+		runtimeFs.Usage = func() {
+			println("Usage: commander runtime:unset [-ps] [-m] [-c] [-vhost x.y.z] [-port] <app>\n")
+			println("    Reset and removes container runtime policies to defaults\n")
+			println("Options:\n")
+			runtimeFs.PrintDefaults()
+		}
+
+		err := runtimeFs.Parse(flag.Args()[1:])
+		if err != nil {
+			log.Fatalf("ERROR: Bad command line options: %s", err)
+		}
+
+		ensureEnv()
+
+		if ps || m || c {
+			ensurePool()
+		}
+
+		if runtimeFs.NArg() != 1 {
+			runtimeFs.Usage()
+			os.Exit(1)
+		}
+
+		app := runtimeFs.Args()[0]
+
+		options := commander.RuntimeOptions{
+			VirtualHost: vhost,
+		}
+		if ps {
+			options.Ps = -1
+		}
+
+		if m {
+			options.Memory = "-"
+		}
+
+		if c {
+			options.CPUShares = "-"
+		}
+
+		if port {
+			options.Port = "-"
+		}
+
+		updated, err := commander.RuntimeUnset(configStore, app, env, pool, options)
+		if err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+
+		if !updated {
+			log.Fatalf("ERROR: Failed to set runtime options.")
+		}
+
+		if pool != "" {
+			log.Printf("Runtime options updated for %s in %s running on %s", app, env, pool)
+		} else {
+			log.Printf("Runtime options updated for %s in %s", app, env)
+		}
 		return
 
 	default:
@@ -966,8 +1062,8 @@ func main() {
 	ensurePool()
 
 	log.Printf("Starting commander %s", buildVersion)
-	log.Printf("Using env = %s, pool = %s, host-ip = %s, registry = %s",
-		env, pool, hostIP, registryURL)
+	log.Printf("env=%s pool=%s host-ip=%s registry=%s shuttle-addr=%s dns=%s cutoff=%ds",
+		env, pool, hostIP, registryURL, shuttleAddr, dns, stopCutoff)
 
 	go heartbeatHost()
 
