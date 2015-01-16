@@ -187,6 +187,11 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 		}
 	}
 
+	err = serviceRuntime.StopAllButCurrentVersion(appCfg)
+	if err != nil {
+		log.Errorf("ERROR: Could not stop old containers: %s", err)
+	}
+
 }
 
 func heartbeatHost() {
