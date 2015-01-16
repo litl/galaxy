@@ -161,7 +161,7 @@ func AppRun(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, a
 
 	}
 
-	_, err = serviceRuntime.RunCommand(appCfg, args)
+	_, err = serviceRuntime.RunCommand(env, appCfg, args)
 	if err != nil {
 		return fmt.Errorf("could not start container: %s", err)
 	}

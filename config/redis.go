@@ -27,7 +27,6 @@ func (r *RedisBackend) AppExists(app, env string) (bool, error) {
 
 func (r *RedisBackend) CreateApp(app, env string) (bool, error) {
 	emptyConfig := NewAppConfig(app, "")
-	emptyConfig.environmentVMap.Set("ENV", env)
 	return r.UpdateApp(emptyConfig, env)
 }
 

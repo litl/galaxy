@@ -389,7 +389,7 @@ func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
 
 }
 
-func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*docker.Container, error) {
+func (s *ServiceRuntime) RunCommand(env string, appCfg *config.AppConfig, cmd []string) (*docker.Container, error) {
 
 	// see if we have the image locally
 	fmt.Fprintf(os.Stderr, "Pulling latest image for %s\n", appCfg.Version())
@@ -403,8 +403,12 @@ func (s *ServiceRuntime) RunCommand(appCfg *config.AppConfig, cmd []string) (*do
 		return nil, err
 	}
 
-	envVars := []string{}
+	envVars := []string{"ENV=" + env}
+
 	for key, value := range appCfg.Env() {
+		if key == "ENV" {
+			continue
+		}
 		envVars = append(envVars, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
 	}
 	envVars = append(envVars, "GALAXY_APP="+appCfg.Name)
@@ -496,10 +500,11 @@ func (s *ServiceRuntime) StartInteractive(env, pool string, appCfg *config.AppCo
 	args := []string{
 		"run", "--rm", "-i",
 	}
+	args = append(args, "-e")
+	args = append(args, "ENV"+"="+env)
+
 	for key, value := range appCfg.Env() {
 		if key == "ENV" {
-			args = append(args, "-e")
-			args = append(args, strings.ToUpper(key)+"="+env)
 			continue
 		}
 
@@ -583,9 +588,10 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 
 	// setup env vars from etcd
 	var envVars []string
+	envVars = append(envVars, "ENV"+"="+env)
+
 	for key, value := range appCfg.Env() {
 		if key == "ENV" {
-			envVars = append(envVars, strings.ToUpper(key)+"="+env)
 			continue
 		}
 		envVars = append(envVars, strings.ToUpper(key)+"="+s.replaceVarEnv(value, s.hostIP))
