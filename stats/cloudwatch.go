@@ -174,7 +174,7 @@ func loadRDSStats(auth aws.Auth, statChan chan []Stat, done *sync.WaitGroup) {
 func loadCloudwatchStats(statChan chan []Stat) {
 	pollWg := sync.WaitGroup{}
 
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	for {
 		auth, err := aws.GetAuth("", "", "", time.Now().UTC())
 		if err != nil {
