@@ -161,7 +161,7 @@ func loadRDSStats(auth aws.Auth, statChan chan []Stat, done *sync.WaitGroup) {
 			}
 
 			var stats []Stat
-			prefix := strings.Join([]string{dbInstance, "aws", "rds", dbInstance, metric}, ".")
+			prefix := strings.Join([]string{dbInstance, "aws", "rds", metric}, ".")
 			for _, metric := range datapoints {
 				stats = append(stats, Stat{Path: prefix, Value: metric.Average, TS: metric.Timestamp})
 			}
