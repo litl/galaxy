@@ -92,16 +92,11 @@ func loadELBStats(auth aws.Auth, statChan chan []Stat, done *sync.WaitGroup) {
 				cwStat.Statistic = "Average"
 			}
 
-			datapoints, err := cwStat.Get()
+			prefix := strings.Join([]string{resourceEnv, "aws", "elb", elbName, metric}, ".")
+			stats, err := cwStat.Get(prefix, cwStat.Statistic)
 			if err != nil {
 				log.Errorf("ERROR: %s\n", err)
 				continue
-			}
-
-			var stats []Stat
-			prefix := strings.Join([]string{resourceEnv, "aws", "elb", elbName, metric}, ".")
-			for _, metric := range datapoints {
-				stats = append(stats, Stat{Path: prefix, Value: metric.Average, TS: metric.Timestamp})
 			}
 
 			statChan <- stats
@@ -154,16 +149,11 @@ func loadRDSStats(auth aws.Auth, statChan chan []Stat, done *sync.WaitGroup) {
 				Component:  "rds",
 			}
 
-			datapoints, err := cwStat.Get()
+			prefix := strings.Join([]string{dbInstance, "aws", "rds", metric}, ".")
+
+			stats, err := cwStat.Get(prefix, cwStat.Statistic)
 			if err != nil {
 				log.Errorf("ERROR: %s\n", err)
-				continue
-			}
-
-			var stats []Stat
-			prefix := strings.Join([]string{dbInstance, "aws", "rds", metric}, ".")
-			for _, metric := range datapoints {
-				stats = append(stats, Stat{Path: prefix, Value: metric.Average, TS: metric.Timestamp})
 			}
 
 			statChan <- stats
@@ -196,7 +186,7 @@ func loadCloudwatchStats(statChan chan []Stat) {
 }
 
 // This fetches the actual stats from Cloudwatch and return a []Stat for feeding into graphite
-func (c *CloudwatchStat) Get() ([]cloudwatch.Datapoint, error) {
+func (c *CloudwatchStat) Get(prefix, statType string) ([]Stat, error) {
 	auth, err := aws.GetAuth("", "", "", time.Now())
 	if err != nil {
 		return nil, err
@@ -228,5 +218,22 @@ func (c *CloudwatchStat) Get() ([]cloudwatch.Datapoint, error) {
 		return nil, err
 	}
 
-	return s.GetMetricStatisticsResult.Datapoints, nil
+	var stats []Stat
+	for _, dp := range s.GetMetricStatisticsResult.Datapoints {
+		var value float64
+		switch statType {
+		case "Maximum":
+			value = dp.Maximum
+		case "Minimum":
+			value = dp.Minimum
+		case "Sum":
+			value = dp.Sum
+		default:
+			value = dp.Average
+		}
+
+		stats = append(stats, Stat{Path: prefix, Value: value, TS: dp.Timestamp})
+	}
+
+	return stats, nil
 }
