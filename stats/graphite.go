@@ -72,7 +72,7 @@ func (c *Carbon) Collector(statChan chan []Stat) error {
 
 		for _, s := range stats {
 		RETRY:
-			_, err := fmt.Fprintf(c.conn, "%s %.2f %d\n", s.Path, s.Value, s.TS.Unix())
+			_, err := fmt.Fprintf(c.conn, "%s %.8f %d\n", s.Path, s.Value, s.TS.Unix())
 			if err != nil {
 				log.Printf("carbon: %s", err)
 				time.Sleep(5 * time.Second)
