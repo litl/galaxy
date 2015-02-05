@@ -442,7 +442,7 @@ func logProxyRequest(pr *ProxyRequest) bool {
 
 	err := fmt.Sprintf("%v", pr.ProxyError)
 
-	fmtStr := "id=%s method=%s clientIp=%s url=%s backend=%s status=%d duration=%s agent=%s, err=%s"
+	fmtStr := "id=%s method=%s client-ip=%s url=%s backend=%s status=%d duration=%s agent=%s, err=%s"
 
 	log.Printf(fmtStr, id, method, clientIP, url, backend, status, duration, agent, err)
 	return true
