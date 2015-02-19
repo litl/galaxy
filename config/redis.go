@@ -32,7 +32,7 @@ func (r *RedisBackend) CreateApp(app, env string) (bool, error) {
 
 func (r *RedisBackend) ListApps(env string) ([]*AppConfig, error) {
 	// TODO: convert to scan
-	apps, err := r.Keys(path.Join(env, "*", "environment"))
+	apps, err := r.Keys(path.Join(env, "*", "version"))
 	if err != nil {
 		return nil, err
 	}
