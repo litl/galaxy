@@ -431,6 +431,7 @@ func main() {
 		println("   app:shell       Run a bash shell within an app on this host")
 		println("   app:start       Starts one or more apps")
 		println("   app:stop        Stops one or more apps")
+		println("   app:unassign    Unassign an app from a pool")
 		println("   config          List config for an app")
 		println("   config:get      Get config values for an app")
 		println("   config:set      Set config values for an app")
