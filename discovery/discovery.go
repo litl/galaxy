@@ -1,6 +1,10 @@
 package discovery
 
 import (
+	"os"
+	"strings"
+	"time"
+
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
@@ -8,9 +12,6 @@ import (
 	shuttle "github.com/litl/galaxy/shuttle/client"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
-	"os"
-	"strings"
-	"time"
 )
 
 func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, pool, hostIP string) error {
@@ -147,6 +148,7 @@ func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.
 					log.Printf("Unregistered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
 						reg.ContainerID[0:12], reg.Name, locationAt(reg))
 				}
+				RegisterAll(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr, true)
 				pruneShuttleBackends(configStore, serviceRegistry, env, shuttleAddr)
 			}
 
