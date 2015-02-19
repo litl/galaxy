@@ -150,6 +150,13 @@ func pruneShuttleBackends(configStore *config.Store, serviceRegistry *registry.S
 		return
 	}
 
+	if len(registrations) == 0 {
+		// If there are no registrations, skip pruning it because we might be in a bad state and
+		// don't want to inadvertently unregister everything.  Shuttle will handle the down
+		// nodes if they are really down.
+		return
+	}
+
 	for _, service := range config.Services {
 
 		app, err := configStore.GetApp(service.Name, env)

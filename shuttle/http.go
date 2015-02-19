@@ -51,6 +51,7 @@ func NewHostRouter(httpServer *http.Server) *HostRouter {
 func (r *HostRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	reqId := genId()
 	req.Header.Set("X-Request-Id", reqId)
+	w.Header().Add("X-Request-Id", reqId)
 
 	if r.SSLOnly {
 		if req.TLS != nil || req.Header.Get("X-Forwarded-Proto") != "https" {
