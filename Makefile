@@ -1,10 +1,10 @@
 .SILENT :
-.PHONY : commander shuttle galaxy hud stats clean fmt test upload-release
+.PHONY : commander shuttle galaxy stats clean fmt test upload-release
 
 TAG:=`git describe --abbrev=0 --tags`
 LDFLAGS:=-X main.buildVersion `git describe --long`
 
-all: commander shuttle galaxy hud stats
+all: commander shuttle galaxy stats
 
 deps:
 	glock sync github.com/litl/galaxy
@@ -21,10 +21,6 @@ galaxy:
 	echo "Building galaxy"
 	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy
 
-hud:
-	echo "Building hud"
-	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/hud
-
 stats:
 	echo "Building stats"
 	go install -ldflags "$(LDFLAGS)" github.com/litl/galaxy/stats
@@ -33,7 +29,6 @@ clean: dist-clean
 	rm -f $(GOPATH)/bin/commander
 	rm -f $(GOPATH)/bin/shuttle
 	rm -f $(GOPATH)/bin/galaxy
-	rm -f $(GOPATH)/bin/hud
 	rm -f $(GOPATH)/bin/stats
 
 fmt:
@@ -54,7 +49,6 @@ dist-build: dist-init
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/galaxy github.com/litl/galaxy
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/commander github.com/litl/galaxy/cmd/commander
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/shuttle github.com/litl/galaxy/shuttle
-	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/hud github.com/litl/galaxy/hud
 	go build -ldflags "$(LDFLAGS)" -o dist/$$GOOS/$$GOARCH/stats github.com/litl/galaxy/stats
 
 dist-linux-amd64:
@@ -81,7 +75,7 @@ dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64 dis
 
 release-tarball:
 	echo "Building $$GOOS-$$GOARCH-$(TAG).tar.gz"
-	GZIP=-9 tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander shuttle hud stats >/dev/null 2>&1
+	GZIP=-9 tar -cvzf galaxy-$$GOOS-$$GOARCH-$(TAG).tar.gz -C dist/$$GOOS/$$GOARCH galaxy commander shuttle stats >/dev/null 2>&1
 
 release-linux-amd64:
 	export GOOS="linux"; \
