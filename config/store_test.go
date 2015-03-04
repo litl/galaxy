@@ -21,6 +21,14 @@ func TestAppNotExists(t *testing.T) {
 	}
 }
 
+func TestGetNonExistentApp(t *testing.T) {
+	r, _ := NewTestStore()
+	_, err := r.GetApp("bad", "bogus")
+	if err == nil {
+		t.Errorf("GetApp() should have returned an error.  got nil")
+	}
+}
+
 func TestAppExists(t *testing.T) {
 	r, _ := NewTestStore()
 	assertAppCreated(t, r, "app")

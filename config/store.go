@@ -3,10 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/utils"
 	"net/url"
 	"strings"
+
+	"github.com/litl/galaxy/log"
+	"github.com/litl/galaxy/utils"
 )
 
 /*
@@ -210,8 +211,12 @@ func (r *Store) ListEnvs() ([]string, error) {
 
 func (r *Store) GetApp(app, env string) (*AppConfig, error) {
 	exists, err := r.AppExists(app, env)
-	if err != nil || !exists {
+	if err != nil {
 		return nil, err
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("app %s does not exist", app)
 	}
 
 	return r.Backend.GetApp(app, env)
