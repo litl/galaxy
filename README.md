@@ -37,6 +37,9 @@ To setup a single host environment, run the following:
 
 ```
 $ docker run -d --name redis -p 6379:6379 redis
+$ export GALAXY_REGISTRY_URL=redis://127.0.0.1:6379
+$ export GALAXY_ENV=local
+$ export GALAXY_POOL=web
 $ commander agent
 ```
 
