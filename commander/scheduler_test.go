@@ -1,8 +1,9 @@
 package commander
 
 import (
-	"github.com/litl/galaxy/config"
 	"testing"
+
+	"github.com/litl/galaxy/config"
 )
 
 func NewTestStore() (*config.Store, *config.MemoryBackend) {

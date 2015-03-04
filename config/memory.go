@@ -1,9 +1,10 @@
 package config
 
 import (
-	"github.com/litl/galaxy/utils"
 	"regexp"
 	"strings"
+
+	"github.com/litl/galaxy/utils"
 )
 
 type Value struct {
