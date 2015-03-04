@@ -34,5 +34,7 @@ vagrant file.
 2. make deps
 3. make
 
+## License
 
+MIT
 
