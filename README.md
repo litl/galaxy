@@ -95,8 +95,7 @@ $ curl -v my.domain:8080
 
 ## Dev Setup
 
-You need to have a docker 1.1.2+ env available.  Set that up w/ boot2docker or use the provided
-vagrant file.
+You need to have a docker 1.4.1+ and golang 1.4. 
 
 1. Install [glock](https://github.com/robfig/glock)
 2. make deps
