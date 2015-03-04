@@ -7,9 +7,15 @@ galaxy
 
 ===
 
-The project handles the deployment, configuration and orchestration of Docker containers across
-multiple hosts.  It is designed for running 12-factor style, stateless, microservices
-within Docker containers while being lightweight and simple to operate.
+galaxy is a micro-pass designed for running 12-factor style, stateless, microservices
+within Docker containers while being lightweight and simple to operate.  It handles the deployment, 
+configuration and orchestration of Docker containers across multiple hosts.  
+
+It is ideally suited for running Docker containers:
+* Alongside existing applications while transitioning to containers
+* On clusters of 10's-100's of hosts
+* On existing or new infrastructure you are already using
+* For HTTP based micro-services
 
 ### Features:
 
