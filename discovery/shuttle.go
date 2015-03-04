@@ -7,7 +7,7 @@ import (
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 
-	shuttle "github.com/litl/galaxy/shuttle/client"
+	shuttle "github.com/litl/shuttle/client"
 )
 
 var (

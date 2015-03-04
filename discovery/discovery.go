@@ -9,9 +9,10 @@ import (
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
-	shuttle "github.com/litl/galaxy/shuttle/client"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
+
+	shuttle "github.com/litl/shuttle/client"
 )
 
 func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *registry.ServiceRegistry, env, pool, hostIP string) error {
