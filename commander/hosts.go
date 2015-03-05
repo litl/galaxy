@@ -1,10 +1,11 @@
 package commander
 
 import (
+	"strings"
+
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/ryanuber/columnize"
-	"strings"
 )
 
 func HostsList(configStore *config.Store, env, pool string) error {

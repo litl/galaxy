@@ -2,10 +2,10 @@ package utils
 
 import (
 	"fmt"
-	"github.com/codegangsta/cli"
 	"strconv"
 	"strings"
 	"time"
+	"github.com/codegangsta/cli"
 
 	"os"
 )

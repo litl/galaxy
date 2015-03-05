@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"strings"
 	"testing"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 type TestConn struct {

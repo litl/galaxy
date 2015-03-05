@@ -2,12 +2,13 @@ package commander
 
 import (
 	"fmt"
-	"github.com/litl/galaxy/config"
-	"github.com/litl/galaxy/log"
 	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/litl/galaxy/config"
+	"github.com/litl/galaxy/log"
 )
 
 func ConfigList(configStore *config.Store, app, env string) error {

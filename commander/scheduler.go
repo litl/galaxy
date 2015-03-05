@@ -1,8 +1,9 @@
 package commander
 
 import (
-	"github.com/litl/galaxy/config"
 	"sort"
+
+	"github.com/litl/galaxy/config"
 )
 
 // Balanced returns the number of instances that should be run on the host

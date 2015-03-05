@@ -2,13 +2,14 @@ package commander
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
-	"strconv"
-	"strings"
 )
 
 func AppList(configStore *config.Store, env string) error {
