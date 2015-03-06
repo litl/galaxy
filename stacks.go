@@ -64,6 +64,8 @@ func getBase(c *cli.Context) string {
 				err = errNoBase
 			}
 			base = stack.Name
+
+			log.Printf("Warning: guessing base stack: %s", base)
 		}
 	}
 
@@ -71,7 +73,6 @@ func getBase(c *cli.Context) string {
 		log.Fatalf("%s: %s", err, "use --base")
 	}
 
-	log.Printf("Referencing base stack: %s", base)
 	return base
 }
 
@@ -104,7 +105,7 @@ func promptValue(prompt, dflt string) string {
 func getInitOpts(c *cli.Context) *stack.GalaxyTmplParams {
 	name := c.Args().First()
 	if name == "" {
-		name = promptValue("Base Stack Name", "galaxy")
+		name = promptValue("Base Stack Name", "galaxy-base")
 	}
 
 	keyName := c.String("keyname")
@@ -115,9 +116,9 @@ func getInitOpts(c *cli.Context) *stack.GalaxyTmplParams {
 		}
 	}
 
-	controllerAMI := promptValue("Controller AMI", "ami-018c9568")
+	controllerAMI := promptValue("Controller AMI", "ami-9a562df2")
 	controllerInstance := promptValue("Controller Instance Type", "t2.medium")
-	poolAMI := promptValue("Default Pool AMI", "ami-018c9568")
+	poolAMI := promptValue("Default Pool AMI", "ami-9a562df2")
 	poolInstance := promptValue("Default Pool Instance Type", "t2.medium")
 
 	vpcSubnet := promptValue("VPC CIDR Block", "10.24.0.0/16")
@@ -128,7 +129,11 @@ func getInitOpts(c *cli.Context) *stack.GalaxyTmplParams {
 
 	region := c.String("region")
 	if region == "" {
-		region = promptValue("EC2 Region", "us-east-1")
+		region = os.Getenv("AWS_DEFAULT_REGION")
+		if region == "" {
+			region = "us-east-1"
+		}
+		region = promptValue("EC2 Region", region)
 	}
 
 	azResp, err := stack.DescribeAvailabilityZones(region)
@@ -469,8 +474,7 @@ func stackCreatePool(c *cli.Context) {
 		resources.SecurityGroups["defaultSG"],
 	}
 
-	// WARNING: magic constant needs a config somewhere
-	lc.SetVolumeSize(100)
+	lc.SetVolumeSize(c.Int("volume-size"))
 
 	pool.Resources[lcName] = lc
 
@@ -512,14 +516,13 @@ func stackCreatePool(c *cli.Context) {
 	}
 
 	if c.Bool("auto-update") {
-		// TODO: configure this somehow
-		asg.SetASGUpdatePolicy(1, 1, 5*time.Minute)
+		asg.SetASGUpdatePolicy(c.Int("update-min"), c.Int("update-batch"), c.Duration("update-pause"))
 	}
 
 	pool.Resources[asgName] = asg
 
 	// Optionally create the Elastic Load Balancer
-	if strings.Contains(poolName, "web") {
+	if c.Bool("elb") {
 		elb := pool.ELBTemplate
 		elbName := "elb" + poolEnv + poolName
 
@@ -662,9 +665,8 @@ func stackUpdatePool(c *cli.Context) {
 	}
 
 	if c.Bool("auto-update") {
-		// TODO: configure this somehow
 		// note that the max pause is only PT5M30S
-		asg.SetASGUpdatePolicy(1, 1, 5*time.Minute)
+		asg.SetASGUpdatePolicy(c.Int("update-min"), c.Int("update-batch"), c.Duration("update-pause"))
 	}
 
 	numZones := c.Int("availability-zones")
