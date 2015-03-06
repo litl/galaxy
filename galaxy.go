@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
@@ -495,24 +496,29 @@ func main() {
 		cli.StringFlag{Name: "keyname", Usage: "ssh keypair name"},
 		cli.StringFlag{Name: "ami", Usage: "ami id"},
 		cli.StringFlag{Name: "instance-type", Usage: "instance type"},
+		cli.IntFlag{Name: "volume-size", Usage: "stack instance volume size in GB", Value: 100},
 		cli.StringFlag{Name: "parameters", Usage: "template parameters in json"},
 		cli.StringFlag{Name: "ssl-cert", Usage: "SSL certificate name"},
 		cli.StringFlag{Name: "policy", Usage: "stack policy"},
 		cli.StringFlag{Name: "region", Usage: "aws region"},
-		cli.StringFlag{Name: "template", Usage: "provide a template file"},
+		cli.IntFlag{Name: "availability-zones", Usage: "number of availability zones to run a pool in"},
+		cli.BoolFlag{Name: "elb", Usage: "add an ELB when creating a stack"},
 		cli.StringFlag{Name: "http-health-check", Usage: "ELB health check address", Value: "HTTP:9090/_config"},
+		cli.IntFlag{Name: "http-port", Usage: "instance http port for ELB listeners"},
+		cli.StringFlag{Name: "template", Usage: "provide a template file"},
 		cli.IntFlag{Name: "min-size", Usage: "minimum pool size"},
 		cli.IntFlag{Name: "max-size", Usage: "maximum pool size"},
 		cli.IntFlag{Name: "desired-size", Usage: "desired pool size"},
-		cli.IntFlag{Name: "http-port", Usage: "instance http port"},
-		cli.BoolFlag{Name: "print", Usage: "print new template and exit"},
+		cli.BoolFlag{Name: "print", Usage: "print new template and exit [noop]"},
 		cli.BoolFlag{Name: "auto-update", Usage: "add an ASG UpdatePolicy"},
 		cli.IntFlag{Name: "scale-adj", Usage: "number of instances to add/remove when scaling"},
 		cli.IntFlag{Name: "scale-up-delay", Usage: "minutes to wait for scaling up"},
 		cli.IntFlag{Name: "scale-down-delay", Usage: "minutes to wait for scaling down"},
 		cli.IntFlag{Name: "scale-up-cpu", Usage: "cpu threshold for scaling up"},
 		cli.IntFlag{Name: "scale-down-cpu", Usage: "cpu threshold for scaling down"},
-		cli.IntFlag{Name: "availability-zones", Usage: "number of availability zones to run a pool in"},
+		cli.IntFlag{Name: "update-min", Usage: "minimum instances in service during auto-update", Value: 1},
+		cli.IntFlag{Name: "update-batch", Usage: "max instance instances to auto-update at once", Value: 1},
+		cli.DurationFlag{Name: "update-pause", Usage: "Pause time between auto-update actions (0s-5m30s)", Value: 5 * time.Minute},
 	}
 
 	app := cli.NewApp()
@@ -700,7 +706,7 @@ func main() {
 			Name:        "stack:pool_create",
 			Usage:       "create a pool stack directly",
 			Action:      stackCreatePool,
-			Description: "stack:pool_update",
+			Description: "stack:pool_create",
 			Flags:       stackFlags,
 		},
 		{
