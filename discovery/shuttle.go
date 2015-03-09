@@ -70,8 +70,8 @@ func registerShuttle(serviceRegistry *registry.ServiceRegistry, env, shuttleAddr
 		}
 	}
 
-	for k, service := range backends {
-		err := client.UpdateService(k, service)
+	for _, service := range backends {
+		err := client.UpdateService(service)
 		if err != nil {
 			log.Errorf("ERROR: Unable to register shuttle service: %s", err)
 		}
@@ -125,7 +125,7 @@ func unregisterShuttle(serviceRegistry *registry.ServiceRegistry, env, hostIP, s
 
 	for _, service := range backends {
 
-		err := client.UnregisterService(service)
+		err := client.RemoveService(service.Name)
 		if err != nil {
 			log.Errorf("ERROR: Unable to remove shuttle service: %s", err)
 		}
@@ -172,7 +172,7 @@ func pruneShuttleBackends(configStore *config.Store, serviceRegistry *registry.S
 		}
 
 		if app == nil || len(pools) == 0 {
-			err := client.UnregisterService(&service)
+			err := client.RemoveService(service.Name)
 			if err != nil {
 				log.Errorf("ERROR: Unable to remove service %s from shuttle: %s", service.Name, err)
 			}
@@ -190,7 +190,7 @@ func pruneShuttleBackends(configStore *config.Store, serviceRegistry *registry.S
 			}
 
 			if !backendExists {
-				err := client.UnregisterBackend(service.Name, backend.Name)
+				err := client.RemoveBackend(service.Name, backend.Name)
 				if err != nil {
 					log.Errorf("ERROR: Unable to remove backend %s from shuttle: %s", backend.Name, err)
 				}
