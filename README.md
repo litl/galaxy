@@ -7,7 +7,7 @@ galaxy
 
 ===
 
-galaxy is a micro-pass designed for running 12-factor style, stateless, microservices
+galaxy is a micro-paas designed for running 12-factor style, stateless, microservices
 within Docker containers while being lightweight and simple to operate.  It handles the deployment, 
 configuration and orchestration of Docker containers across multiple hosts.  
 
