@@ -1,0 +1,9 @@
+language: go
+go:
+- 1.4
+- tip
+install:
+- go get github.com/robfig/glock
+- make deps
+script:
+- make all fmt test
