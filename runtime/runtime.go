@@ -152,6 +152,7 @@ func (s *ServiceRuntime) ensureDockerClient() *docker.Client {
 		if err != nil {
 			log.Fatalf("ERROR: Unable to connect to docker: %s: %s", err, endpoint)
 		}
+		client.HTTPClient.Timeout = 60 * time.Second
 		s.dockerClient = client
 
 	}
