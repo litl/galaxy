@@ -450,6 +450,9 @@ func main() {
 		return
 	}
 
+	log.DefaultLogger = log.New(os.Stdout, "", log.INFO)
+	log.DefaultLogger.SetFlags(0)
+
 	if debug {
 		log.DefaultLogger.Level = log.DEBUG
 	}
@@ -460,7 +463,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.DefaultLogger.SetFlags(0)
 	initOrDie()
 
 	switch flag.Args()[0] {
