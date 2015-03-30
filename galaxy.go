@@ -485,7 +485,8 @@ func main() {
 
 	loadConfig()
 
-	// Don't print date, etc..
+	// Don't print date, etc. and print to stdout
+	log.DefaultLogger = log.New(os.Stdout, "", log.INFO)
 	log.DefaultLogger.SetFlags(0)
 
 	// declare one superset of flags for stack operations, so we don't pollute the global flags
