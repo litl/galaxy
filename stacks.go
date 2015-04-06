@@ -700,9 +700,9 @@ func stackUpdatePool(c *cli.Context) {
 
 	sslCert := ""
 	if cert := c.String("ssl-cert"); cert != "" {
-		sslCert = resources.ServerCerts[sslCert]
+		sslCert = resources.ServerCerts[cert]
 		if sslCert == "" {
-			log.Fatalf("Could not find certificate '%s'", sslCert)
+			log.Fatalf("Could not find certificate '%s'", cert)
 		}
 	}
 
@@ -712,15 +712,27 @@ func stackUpdatePool(c *cli.Context) {
 		log.Fatal("ERROR: Pool does not have an ELB")
 	}
 
+	// we can set the default now that we've verified that elb can be nil
+	if httpPort == 0 {
+		httpPort = 80
+	}
+
 	if elb != nil {
+		certAdded := false
 		for _, l := range elb.Properties.Listeners {
 			if sslCert != "" && l.Protocol == "HTTPS" {
 				l.SSLCertificateId = sslCert
+				certAdded = true
 			}
 
 			if httpPort > 0 {
 				l.InstancePort = httpPort
 			}
+		}
+
+		// the elb needs a cert, but doesn't have an https listener
+		if sslCert != "" && !certAdded {
+			elb.AddListener(443, "HTTPS", httpPort, "HTTP", sslCert, nil)
 		}
 
 		healthCheck := c.String("http-health-check")
