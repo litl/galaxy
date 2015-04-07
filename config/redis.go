@@ -232,13 +232,13 @@ func (r *RedisBackend) ListPools(env string) ([]string, error) {
 
 func (r *RedisBackend) ListEnvs() ([]string, error) {
 	envs := []string{}
-	apps, err := r.Keys(path.Join("*", "*", "environment"))
+	pools, err := r.Keys(path.Join("*", "pools", "*"))
 	if err != nil {
 		return nil, err
 	}
 
-	for _, app := range apps {
-		parts := strings.Split(app, "/")
+	for _, pool := range pools {
+		parts := strings.Split(pool, "/")
 		if !utils.StringInSlice(parts[0], envs) {
 			envs = append(envs, parts[0])
 		}
