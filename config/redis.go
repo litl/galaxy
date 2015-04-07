@@ -178,11 +178,20 @@ func (r *RedisBackend) CreatePool(env, pool string) (bool, error) {
 }
 
 func (r *RedisBackend) DeletePool(env, pool string) (bool, error) {
-	removed, err := r.RemoveMember(path.Join(env, "pools", "*"), pool)
+	apps, err := r.Members(path.Join(env, "pools", pool))
 	if err != nil {
 		return false, err
 	}
-	return removed == 1, nil
+
+	if len(apps) > 0 {
+		return false, nil
+	}
+
+	_, err = r.RemoveMember(path.Join(env, "pools", "*"), pool)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *RedisBackend) ListPools(env string) ([]string, error) {
