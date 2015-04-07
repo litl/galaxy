@@ -395,14 +395,14 @@ func poolDelete(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
 	initRegistry(c)
-	created, err := configStore.DeletePool(utils.GalaxyPool(c), utils.GalaxyEnv(c))
+	empty, err := configStore.DeletePool(utils.GalaxyPool(c), utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not delete pool: %s", err)
 		return
 	}
 
-	if created {
-		log.Printf("Pool %s delete\n", utils.GalaxyPool(c))
+	if empty {
+		log.Printf("Pool %s deleted\n", utils.GalaxyPool(c))
 		// now delete the Cloudformation Stack
 		stackDeletePool(c)
 

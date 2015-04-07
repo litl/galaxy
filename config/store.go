@@ -146,7 +146,7 @@ func (r *Store) DeletePool(pool, env string) (bool, error) {
 		return false, nil
 	}
 
-	return r.Backend.DeletePool(pool, env)
+	return r.Backend.DeletePool(env, pool)
 }
 
 func (r *Store) ListPools(env string) ([]string, error) {
