@@ -205,10 +205,9 @@ func (r *RedisBackend) ListPools(env string) ([]string, error) {
 		}
 	}
 
-	// This is the pools that have been manaully assigned
-	// apps.  It's possible to assign an app to a pool that
-	// has no running hosts so we add these to the pools
-	// list as well.
+	// This is the pools that have been manually created.  It's
+	// possible to assign an app to a pool that has no running
+	// hosts so we add these to the pools list as well.
 	key = path.Join(env, "pools", "*")
 	keys, err = r.Keys(key)
 	if err != nil {
@@ -219,11 +218,19 @@ func (r *RedisBackend) ListPools(env string) ([]string, error) {
 		parts := strings.Split(k, "/")
 		pool := parts[2]
 
-		if pool == "*" {
+		if pool != "*" {
 			continue
 		}
-		if !utils.StringInSlice(pool, pools) {
-			pools = append(pools, pool)
+
+		members, err := r.Members(k)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, m := range members {
+			if !utils.StringInSlice(m, pools) {
+				pools = append(pools, m)
+			}
 		}
 	}
 
