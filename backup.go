@@ -189,9 +189,18 @@ func appRestore(c *cli.Context) {
 func restoreApp(bkup *appCfg, env string) error {
 	fmt.Println("restoring", bkup.Name)
 
-	svcCfg, err := configStore.GetApp(bkup.Name, env)
+	var svcCfg *gconfig.AppConfig
+
+	exists, err := configStore.AppExists(bkup.Name, env)
 	if err != nil {
 		return err
+	}
+
+	if exists {
+		svcCfg, err = configStore.GetApp(bkup.Name, env)
+		if err != nil {
+			return err
+		}
 	}
 
 	if svcCfg == nil {
