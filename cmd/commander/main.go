@@ -195,8 +195,6 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 }
 
 func heartbeatHost() {
-	wg.Add(1)
-
 	_, err := configStore.CreatePool(pool, env)
 	if err != nil {
 		log.Fatalf("ERROR: Unabled to create pool %s: %s", pool, err)
@@ -208,9 +206,6 @@ func heartbeatHost() {
 			HostIP: hostIP,
 		})
 
-		if !loop {
-			return
-		}
 		time.Sleep(45 * time.Second)
 	}
 }
@@ -1068,8 +1063,6 @@ func main() {
 	log.Printf("env=%s pool=%s host-ip=%s registry=%s shuttle-addr=%s dns=%s cutoff=%ds",
 		env, pool, hostIP, registryURL, shuttleAddr, dns, stopCutoff)
 
-	go heartbeatHost()
-
 	defer func() {
 		configStore.DeleteHost(env, pool, config.HostInfo{
 			HostIP: hostIP,
@@ -1085,6 +1078,8 @@ func main() {
 	}
 
 	if loop {
+		wg.Add(1)
+		go heartbeatHost()
 
 		go discovery.Register(serviceRuntime, serviceRegistry, configStore, env, pool, hostIP, shuttleAddr)
 		cancelChan := make(chan struct{})
@@ -1094,6 +1089,7 @@ func main() {
 		monitorService(restartChan)
 	}
 
+	// TODO: do we still need a WaitGroup?
 	wg.Wait()
 
 }
