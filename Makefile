@@ -2,7 +2,7 @@
 .PHONY : commander galaxy clean fmt test upload-release
 
 TAG:=`git describe --abbrev=0 --tags`
-LDFLAGS:=-X main.buildVersion `git describe --long`
+LDFLAGS:=-X main.buildVersion `git describe --long --tags`
 
 all: commander galaxy
 
