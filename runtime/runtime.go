@@ -679,6 +679,10 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 
 	config := &docker.HostConfig{
 		PublishAllPorts: true,
+		RestartPolicy: docker.RestartPolicy{
+			Name:              "on-failure",
+			MaximumRetryCount: 10,
+		},
 	}
 
 	if s.dns != "" {

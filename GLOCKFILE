@@ -4,7 +4,7 @@ github.com/codegangsta/cli 50c77ecec0068c9aef9d90ae0fd0fdf410041da3
 github.com/docker/docker 3837c080228143378b1041364a90aa5bcf59fa00
 github.com/dotcloud/docker 24c4c3e0e99ddb4d65200f2f7367883e47008898
 github.com/fatih/color 95b468b5f34882796c597b718955603a584a9bd4
-github.com/fsouza/go-dockerclient bc54f3734b9b098e24680d5ad686f602bc152df4
+github.com/fsouza/go-dockerclient 17d39bcb22e8103ba6d1c0cb2530c6434cb870a3
 github.com/garyburd/redigo 61e2910408efd40dafb3c7d856a4cf8aeb5fb1c6
 github.com/goamz/goamz a1da1b724496ac803aabd4898e15e74535d68ee0
 github.com/litl/shuttle f2398ad6626694603accb6d34183aedee79336df
