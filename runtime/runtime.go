@@ -690,21 +690,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 	}
 	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
-	if err != nil {
-		return container, err
-	}
-
-	startedContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-	for i := 0; i < 5; i++ {
-
-		startedContainer, err = s.ensureDockerClient().InspectContainer(container.ID)
-		if !startedContainer.State.Running {
-			return nil, errors.New("Container stopped unexpectedly")
-		}
-		time.Sleep(1 * time.Second)
-	}
-	return startedContainer, err
-
+	return container, err
 }
 
 func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg *config.AppConfig) (bool, *docker.Container, error) {
