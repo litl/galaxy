@@ -681,7 +681,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 		PublishAllPorts: true,
 		RestartPolicy: docker.RestartPolicy{
 			Name:              "on-failure",
-			MaximumRetryCount: 10,
+			MaximumRetryCount: 20,
 		},
 	}
 
@@ -934,7 +934,7 @@ func (s *ServiceRuntime) EnvFor(container *docker.Container) map[string]string {
 func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 	apps := []*docker.Container{}
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
+		All: true,
 	})
 	if err != nil {
 		return apps, err
