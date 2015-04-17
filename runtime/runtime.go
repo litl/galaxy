@@ -681,7 +681,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 		PublishAllPorts: true,
 		RestartPolicy: docker.RestartPolicy{
 			Name:              "on-failure",
-			MaximumRetryCount: 20,
+			MaximumRetryCount: 16,
 		},
 	}
 
@@ -955,7 +955,7 @@ func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 			continue
 		}
 		name := s.EnvFor(container)["GALAXY_APP"]
-		if name != "" {
+		if name != "" && (container.State.Running || container.State.Restarting) {
 			apps = append(apps, container)
 		}
 	}
