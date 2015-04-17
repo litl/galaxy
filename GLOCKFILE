@@ -1,10 +1,10 @@
 github.com/BurntSushi/toml f87ce853111478914f0bcffa34d43a93643e6eda
-github.com/Sirupsen/logrus c6a969a0de65e41b666c5dd015b3988b47cd940b
+github.com/Sirupsen/logrus 55eb11d21d2a31a3cc93838241d04800f52e823d
 github.com/codegangsta/cli 50c77ecec0068c9aef9d90ae0fd0fdf410041da3
-github.com/docker/docker 3837c080228143378b1041364a90aa5bcf59fa00
+github.com/docker/docker 9922122fd467b3ba384801a059b05b00fd65998e
 github.com/dotcloud/docker 24c4c3e0e99ddb4d65200f2f7367883e47008898
 github.com/fatih/color 95b468b5f34882796c597b718955603a584a9bd4
-github.com/fsouza/go-dockerclient 17d39bcb22e8103ba6d1c0cb2530c6434cb870a3
+github.com/fsouza/go-dockerclient 4a43f0ee9fe0c8f6cb7672b41b11122b40bb531a
 github.com/garyburd/redigo 61e2910408efd40dafb3c7d856a4cf8aeb5fb1c6
 github.com/goamz/goamz a1da1b724496ac803aabd4898e15e74535d68ee0
 github.com/litl/shuttle f2398ad6626694603accb6d34183aedee79336df
