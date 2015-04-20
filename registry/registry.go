@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -62,16 +63,31 @@ func (r *ServiceRegistry) Connect(registryURL string) {
 	}
 }
 
-func (r *ServiceRegistry) newServiceRegistration(container *docker.Container, hostIP string) *ServiceRegistration {
+func (r *ServiceRegistry) newServiceRegistration(container *docker.Container, hostIP, galaxyPort string) *ServiceRegistration {
 	//FIXME: We're using the first found port and assuming it's tcp.
 	//How should we handle a service that exposes multiple ports
 	//as well as tcp vs udp ports.
 	var externalPort, internalPort string
-	for k, v := range container.NetworkSettings.Ports {
+
+	// sort the port bindings by internal port number so multiple ports are assigned deterministically
+	// (docker.Port is a string with a Port method)
+	cPorts := container.NetworkSettings.Ports
+	allPorts := []string{}
+	for p, _ := range cPorts {
+		allPorts = append(allPorts, string(p))
+	}
+	sort.Strings(allPorts)
+
+	for _, k := range allPorts {
+		v := cPorts[docker.Port(k)]
 		if len(v) > 0 {
 			externalPort = v[0].HostPort
-			internalPort = k.Port()
-			break
+			internalPort = docker.Port(k).Port()
+			// Look for a match to GALAXY_PORT if we have multiple ports to
+			// choose from. (don't require this, or we may break existing services)
+			if len(allPorts) > 1 && internalPort == galaxyPort {
+				break
+			}
 		}
 	}
 
@@ -80,6 +96,7 @@ func (r *ServiceRegistry) newServiceRegistration(container *docker.Container, ho
 		ContainerID:   container.ID,
 		StartedAt:     container.Created,
 		Image:         container.Config.Image,
+		Port:          galaxyPort,
 	}
 
 	if externalPort != "" && internalPort != "" {
@@ -141,7 +158,7 @@ func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *d
 
 	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
-	serviceRegistration := r.newServiceRegistration(container, hostIP)
+	serviceRegistration := r.newServiceRegistration(container, hostIP, environment["GALAXY_PORT"])
 	serviceRegistration.Name = name
 	serviceRegistration.ImageId = container.Config.Image
 
@@ -167,8 +184,6 @@ func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *d
 	if len(errorPages) > 0 {
 		serviceRegistration.ErrorPages = errorPages
 	}
-
-	serviceRegistration.Port = environment["GALAXY_PORT"]
 
 	jsonReg, err := json.Marshal(serviceRegistration)
 	if err != nil {
