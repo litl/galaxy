@@ -15,7 +15,6 @@ var (
 )
 
 func registerShuttle(serviceRegistry *registry.ServiceRegistry, env, shuttleAddr string) {
-
 	if client == nil {
 		return
 	}
@@ -31,7 +30,7 @@ func registerShuttle(serviceRegistry *registry.ServiceRegistry, env, shuttleAddr
 	for _, r := range registrations {
 
 		// No service ports exposed on the host, skip it.
-		if r.ExternalAddr() == "" || r.Port == "" {
+		if r.ExternalAddr() == "" {
 			continue
 		}
 
