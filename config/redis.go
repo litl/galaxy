@@ -346,7 +346,7 @@ func (r *RedisBackend) Keys(key string) ([]string, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return nil, conn.Err()
+		return nil, err
 	}
 
 	return redis.Strings(conn.Do("KEYS", key))
@@ -357,7 +357,7 @@ func (r *RedisBackend) Expire(key string, ttl uint64) (int, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return 0, conn.Err()
+		return 0, err
 	}
 
 	return redis.Int(conn.Do("EXPIRE", key, ttl))
@@ -379,7 +379,7 @@ func (r *RedisBackend) Delete(key string) (int, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return 0, conn.Err()
+		return 0, err
 	}
 
 	return redis.Int(conn.Do("DEL", key))
@@ -390,7 +390,7 @@ func (r *RedisBackend) AddMember(key, value string) (int, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return 0, conn.Err()
+		return 0, err
 	}
 
 	return redis.Int(conn.Do("SADD", key, value))
@@ -401,7 +401,7 @@ func (r *RedisBackend) RemoveMember(key, value string) (int, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return 0, conn.Err()
+		return 0, err
 	}
 
 	return redis.Int(conn.Do("SREM", key, value))
@@ -412,7 +412,7 @@ func (r *RedisBackend) Members(key string) ([]string, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return nil, conn.Err()
+		return nil, err
 	}
 
 	return redis.Strings(conn.Do("SMEMBERS", key))
@@ -423,7 +423,7 @@ func (r *RedisBackend) Notify(key, value string) (int, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return 0, conn.Err()
+		return 0, err
 	}
 
 	return redis.Int(conn.Do("PUBLISH", key, value))
@@ -445,7 +445,7 @@ func (r *RedisBackend) subscribeChannel(key string, msgs chan string) {
 		// no defer, doesn't return
 		if err := conn.Err(); err != nil {
 			conn.Close()
-			log.Printf("ERROR: %v\n", conn.Err())
+			log.Printf("ERROR: %v\n", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -489,7 +489,7 @@ func (r *RedisBackend) Set(key, field string, value string) (string, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return "", conn.Err()
+		return "", err
 	}
 
 	return redis.String(conn.Do("HMSET", key, field, value))
@@ -500,7 +500,7 @@ func (r *RedisBackend) Get(key, field string) (string, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return "", conn.Err()
+		return "", err
 	}
 
 	ret, err := redis.String(conn.Do("HGET", key, field))
@@ -516,7 +516,7 @@ func (r *RedisBackend) GetAll(key string) (map[string]string, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return nil, conn.Err()
+		return nil, err
 	}
 
 	matches, err := redis.Values(conn.Do("HGETALL", key))
@@ -539,7 +539,7 @@ func (r *RedisBackend) SetMulti(key string, values map[string]string) (string, e
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return "", conn.Err()
+		return "", err
 	}
 
 	redisArgs := redis.Args{}.Add(key).AddFlat(values)
@@ -551,7 +551,7 @@ func (r *RedisBackend) DeleteMulti(key string, fields ...string) (int, error) {
 	defer conn.Close()
 
 	if err := conn.Err(); err != nil {
-		return 0, conn.Err()
+		return 0, err
 	}
 
 	args := []string{}
