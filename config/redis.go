@@ -314,23 +314,25 @@ func (r *RedisBackend) GcVMap(key string, vmap *utils.VersionedMap) error {
 	return nil
 }
 
-func (r *RedisBackend) Connect() {
+func (r *RedisBackend) dialTimeout() (redis.Conn, error) {
 	rwTimeout := 5 * time.Second
+	return redis.DialTimeout("tcp", r.RedisHost, rwTimeout, rwTimeout, rwTimeout)
+}
 
+func (r *RedisBackend) testOnBorrow(c redis.Conn, t time.Time) error {
+	_, err := c.Do("PING")
+	if err != nil {
+		defer c.Close()
+	}
+	return err
+}
+
+func (r *RedisBackend) Connect() {
 	r.redisPool = redis.Pool{
-		MaxIdle:     1,
-		IdleTimeout: 120 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			return redis.DialTimeout("tcp", r.RedisHost, rwTimeout, rwTimeout, rwTimeout)
-		},
-		// test every connection for now
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			if err != nil {
-				defer c.Close()
-			}
-			return err
-		},
+		MaxIdle:      1,
+		IdleTimeout:  120 * time.Second,
+		Dial:         r.dialTimeout,
+		TestOnBorrow: r.testOnBorrow,
 	}
 }
 
@@ -343,9 +345,7 @@ func (r *RedisBackend) Keys(key string) ([]string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return nil, conn.Err()
 	}
 
@@ -356,9 +356,7 @@ func (r *RedisBackend) Expire(key string, ttl uint64) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return 0, conn.Err()
 	}
 
@@ -369,10 +367,8 @@ func (r *RedisBackend) Ttl(key string) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
-		return 0, conn.Err()
+	if err := conn.Err(); err != nil {
+		return 0, err
 	}
 
 	return redis.Int(conn.Do("TTL", key))
@@ -382,9 +378,7 @@ func (r *RedisBackend) Delete(key string) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return 0, conn.Err()
 	}
 
@@ -395,9 +389,7 @@ func (r *RedisBackend) AddMember(key, value string) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return 0, conn.Err()
 	}
 
@@ -408,9 +400,7 @@ func (r *RedisBackend) RemoveMember(key, value string) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return 0, conn.Err()
 	}
 
@@ -421,9 +411,7 @@ func (r *RedisBackend) Members(key string) ([]string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return nil, conn.Err()
 	}
 
@@ -434,9 +422,7 @@ func (r *RedisBackend) Notify(key, value string) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return 0, conn.Err()
 	}
 
@@ -446,43 +432,25 @@ func (r *RedisBackend) Notify(key, value string) (int, error) {
 func (r *RedisBackend) subscribeChannel(key string, msgs chan string) {
 	var wg sync.WaitGroup
 
-	newPubSubPool := func() redis.Pool {
-		return redis.Pool{
-			MaxIdle:     1,
-			IdleTimeout: 0,
-			Dial: func() (redis.Conn, error) {
-				c, err := redis.Dial("tcp", r.RedisHost)
-				if err != nil {
-					return nil, err
-				}
-				return c, err
-			},
-			// test every connection for now
-			TestOnBorrow: func(c redis.Conn, t time.Time) error {
-				_, err := c.Do("PING")
-				if err != nil {
-					defer c.Close()
-				}
-				return err
-			},
-		}
+	redisPool := redis.Pool{
+		MaxIdle:     1,
+		IdleTimeout: 0,
+		Dial:        r.dialTimeout,
+		// test every connection for now
+		TestOnBorrow: r.testOnBorrow,
 	}
 
-	redisPool := newPubSubPool()
 	for {
-
 		conn := redisPool.Get()
-		defer conn.Close()
-		if conn.Err() != nil {
+		// no defer, doesn't return
+		if err := conn.Err(); err != nil {
 			conn.Close()
-			redisPool.Close()
 			log.Printf("ERROR: %v\n", conn.Err())
 			time.Sleep(5 * time.Second)
-			redisPool = newPubSubPool()
 			continue
 		}
 
-		wg.Add(2)
+		wg.Add(1)
 		psc := redis.PubSubConn{Conn: conn}
 		go func() {
 			defer wg.Done()
@@ -493,19 +461,20 @@ func (r *RedisBackend) subscribeChannel(key string, msgs chan string) {
 					msgs <- msg
 				case error:
 					psc.Close()
-					redisPool.Close()
 					log.Printf("ERROR: %v\n", n)
 					return
 				}
 			}
 		}()
 
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			psc.Subscribe(key)
 			log.Printf("Monitoring for config changes on channel: %s\n", key)
 		}()
 		wg.Wait()
+		conn.Close()
 	}
 }
 
@@ -519,9 +488,7 @@ func (r *RedisBackend) Set(key, field string, value string) (string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return "", conn.Err()
 	}
 
@@ -532,9 +499,7 @@ func (r *RedisBackend) Get(key, field string) (string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return "", conn.Err()
 	}
 
@@ -550,9 +515,7 @@ func (r *RedisBackend) GetAll(key string) (map[string]string, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return nil, conn.Err()
 	}
 
@@ -575,9 +538,7 @@ func (r *RedisBackend) SetMulti(key string, values map[string]string) (string, e
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return "", conn.Err()
 	}
 
@@ -589,9 +550,7 @@ func (r *RedisBackend) DeleteMulti(key string, fields ...string) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 
-	if conn.Err() != nil {
-		conn.Close()
-		r.Reconnect()
+	if err := conn.Err(); err != nil {
 		return 0, conn.Err()
 	}
 
