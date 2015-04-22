@@ -476,19 +476,6 @@ func main() {
 		ensureEnv()
 		ensurePool()
 
-		/* //FIXME: Temp fix for #179
-		hosts, err := configStore.ListHosts(env, pool)
-		if err != nil {
-			log.Fatalf("ERROR: %s", err)
-		}
-
-		for _, hi := range hosts {
-			if hi.HostIP == hostIP {
-				log.Fatalf("ERROR: agent already running on this host")
-			}
-		}
-		*/
-
 	case "app":
 		appFs := flag.NewFlagSet("app", flag.ExitOnError)
 		appFs.Usage = func() {
