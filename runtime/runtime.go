@@ -625,7 +625,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 	// Existing container is running or stopped.  If the image has changed, stop
 	// and re-create it.
 	if container != nil && container.Image != image.ID {
-		if container.State.Running {
+		if container.State.Running || container.State.Restarting || container.State.Paused {
 			log.Printf("Stopping %s version %s running as %s", appCfg.Name, appCfg.Version(), container.ID[0:12])
 			err := s.ensureDockerClient().StopContainer(container.ID, 10)
 			if err != nil {
@@ -680,6 +680,10 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 
 	config := &docker.HostConfig{
 		PublishAllPorts: true,
+		RestartPolicy: docker.RestartPolicy{
+			Name:              "on-failure",
+			MaximumRetryCount: 16,
+		},
 	}
 
 	if s.dns != "" {
@@ -687,23 +691,10 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg *config.AppConfig) (*doc
 	}
 	err = s.ensureDockerClient().StartContainer(container.ID, config)
 
-	if err != nil {
-		return container, err
-	}
-
-	startedContainer, err := s.ensureDockerClient().InspectContainer(container.ID)
-	for i := 0; i < 5; i++ {
-
-		startedContainer, err = s.ensureDockerClient().InspectContainer(container.ID)
-		if !startedContainer.State.Running {
-			return nil, errors.New("Container stopped unexpectedly")
-		}
-		time.Sleep(1 * time.Second)
-	}
-	return startedContainer, err
-
+	return container, err
 }
 
+// NOTE: UNUSED
 func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg *config.AppConfig) (bool, *docker.Container, error) {
 
 	containers, err := s.ManagedContainers()
@@ -858,6 +849,8 @@ func (s *ServiceRuntime) UnRegisterAll(env, pool, hostIP string) ([]*docker.Cont
 	return removed, nil
 }
 
+// RegisterEvents monitors the docker daemon for events, and returns those
+// that require registration action over the listener chan.
 func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan ContainerEvent) error {
 	go func() {
 		c := make(chan *docker.APIEvents)
@@ -914,6 +907,11 @@ func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan 
 							continue
 						}
 
+						// if a container is restarting, don't continue re-registering the app
+						if container.State.Restarting {
+							continue
+						}
+
 						listener <- ContainerEvent{
 							Status:              e.Status,
 							Container:           container,
@@ -945,7 +943,7 @@ func (s *ServiceRuntime) EnvFor(container *docker.Container) map[string]string {
 func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 	apps := []*docker.Container{}
 	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
-		All: false,
+		All: true,
 	})
 	if err != nil {
 		return apps, err
@@ -958,7 +956,7 @@ func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 			continue
 		}
 		name := s.EnvFor(container)["GALAXY_APP"]
-		if name != "" {
+		if name != "" && (container.State.Running || container.State.Restarting) {
 			apps = append(apps, container)
 		}
 	}
