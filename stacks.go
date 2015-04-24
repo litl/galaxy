@@ -77,7 +77,8 @@ func getBase(c *cli.Context) string {
 }
 
 func promptValue(prompt, dflt string) string {
-	if !tty {
+	term := os.Getenv("TERM")
+	if term == "" || term == "dumb" {
 		return dflt
 	}
 

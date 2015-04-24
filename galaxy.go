@@ -10,17 +10,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BurntSushi/toml"
-	"github.com/codegangsta/cli"
+	"github.com/litl/galaxy/commander"
 	gconfig "github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
-	"github.com/ryanuber/columnize"
 
-	"github.com/dotcloud/docker/pkg/term"
-	"github.com/litl/galaxy/commander"
+	"github.com/BurntSushi/toml"
+	"github.com/codegangsta/cli"
+	"github.com/ryanuber/columnize"
 )
 
 var (
@@ -30,17 +29,10 @@ var (
 
 	initOnce     sync.Once
 	buildVersion string
-
-	// make certain we have a tty for interactive prompts
-	tty bool
 )
 
 var config struct {
 	Host string `toml:"host"`
-}
-
-func init() {
-	tty = term.IsTerminal(os.Stdin.Fd())
 }
 
 // ensure the registry as a redis host, but only once
