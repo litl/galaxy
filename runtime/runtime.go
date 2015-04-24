@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	auth "github.com/dotcloud/docker/registry"
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
@@ -23,7 +22,6 @@ var blacklistedContainerId = make(map[string]bool)
 
 type ServiceRuntime struct {
 	dockerClient    *docker.Client
-	authConfig      *auth.ConfigFile
 	dns             string
 	serviceRegistry *registry.ServiceRegistry
 	dockerIP        string
@@ -753,31 +751,16 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 		Tag:          tag,
 		OutputStream: log.DefaultLogger}
 
-	dockerAuth := docker.AuthConfiguration{}
-	if registry != "" && s.authConfig == nil {
-
-		pullOpts.Repository = registry + "/" + repository
-		pullOpts.Registry = registry
-		pullOpts.Tag = tag
-
-		homeDir := utils.HomeDir()
-		if homeDir == "" {
-			return nil, errors.New("ERROR: Unable to determine current home dir. Set $HOME")
-		}
-
-		// use ~/.dockercfg
-		authConfig, err := auth.LoadConfig(homeDir)
-		if err != nil {
-			panic(err)
-		}
-
-		pullOpts.Registry = registry
-		authCreds := authConfig.ResolveAuthConfig(registry)
-
-		dockerAuth.Username = authCreds.Username
-		dockerAuth.Password = authCreds.Password
-		dockerAuth.Email = authCreds.Email
+	auths, err := docker.NewAuthConfigurationsFromDockerCfg()
+	if err != nil {
+		panic(err)
 	}
+
+	dockerAuth := auths.Configs[registry]
+
+	pullOpts.Repository = registry + "/" + repository
+	pullOpts.Registry = registry
+	pullOpts.Tag = tag
 
 	retries := 0
 	for {
