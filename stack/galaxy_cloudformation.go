@@ -318,6 +318,15 @@ var galaxyTmpl = `{{ $stackName := .Name }}{
                                     "Effect": "Allow",
                                     "NotAction": "iam:*",
                                     "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "iam:ListServerCertificates",
+                                        "iam:ListInstanceProfiles",
+                                        "iam:PassRole"
+                                    ],
+                                    "Resource": "*"
                                 }
                             ],
                             "Version": "2012-10-17"
