@@ -435,7 +435,9 @@ func (r *RedisBackend) subscribeChannel(key string, msgs chan string) {
 	redisPool := redis.Pool{
 		MaxIdle:     1,
 		IdleTimeout: 0,
-		Dial:        r.dialTimeout,
+		Dial: func() (redis.Conn, error) {
+			return redis.DialTimeout("tcp", r.RedisHost, time.Second, 0, 0)
+		},
 		// test every connection for now
 		TestOnBorrow: r.testOnBorrow,
 	}
