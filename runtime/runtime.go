@@ -146,10 +146,23 @@ func dockerBridgeIp() (string, error) {
 func (s *ServiceRuntime) ensureDockerClient() *docker.Client {
 	if s.dockerClient == nil {
 		endpoint := GetEndpoint()
-		client, err := docker.NewClient(endpoint)
+
+		var client *docker.Client
+		var err error
+
+		if certPath := os.Getenv("DOCKER_CERT_PATH"); certPath != "" {
+			cert := certPath + "/cert.pem"
+			key := certPath + "/key.pem"
+			ca := certPath + "/ca.pem"
+			client, err = docker.NewTLSClient(endpoint, cert, key, ca)
+		} else {
+			client, err = docker.NewClient(endpoint)
+		}
+
 		if err != nil {
 			log.Fatalf("ERROR: Unable to connect to docker: %s: %s", err, endpoint)
 		}
+
 		client.HTTPClient.Timeout = 60 * time.Second
 		s.dockerClient = client
 
