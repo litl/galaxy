@@ -363,7 +363,7 @@ func (r *RedisBackend) Expire(key string, ttl uint64) (int, error) {
 	return redis.Int(conn.Do("EXPIRE", key, ttl))
 }
 
-func (r *RedisBackend) Ttl(key string) (int, error) {
+func (r *RedisBackend) TTL(key string) (int, error) {
 	conn := r.redisPool.Get()
 	defer conn.Close()
 

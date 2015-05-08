@@ -6,7 +6,7 @@ type RegistryBackend interface {
 	Keys(key string) ([]string, error)
 	Delete(key string) (int, error)
 	Expire(key string, ttl uint64) (int, error)
-	Ttl(key string) (int, error)
+	TTL(key string) (int, error)
 
 	Connect()
 	Reconnect()

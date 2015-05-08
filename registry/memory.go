@@ -56,7 +56,7 @@ func (r *MemoryBackend) Expire(key string, ttl uint64) (int, error) {
 	return 0, nil
 }
 
-func (r *MemoryBackend) Ttl(key string) (int, error) {
+func (r *MemoryBackend) TTL(key string) (int, error) {
 	return 0, nil
 }
 
