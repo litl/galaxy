@@ -260,7 +260,7 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool, hostIP string, conta
 			return nil, err
 		}
 
-		expires, err := r.backend.Ttl(regPath)
+		expires, err := r.backend.TTL(regPath)
 		if err != nil {
 			return nil, err
 		}
