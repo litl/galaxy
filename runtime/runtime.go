@@ -771,7 +771,11 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 
 	dockerAuth := auths.Configs[registry]
 
-	pullOpts.Repository = registry + "/" + repository
+	if registry != "" {
+		pullOpts.Repository = registry + "/" + repository
+	} else {
+		pullOpts.Repository = repository
+	}
 	pullOpts.Registry = registry
 	pullOpts.Tag = tag
 

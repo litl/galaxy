@@ -33,6 +33,11 @@ There are two sub-projects: commander and shuttle.
 
 ## Getting Started
 
+(These assume that Docker is running on your local host.  If you're
+running it remotely, or via something like boot2docker, you'll need to
+adjust the `GALAXY_REGISTRY_URL` below and provide the `-host-ip`
+argument to `commander agent`.)
+
 To setup a single host environment, run the following:
 
 ```
@@ -58,7 +63,7 @@ $ commander app:deploy nginx nginx
 Finally, we need to assign this app to our default `web` pool:
 
 ```
-$ commander app:assign nginx web
+$ commander app:assign nginx
 ```
 
 You should see nginx started by the `commander agent` process.
@@ -73,10 +78,14 @@ Start shuttle:
 $ shuttle -http 0.0.0.0:8080
 ```
 
-Start commander with a shuttle addr:
+This starts a shuttle with an admin server on 127.0.0.1:9090 (the
+default) and an HTTP server on 0.0.0.0:8080.
+
+Next, stop your old commander agent and restart it, pointing to the
+shuttle admin address:
 
 ```
-$ commander -shuttl-addr 127.0.0.1:9090 agent
+$ commander -shuttle-addr 127.0.0.1:9090 agent
 ```
 
 Assign a service port to nginx:
@@ -92,7 +101,7 @@ $ curl localhost:8888
 
 Add a virtual host:
 ```
-$ commander runtim:set -vhost my.domain nginx
+$ commander runtime:set -vhost my.domain nginx
 $ curl -v my.domain:8080
 ```
 
