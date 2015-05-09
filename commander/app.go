@@ -113,6 +113,7 @@ func AppDelete(configStore *config.Store, app, env string) error {
 }
 
 func AppDeploy(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime, app, env, version string) error {
+	log.Printf("Pulling image %s...", version)
 
 	image, err := serviceRuntime.PullImage(version, "")
 	if image == nil || err != nil {
