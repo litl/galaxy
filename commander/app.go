@@ -39,7 +39,7 @@ func AppList(configStore *config.Store, env string) error {
 		}
 
 		for _, app := range appList {
-			name := app.Name
+			name := app.Name()
 			versionDeployed := app.Version()
 			versionID := app.VersionID()
 			if len(versionID) > 12 {
@@ -52,7 +52,7 @@ func AppList(configStore *config.Store, env string) error {
 				if err != nil {
 					return err
 				}
-				if utils.StringInSlice(app.Name, aa) {
+				if utils.StringInSlice(app.Name(), aa) {
 					assignments = append(assignments, pool)
 				}
 			}

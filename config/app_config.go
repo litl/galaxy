@@ -8,19 +8,44 @@ import (
 	"github.com/litl/galaxy/utils"
 )
 
+// Interface to wrap AppConfig, so that it can be swapped out with a different
+// Backend. This should be temporary as many of these methods won't be useful.
+type App interface {
+	Name() string
+	Env() map[string]string
+	EnvSet(key, value string)
+	EnvGet(key string) string
+	Version() string
+	SetVersion(version string)
+	VersionID() string
+	SetVersionID(versionID string)
+	Ports() map[string]string
+	ClearPorts()
+	AddPort(port, portType string)
+	ID() int64
+	ContainerName() string
+	SetProcesses(pool string, count int)
+	GetProcesses(pool string) int
+	RuntimePools() []string
+	SetMemory(pool string, mem string)
+	GetMemory(pool string) string
+	SetCPUShares(pool string, cpu string)
+	GetCPUShares(pool string) string
+}
+
 type AppConfig struct {
 	// ID is used for ordering and conflict resolution.
 	// Usualy set to time.Now().UnixNano()
-	Name            string `redis:"name"`
+	name            string `redis:"name"`
 	versionVMap     *utils.VersionedMap
 	environmentVMap *utils.VersionedMap
 	portsVMap       *utils.VersionedMap
 	runtimeVMap     *utils.VersionedMap
 }
 
-func NewAppConfig(app, version string) *AppConfig {
+func NewAppConfig(app, version string) App {
 	svcCfg := &AppConfig{
-		Name:            app,
+		name:            app,
 		versionVMap:     utils.NewVersionedMap(),
 		environmentVMap: utils.NewVersionedMap(),
 		portsVMap:       utils.NewVersionedMap(),
@@ -31,14 +56,18 @@ func NewAppConfig(app, version string) *AppConfig {
 	return svcCfg
 }
 
-func NewAppConfigWithEnv(app, version string, env map[string]string) *AppConfig {
-	svcCfg := NewAppConfig(app, version)
+func NewAppConfigWithEnv(app, version string, env map[string]string) App {
+	svcCfg := NewAppConfig(app, version).(*AppConfig)
 
 	for k, v := range env {
 		svcCfg.environmentVMap.Set(k, v)
 	}
 
 	return svcCfg
+}
+
+func (s *AppConfig) Name() string {
+	return s.name
 }
 
 // Env returns a map representing the runtime environment for the container.
@@ -115,7 +144,7 @@ func (s *AppConfig) ID() int64 {
 }
 
 func (s *AppConfig) ContainerName() string {
-	return s.Name + "_" + strconv.FormatInt(s.ID(), 10)
+	return s.name + "_" + strconv.FormatInt(s.ID(), 10)
 }
 
 func (s *AppConfig) nextID() int64 {
