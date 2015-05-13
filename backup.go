@@ -48,7 +48,7 @@ func appBackup(c *cli.Context) {
 		}
 
 		for _, app := range appList {
-			toBackup = append(toBackup, app.Name)
+			toBackup = append(toBackup, app.Name())
 		}
 	}
 
@@ -189,7 +189,7 @@ func appRestore(c *cli.Context) {
 func restoreApp(bkup *appCfg, env string) error {
 	fmt.Println("restoring", bkup.Name)
 
-	var svcCfg *gconfig.AppConfig
+	var svcCfg gconfig.App
 
 	exists, err := configStore.AppExists(bkup.Name, env)
 	if err != nil {

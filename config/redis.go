@@ -30,7 +30,7 @@ func (r *RedisBackend) CreateApp(app, env string) (bool, error) {
 	return r.UpdateApp(emptyConfig, env)
 }
 
-func (r *RedisBackend) ListApps(env string) ([]*AppConfig, error) {
+func (r *RedisBackend) ListApps(env string) ([]App, error) {
 	// TODO: convert to scan
 	apps, err := r.Keys(path.Join(env, "*", "version"))
 	if err != nil {
@@ -38,7 +38,7 @@ func (r *RedisBackend) ListApps(env string) ([]*AppConfig, error) {
 	}
 
 	// TODO: is it OK to error out early?
-	var appList []*AppConfig
+	var appList []App
 	for _, app := range apps {
 		parts := strings.Split(app, "/")
 
@@ -63,8 +63,8 @@ func (r *RedisBackend) ListApps(env string) ([]*AppConfig, error) {
 	return appList, nil
 }
 
-func (r *RedisBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
-
+func (r *RedisBackend) UpdateApp(cfg App, env string) (bool, error) {
+	svcCfg := cfg.(*AppConfig)
 	for k, v := range svcCfg.Env() {
 		if svcCfg.environmentVMap.Get(k) != v {
 			svcCfg.environmentVMap.Set(k, v)
@@ -78,28 +78,28 @@ func (r *RedisBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 	}
 
 	//TODO: user MULTI/EXEC
-	err := r.SaveVMap(path.Join(env, svcCfg.Name, "environment"),
+	err := r.SaveVMap(path.Join(env, svcCfg.name, "environment"),
 		svcCfg.environmentVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.SaveVMap(path.Join(env, svcCfg.Name, "version"),
+	err = r.SaveVMap(path.Join(env, svcCfg.name, "version"),
 		svcCfg.versionVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.SaveVMap(path.Join(env, svcCfg.Name, "ports"),
+	err = r.SaveVMap(path.Join(env, svcCfg.name, "ports"),
 		svcCfg.portsVMap)
 
 	if err != nil {
 		return false, err
 	}
 
-	err = r.SaveVMap(path.Join(env, svcCfg.Name, "runtime"),
+	err = r.SaveVMap(path.Join(env, svcCfg.name, "runtime"),
 		svcCfg.runtimeVMap)
 
 	if err != nil {
@@ -108,8 +108,8 @@ func (r *RedisBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
 	return true, nil
 }
 
-func (r *RedisBackend) GetApp(app, env string) (*AppConfig, error) {
-	svcCfg := NewAppConfig(path.Base(app), "")
+func (r *RedisBackend) GetApp(app, env string) (App, error) {
+	svcCfg := NewAppConfig(path.Base(app), "").(*AppConfig)
 
 	err := r.LoadVMap(path.Join(env, app, "environment"), svcCfg.environmentVMap)
 	if err != nil {
@@ -132,9 +132,9 @@ func (r *RedisBackend) GetApp(app, env string) (*AppConfig, error) {
 	return svcCfg, nil
 }
 
-func (r *RedisBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
+func (r *RedisBackend) DeleteApp(svcCfg App, env string) (bool, error) {
 	deletedOne := false
-	deleted, err := r.Delete(path.Join(env, svcCfg.Name))
+	deleted, err := r.Delete(path.Join(env, svcCfg.Name()))
 	if err != nil {
 		return false, err
 	}
@@ -142,7 +142,7 @@ func (r *RedisBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
 	deletedOne = deletedOne || deleted == 1
 
 	for _, k := range []string{"environment", "version", "ports", "runtime"} {
-		deleted, err = r.Delete(path.Join(env, svcCfg.Name, k))
+		deleted, err = r.Delete(path.Join(env, svcCfg.Name(), k))
 		if err != nil {
 			return false, err
 		}

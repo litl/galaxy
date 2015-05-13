@@ -14,14 +14,14 @@ type Value struct {
 
 type MemoryBackend struct {
 	maps        map[string]map[string]string
-	apps        map[string][]*AppConfig // env -> []app
+	apps        map[string][]App // env -> []app
 	assignments map[string][]string
 
 	AppExistsFunc       func(app, env string) (bool, error)
 	CreateAppFunc       func(app, env string) (bool, error)
-	GetAppFunc          func(app, env string) (*AppConfig, error)
-	UpdateAppFunc       func(svcCfg *AppConfig, env string) (bool, error)
-	DeleteAppFunc       func(svcCfg *AppConfig, env string) (bool, error)
+	GetAppFunc          func(app, env string) (App, error)
+	UpdateAppFunc       func(svcCfg App, env string) (bool, error)
+	DeleteAppFunc       func(svcCfg App, env string) (bool, error)
 	ListAppFunc         func(env string) ([]AppConfig, error)
 	AssignAppFunc       func(app, env, pool string) (bool, error)
 	UnassignAppFunc     func(app, env, pool string) (bool, error)
@@ -43,7 +43,7 @@ type MemoryBackend struct {
 func NewMemoryBackend() *MemoryBackend {
 	return &MemoryBackend{
 		maps:        make(map[string]map[string]string),
-		apps:        make(map[string][]*AppConfig),
+		apps:        make(map[string][]App),
 		assignments: make(map[string][]string),
 	}
 }
@@ -54,7 +54,7 @@ func (r *MemoryBackend) AppExists(app, env string) (bool, error) {
 	}
 
 	for _, s := range r.apps[env] {
-		if s.Name == app {
+		if s.Name() == app {
 			return true, nil
 		}
 	}
@@ -75,38 +75,38 @@ func (r *MemoryBackend) CreateApp(app, env string) (bool, error) {
 	return false, nil
 }
 
-func (r *MemoryBackend) ListApps(env string) ([]*AppConfig, error) {
+func (r *MemoryBackend) ListApps(env string) ([]App, error) {
 	return r.apps[env], nil
 }
 
-func (r *MemoryBackend) GetApp(app, env string) (*AppConfig, error) {
+func (r *MemoryBackend) GetApp(app, env string) (App, error) {
 	if r.GetAppFunc != nil {
 		return r.GetAppFunc(app, env)
 	}
 
 	for _, cfg := range r.apps[env] {
-		if cfg.Name == app {
+		if cfg.Name() == app {
 			return cfg, nil
 		}
 	}
 	return nil, nil
 }
 
-func (r *MemoryBackend) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
+func (r *MemoryBackend) UpdateApp(svcCfg App, env string) (bool, error) {
 	if r.UpdateAppFunc != nil {
 		return r.UpdateAppFunc(svcCfg, env)
 	}
 	return false, nil
 }
 
-func (r *MemoryBackend) DeleteApp(svcCfg *AppConfig, env string) (bool, error) {
+func (r *MemoryBackend) DeleteApp(svcCfg App, env string) (bool, error) {
 	if r.DeleteAppFunc != nil {
 		return r.DeleteAppFunc(svcCfg, env)
 	}
 
-	cfgs := []*AppConfig{}
+	cfgs := []App{}
 	for _, cfg := range r.apps[env] {
-		if cfg.Name != svcCfg.Name {
+		if cfg.Name() != svcCfg.Name() {
 			cfgs = append(cfgs, cfg)
 		}
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 type ConfigChange struct {
-	AppConfig *AppConfig
+	AppConfig App
 	Restart   bool
 	Error     error
 }
@@ -32,7 +32,7 @@ func (r *Store) checkForChanges(env string) {
 		}
 
 		for _, config := range appCfg {
-			lastVersion[config.Name] = config.ID()
+			lastVersion[config.Name()] = config.ID()
 		}
 		break
 
@@ -49,10 +49,10 @@ func (r *Store) checkForChanges(env string) {
 		}
 		for _, changedConfig := range appCfg {
 			changeCopy := changedConfig
-			if changedConfig.ID() != lastVersion[changedConfig.Name] {
+			if changedConfig.ID() != lastVersion[changedConfig.Name()] {
 				log.Printf("%s changed from %d to %d", changedConfig.Name,
-					lastVersion[changedConfig.Name], changedConfig.ID())
-				lastVersion[changedConfig.Name] = changedConfig.ID()
+					lastVersion[changedConfig.Name()], changedConfig.ID())
+				lastVersion[changedConfig.Name()] = changedConfig.ID()
 				restartChan <- &ConfigChange{
 					AppConfig: changeCopy,
 				}

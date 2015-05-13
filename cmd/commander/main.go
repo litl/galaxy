@@ -77,7 +77,7 @@ func initOrDie() {
 			log.Fatalf("ERROR: Could not retrieve service config for /%s/%s: %s", env, pool, err)
 		}
 
-		workerChans[appCfg.Name] = make(chan string)
+		workerChans[appCfg.Name()] = make(chan string)
 	}
 
 	signalsChan = make(chan os.Signal, 1)
@@ -108,9 +108,9 @@ func ensurePool() {
 	}
 }
 
-func pullImageAsync(appCfg config.AppConfig, errChan chan error) {
+func pullImageAsync(appCfg config.App, errChan chan error) {
 	// err logged via pullImage
-	_, err := pullImage(&appCfg)
+	_, err := pullImage(appCfg)
 	if err != nil {
 		errChan <- err
 		return
@@ -118,14 +118,14 @@ func pullImageAsync(appCfg config.AppConfig, errChan chan error) {
 	errChan <- nil
 }
 
-func pullImage(appCfg *config.AppConfig) (*docker.Image, error) {
+func pullImage(appCfg config.App) (*docker.Image, error) {
 
 	image, err := serviceRuntime.InspectImage(appCfg.Version())
 	if image != nil && image.ID == appCfg.VersionID() || appCfg.VersionID() == "" {
 		return image, nil
 	}
 
-	log.Printf("Pulling %s version %s\n", appCfg.Name, appCfg.Version())
+	log.Printf("Pulling %s version %s\n", appCfg.Name(), appCfg.Version())
 	image, err = serviceRuntime.PullImage(appCfg.Version(),
 		appCfg.VersionID())
 	if image == nil || err != nil {
@@ -145,15 +145,15 @@ func pullImage(appCfg *config.AppConfig) (*docker.Image, error) {
 	return image, nil
 }
 
-func startService(appCfg *config.AppConfig, logStatus bool) {
+func startService(appCfg config.App, logStatus bool) {
 
-	desired, err := commander.Balanced(configStore, hostIP, appCfg.Name, env, pool)
+	desired, err := commander.Balanced(configStore, hostIP, appCfg.Name(), env, pool)
 	if err != nil {
 		log.Errorf("ERROR: Could not determine instance count: %s", err)
 		return
 	}
 
-	running, err := serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
+	running, err := serviceRuntime.InstanceCount(appCfg.Name(), strconv.FormatInt(appCfg.ID(), 10))
 	if err != nil {
 		log.Errorf("ERROR: Could not determine running instance count: %s", err)
 		return
@@ -166,7 +166,7 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 			return
 		}
 
-		log.Printf("Started %s version %s as %s\n", appCfg.Name, appCfg.Version(), container.ID[0:12])
+		log.Printf("Started %s version %s as %s\n", appCfg.Name(), appCfg.Version(), container.ID[0:12])
 
 		err = serviceRuntime.StopOldVersion(appCfg, 1)
 		if err != nil {
@@ -174,7 +174,7 @@ func startService(appCfg *config.AppConfig, logStatus bool) {
 		}
 	}
 
-	running, err = serviceRuntime.InstanceCount(appCfg.Name, strconv.FormatInt(appCfg.ID(), 10))
+	running, err = serviceRuntime.InstanceCount(appCfg.Name(), strconv.FormatInt(appCfg.ID(), 10))
 	if err != nil {
 		log.Errorf("ERROR: Could not determine running instance count: %s", err)
 		return
@@ -364,9 +364,9 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 				continue
 			}
 
-			assigned, err := appAssigned(changedConfig.AppConfig.Name)
+			assigned, err := appAssigned(changedConfig.AppConfig.Name())
 			if err != nil {
-				log.Errorf("ERROR: Error retrieving service config for %s: %s", changedConfig.AppConfig.Name, err)
+				log.Errorf("ERROR: Error retrieving service config for %s: %s", changedConfig.AppConfig.Name(), err)
 				if !loop {
 					return
 				}
@@ -377,9 +377,9 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 				continue
 			}
 
-			ch, ok := workerChans[changedConfig.AppConfig.Name]
+			ch, ok := workerChans[changedConfig.AppConfig.Name()]
 			if !ok {
-				name := changedConfig.AppConfig.Name
+				name := changedConfig.AppConfig.Name()
 				ch := make(chan string)
 				workerChans[name] = ch
 				wg.Add(1)
@@ -391,7 +391,7 @@ func monitorService(changedConfigs chan *config.ConfigChange) {
 			}
 
 			if changedConfig.Restart {
-				log.Printf("Restarting %s", changedConfig.AppConfig.Name)
+				log.Printf("Restarting %s", changedConfig.AppConfig.Name())
 				ch <- "restart"
 			} else {
 				ch <- "deploy"
@@ -672,7 +672,7 @@ func main() {
 				log.Fatalf("ERROR: Unable to list apps: %s", err)
 			}
 			for _, ac := range acs {
-				apps = append(apps, ac.Name)
+				apps = append(apps, ac.Name())
 			}
 		}
 		break

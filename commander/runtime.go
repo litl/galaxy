@@ -41,7 +41,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 
 		for _, appCfg := range appList {
 
-			if app != "" && appCfg.Name != app {
+			if app != "" && appCfg.Name() != app {
 				continue
 			}
 
@@ -51,7 +51,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 					continue
 				}
 
-				name := appCfg.Name
+				name := appCfg.Name()
 				ps := appCfg.GetProcesses(p)
 				mem := appCfg.GetMemory(p)
 

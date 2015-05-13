@@ -201,7 +201,7 @@ func (r *Store) DeleteApp(app, env string) (bool, error) {
 	return true, nil
 }
 
-func (r *Store) ListApps(env string) ([]*AppConfig, error) {
+func (r *Store) ListApps(env string) ([]App, error) {
 	return r.Backend.ListApps(env)
 }
 
@@ -209,7 +209,7 @@ func (r *Store) ListEnvs() ([]string, error) {
 	return r.Backend.ListEnvs()
 }
 
-func (r *Store) GetApp(app, env string) (*AppConfig, error) {
+func (r *Store) GetApp(app, env string) (App, error) {
 	exists, err := r.AppExists(app, env)
 	if err != nil {
 		return nil, err
@@ -222,7 +222,7 @@ func (r *Store) GetApp(app, env string) (*AppConfig, error) {
 	return r.Backend.GetApp(app, env)
 }
 
-func (r *Store) UpdateApp(svcCfg *AppConfig, env string) (bool, error) {
+func (r *Store) UpdateApp(svcCfg App, env string) (bool, error) {
 	updated, err := r.Backend.UpdateApp(svcCfg, env)
 	if !updated || err != nil {
 		return updated, err
