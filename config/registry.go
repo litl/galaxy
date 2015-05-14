@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"path"
 	"sort"
 	"strings"
@@ -11,46 +10,17 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/utils"
 )
 
-type ServiceRegistry struct {
-	backend      RegistryBackend
-	Hostname     string
-	TTL          uint64
-	OutputBuffer *utils.OutputBuffer
-	pollCh       chan bool
-	registryURL  string
-}
-
-func NewServiceRegistry(ttl uint64) *ServiceRegistry {
-	return &ServiceRegistry{
+func NewServiceRegistry(ttl uint64) *Store {
+	return &Store{
 		TTL:    ttl,
 		pollCh: make(chan bool),
 	}
 
 }
 
-// Build the Redis Pool
-func (r *ServiceRegistry) Connect(registryURL string) {
-
-	r.registryURL = registryURL
-	u, err := url.Parse(registryURL)
-	if err != nil {
-		log.Fatalf("ERROR: Unable to parse %s", err)
-	}
-
-	if strings.ToLower(u.Scheme) == "redis" {
-		r.backend = &RegRedisBackend{
-			RedisHost: u.Host,
-		}
-		r.backend.Connect()
-	} else {
-		log.Fatalf("ERROR: Unsupported registry backend: %s", u)
-	}
-}
-
-func (r *ServiceRegistry) newServiceRegistration(container *docker.Container, hostIP, galaxyPort string) *ServiceRegistration {
+func (r *Store) newServiceRegistration(container *docker.Container, hostIP, galaxyPort string) *ServiceRegistration {
 	//FIXME: We're using the first found port and assuming it's tcp.
 	//How should we handle a service that exposes multiple ports
 	//as well as tcp vs udp ports.
@@ -135,7 +105,7 @@ func (s *ServiceRegistration) InternalAddr() string {
 	return s.addr(s.InternalIP, s.InternalPort)
 }
 
-func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
+func (r *Store) RegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
 	environment := r.EnvFor(container)
 
 	name := environment["GALAXY_APP"]
@@ -178,12 +148,12 @@ func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *d
 	}
 
 	// TODO: use a compare-and-swap SCRIPT
-	_, err = r.backend.Set(registrationPath, "location", string(jsonReg))
+	_, err = r.Backend.Set(registrationPath, "location", string(jsonReg))
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = r.backend.Expire(registrationPath, r.TTL)
+	_, err = r.Backend.Expire(registrationPath, r.TTL)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +162,7 @@ func (r *ServiceRegistry) RegisterService(env, pool, hostIP string, container *d
 	return serviceRegistration, nil
 }
 
-func (r *ServiceRegistry) UnRegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
+func (r *Store) UnRegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
 
 	environment := r.EnvFor(container)
 
@@ -212,7 +182,7 @@ func (r *ServiceRegistry) UnRegisterService(env, pool, hostIP string, container 
 		return nil, nil
 	}
 
-	_, err = r.backend.Delete(registrationPath)
+	_, err = r.Backend.Delete(registrationPath)
 	if err != nil {
 		return registration, err
 	}
@@ -220,7 +190,7 @@ func (r *ServiceRegistry) UnRegisterService(env, pool, hostIP string, container 
 	return registration, nil
 }
 
-func (r *ServiceRegistry) GetServiceRegistration(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
+func (r *Store) GetServiceRegistration(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
 
 	environment := r.EnvFor(container)
 
@@ -235,7 +205,7 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool, hostIP string, conta
 		Path: regPath,
 	}
 
-	location, err := r.backend.Get(regPath, "location")
+	location, err := r.Backend.Get(regPath, "location")
 
 	if err != nil {
 		return nil, err
@@ -247,7 +217,7 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool, hostIP string, conta
 			return nil, err
 		}
 
-		expires, err := r.backend.TTL(regPath)
+		expires, err := r.Backend.TTL(regPath)
 		if err != nil {
 			return nil, err
 		}
@@ -258,17 +228,17 @@ func (r *ServiceRegistry) GetServiceRegistration(env, pool, hostIP string, conta
 	return nil, nil
 }
 
-func (r *ServiceRegistry) IsRegistered(env, pool, hostIP string, container *docker.Container) (bool, error) {
+func (r *Store) IsRegistered(env, pool, hostIP string, container *docker.Container) (bool, error) {
 
 	reg, err := r.GetServiceRegistration(env, pool, hostIP, container)
 	return reg != nil, err
 }
 
 // TODO: get all ServiceRegistrations
-func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, error) {
+func (r *Store) ListRegistrations(env string) ([]ServiceRegistration, error) {
 
 	// TODO: convert to scan
-	keys, err := r.backend.Keys(path.Join(env, "*", "hosts", "*", "*", "*"))
+	keys, err := r.Backend.Keys(path.Join(env, "*", "hosts", "*", "*", "*"))
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +246,7 @@ func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, 
 	var regList []ServiceRegistration
 	for _, key := range keys {
 
-		val, err := r.backend.Get(key, "location")
+		val, err := r.Backend.Get(key, "location")
 		if err != nil {
 			log.Warnf("WARN: Unable to get location for %s: %s", key, err)
 			continue
@@ -299,7 +269,7 @@ func (r *ServiceRegistry) ListRegistrations(env string) ([]ServiceRegistration, 
 	return regList, nil
 }
 
-func (s *ServiceRegistry) EnvFor(container *docker.Container) map[string]string {
+func (s *Store) EnvFor(container *docker.Container) map[string]string {
 	env := map[string]string{}
 	for _, item := range container.Config.Env {
 		sep := strings.Index(item, "=")

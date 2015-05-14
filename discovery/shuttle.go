@@ -13,7 +13,7 @@ var (
 	client *shuttle.Client
 )
 
-func registerShuttle(serviceRegistry *config.ServiceRegistry, env, shuttleAddr string) {
+func registerShuttle(serviceRegistry *config.Store, env, shuttleAddr string) {
 	if client == nil {
 		return
 	}
@@ -77,7 +77,7 @@ func registerShuttle(serviceRegistry *config.ServiceRegistry, env, shuttleAddr s
 
 }
 
-func unregisterShuttle(serviceRegistry *config.ServiceRegistry, env, hostIP, shuttleAddr string) {
+func unregisterShuttle(serviceRegistry *config.Store, env, hostIP, shuttleAddr string) {
 
 	if client == nil {
 		return
@@ -131,7 +131,7 @@ func unregisterShuttle(serviceRegistry *config.ServiceRegistry, env, hostIP, shu
 
 }
 
-func pruneShuttleBackends(configStore *config.Store, serviceRegistry *config.ServiceRegistry, env, shuttleAddr string) {
+func pruneShuttleBackends(configStore *config.Store, serviceRegistry *config.Store, env, shuttleAddr string) {
 	if client == nil {
 		return
 	}

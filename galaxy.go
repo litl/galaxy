@@ -23,7 +23,7 @@ import (
 
 var (
 	serviceRuntime  *runtime.ServiceRuntime
-	serviceRegistry *gconfig.ServiceRegistry
+	serviceRegistry *gconfig.Store
 	configStore     *gconfig.Store
 
 	initOnce     sync.Once

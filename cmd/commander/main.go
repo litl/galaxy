@@ -37,7 +37,7 @@ var (
 	runOnce         bool
 	version         bool
 	buildVersion    string
-	serviceRegistry *config.ServiceRegistry
+	serviceRegistry *config.Store
 	configStore     *config.Store
 	serviceRuntime  *runtime.ServiceRuntime
 	workerChans     map[string]chan string

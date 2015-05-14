@@ -22,7 +22,7 @@ var blacklistedContainerId = make(map[string]bool)
 type ServiceRuntime struct {
 	dockerClient    *docker.Client
 	dns             string
-	serviceRegistry *config.ServiceRegistry
+	serviceRegistry *config.Store
 	dockerIP        string
 	hostIP          string
 }
@@ -33,7 +33,7 @@ type ContainerEvent struct {
 	ServiceRegistration *config.ServiceRegistration
 }
 
-func NewServiceRuntime(serviceRegistry *config.ServiceRegistry, dns, hostIP string) *ServiceRuntime {
+func NewServiceRuntime(serviceRegistry *config.Store, dns, hostIP string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)

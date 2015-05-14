@@ -14,7 +14,7 @@ import (
 	shuttle "github.com/litl/shuttle/client"
 )
 
-func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.ServiceRegistry, env, pool, hostIP string) error {
+func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store, env, pool, hostIP string) error {
 
 	containers, err := serviceRuntime.ManagedContainers()
 	if err != nil {
@@ -66,14 +66,14 @@ func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Serv
 	return nil
 }
 
-func Unregister(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.ServiceRegistry,
+func Unregister(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store,
 	env, pool, hostIP, shuttleAddr string) {
 	unregisterShuttle(serviceRegistry, env, hostIP, shuttleAddr)
 	serviceRuntime.UnRegisterAll(env, pool, hostIP)
 	os.Exit(0)
 }
 
-func RegisterAll(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.ServiceRegistry, env, pool, hostIP, shuttleAddr string, loggedOnce bool) {
+func RegisterAll(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store, env, pool, hostIP, shuttleAddr string, loggedOnce bool) {
 	columns := []string{"CONTAINER ID | IMAGE | EXTERNAL | INTERNAL | CREATED | EXPIRES"}
 
 	registrations, err := serviceRuntime.RegisterAll(env, pool, hostIP)
@@ -107,7 +107,7 @@ func RegisterAll(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config
 	registerShuttle(serviceRegistry, env, shuttleAddr)
 }
 
-func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.ServiceRegistry, configStore *config.Store,
+func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store, configStore *config.Store,
 	env, pool, hostIP, shuttleAddr string) {
 
 	if shuttleAddr != "" {
