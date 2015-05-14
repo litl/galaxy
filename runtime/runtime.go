@@ -14,7 +14,6 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -23,7 +22,7 @@ var blacklistedContainerId = make(map[string]bool)
 type ServiceRuntime struct {
 	dockerClient    *docker.Client
 	dns             string
-	serviceRegistry *registry.ServiceRegistry
+	serviceRegistry *config.ServiceRegistry
 	dockerIP        string
 	hostIP          string
 }
@@ -31,10 +30,10 @@ type ServiceRuntime struct {
 type ContainerEvent struct {
 	Status              string
 	Container           *docker.Container
-	ServiceRegistration *registry.ServiceRegistration
+	ServiceRegistration *config.ServiceRegistration
 }
 
-func NewServiceRuntime(serviceRegistry *registry.ServiceRegistry, dns, hostIP string) *ServiceRuntime {
+func NewServiceRuntime(serviceRegistry *config.ServiceRegistry, dns, hostIP string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
@@ -803,13 +802,13 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 
 }
 
-func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*registry.ServiceRegistration, error) {
+func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.ServiceRegistration, error) {
 	containers, err := s.ManagedContainers()
 	if err != nil {
 		return nil, err
 	}
 
-	registrations := []*registry.ServiceRegistration{}
+	registrations := []*config.ServiceRegistration{}
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]

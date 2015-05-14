@@ -1,16 +1,11 @@
-package registry
+package config
 
 import (
 	"regexp"
 	"strings"
 )
 
-type Value struct {
-	value interface{}
-	ttl   int
-}
-
-type MemoryBackend struct {
+type RegMemBackend struct {
 	maps map[string]map[string]string
 
 	MembersFunc      func(key string) ([]string, error)
@@ -21,19 +16,19 @@ type MemoryBackend struct {
 	SetMultiFunc     func(key string, values map[string]string) (string, error)
 }
 
-func NewMemoryBackend() *MemoryBackend {
-	return &MemoryBackend{
+func NewRegMemBackend() *RegMemBackend {
+	return &RegMemBackend{
 		maps: make(map[string]map[string]string),
 	}
 }
 
-func (r *MemoryBackend) Connect() {
+func (r *RegMemBackend) Connect() {
 }
 
-func (r *MemoryBackend) Reconnect() {
+func (r *RegMemBackend) Reconnect() {
 }
 
-func (r *MemoryBackend) Keys(key string) ([]string, error) {
+func (r *RegMemBackend) Keys(key string) ([]string, error) {
 	if r.KeysFunc != nil {
 		return r.KeysFunc(key)
 	}
@@ -52,15 +47,15 @@ func (r *MemoryBackend) Keys(key string) ([]string, error) {
 	return keys, nil
 }
 
-func (r *MemoryBackend) Expire(key string, ttl uint64) (int, error) {
+func (r *RegMemBackend) Expire(key string, ttl uint64) (int, error) {
 	return 0, nil
 }
 
-func (r *MemoryBackend) TTL(key string) (int, error) {
+func (r *RegMemBackend) TTL(key string) (int, error) {
 	return 0, nil
 }
 
-func (r *MemoryBackend) Delete(key string) (int, error) {
+func (r *RegMemBackend) Delete(key string) (int, error) {
 	if _, ok := r.maps[key]; ok {
 		delete(r.maps, key)
 		return 1, nil
@@ -68,10 +63,10 @@ func (r *MemoryBackend) Delete(key string) (int, error) {
 	return 0, nil
 }
 
-func (r *MemoryBackend) Set(key, field string, value string) (string, error) {
+func (r *RegMemBackend) Set(key, field string, value string) (string, error) {
 	return "OK", nil
 }
 
-func (r *MemoryBackend) Get(key, field string) (string, error) {
+func (r *RegMemBackend) Get(key, field string) (string, error) {
 	return "", nil
 }

@@ -1,4 +1,4 @@
-package registry
+package config
 
 type RegistryBackend interface {
 

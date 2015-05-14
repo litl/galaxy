@@ -1,4 +1,4 @@
-package registry
+package config
 
 import (
 	"encoding/json"
@@ -12,19 +12,6 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
-)
-
-/*
-All config opbects in redis will be stored in a hash with an id key.
-Services will have id, version and environment keys; while Hosts will have id
-and location keys.
-
-TODO: IMPORTANT: make an atomic compare-and-swap script to save configs, or
-      switch to ORDERED SETS and log changes
-*/
-
-const (
-	DefaultTTL = 60
 )
 
 type ServiceRegistry struct {
@@ -54,7 +41,7 @@ func (r *ServiceRegistry) Connect(registryURL string) {
 	}
 
 	if strings.ToLower(u.Scheme) == "redis" {
-		r.backend = &RedisBackend{
+		r.backend = &RegRedisBackend{
 			RedisHost: u.Host,
 		}
 		r.backend.Connect()

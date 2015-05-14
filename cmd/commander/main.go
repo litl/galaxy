@@ -19,7 +19,6 @@ import (
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/discovery"
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 )
@@ -38,7 +37,7 @@ var (
 	runOnce         bool
 	version         bool
 	buildVersion    string
-	serviceRegistry *registry.ServiceRegistry
+	serviceRegistry *config.ServiceRegistry
 	configStore     *config.Store
 	serviceRuntime  *runtime.ServiceRuntime
 	workerChans     map[string]chan string
@@ -52,13 +51,13 @@ func initOrDie() {
 		log.Fatalf("ERROR: Registry URL not specified. Use '-registry redis://127.0.0.1:6379' or set 'GALAXY_REGISTRY_URL'")
 	}
 
-	serviceRegistry = registry.NewServiceRegistry(
-		registry.DefaultTTL,
+	serviceRegistry = config.NewServiceRegistry(
+		config.DefaultTTL,
 	)
 	serviceRegistry.Connect(registryURL)
 
 	configStore = config.NewStore(
-		registry.DefaultTTL,
+		config.DefaultTTL,
 	)
 
 	configStore.Connect(registryURL)
