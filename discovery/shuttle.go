@@ -5,7 +5,6 @@ import (
 
 	"github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
 
 	shuttle "github.com/litl/shuttle/client"
 )
@@ -14,7 +13,7 @@ var (
 	client *shuttle.Client
 )
 
-func registerShuttle(serviceRegistry *registry.ServiceRegistry, env, shuttleAddr string) {
+func registerShuttle(serviceRegistry *config.Store, env, shuttleAddr string) {
 	if client == nil {
 		return
 	}
@@ -78,7 +77,7 @@ func registerShuttle(serviceRegistry *registry.ServiceRegistry, env, shuttleAddr
 
 }
 
-func unregisterShuttle(serviceRegistry *registry.ServiceRegistry, env, hostIP, shuttleAddr string) {
+func unregisterShuttle(serviceRegistry *config.Store, env, hostIP, shuttleAddr string) {
 
 	if client == nil {
 		return
@@ -132,7 +131,7 @@ func unregisterShuttle(serviceRegistry *registry.ServiceRegistry, env, hostIP, s
 
 }
 
-func pruneShuttleBackends(configStore *config.Store, serviceRegistry *registry.ServiceRegistry, env, shuttleAddr string) {
+func pruneShuttleBackends(configStore *config.Store, serviceRegistry *config.Store, env, shuttleAddr string) {
 	if client == nil {
 		return
 	}

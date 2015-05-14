@@ -13,7 +13,6 @@ import (
 	"github.com/litl/galaxy/commander"
 	gconfig "github.com/litl/galaxy/config"
 	"github.com/litl/galaxy/log"
-	"github.com/litl/galaxy/registry"
 	"github.com/litl/galaxy/runtime"
 	"github.com/litl/galaxy/utils"
 
@@ -24,7 +23,7 @@ import (
 
 var (
 	serviceRuntime  *runtime.ServiceRuntime
-	serviceRegistry *registry.ServiceRegistry
+	serviceRegistry *gconfig.Store
 	configStore     *gconfig.Store
 
 	initOnce     sync.Once
@@ -38,7 +37,7 @@ var config struct {
 // ensure the registry as a redis host, but only once
 func initRegistry(c *cli.Context) {
 
-	serviceRegistry = registry.NewServiceRegistry(
+	serviceRegistry = gconfig.NewServiceRegistry(
 		uint64(c.Int("ttl")),
 	)
 
