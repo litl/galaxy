@@ -13,12 +13,12 @@ var (
 	client *shuttle.Client
 )
 
-func registerShuttle(serviceRegistry *config.Store, env, shuttleAddr string) {
+func registerShuttle(configStore *config.Store, env, shuttleAddr string) {
 	if client == nil {
 		return
 	}
 
-	registrations, err := serviceRegistry.ListRegistrations(env)
+	registrations, err := configStore.ListRegistrations(env)
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -77,13 +77,13 @@ func registerShuttle(serviceRegistry *config.Store, env, shuttleAddr string) {
 
 }
 
-func unregisterShuttle(serviceRegistry *config.Store, env, hostIP, shuttleAddr string) {
+func unregisterShuttle(configStore *config.Store, env, hostIP, shuttleAddr string) {
 
 	if client == nil {
 		return
 	}
 
-	registrations, err := serviceRegistry.ListRegistrations(env)
+	registrations, err := configStore.ListRegistrations(env)
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return
@@ -131,7 +131,7 @@ func unregisterShuttle(serviceRegistry *config.Store, env, hostIP, shuttleAddr s
 
 }
 
-func pruneShuttleBackends(configStore *config.Store, serviceRegistry *config.Store, env, shuttleAddr string) {
+func pruneShuttleBackends(configStore *config.Store, env, shuttleAddr string) {
 	if client == nil {
 		return
 	}
@@ -142,7 +142,7 @@ func pruneShuttleBackends(configStore *config.Store, serviceRegistry *config.Sto
 		return
 	}
 
-	registrations, err := serviceRegistry.ListRegistrations(env)
+	registrations, err := configStore.ListRegistrations(env)
 	if err != nil {
 		log.Errorf("ERROR: Unable to list registrations: %s", err)
 		return

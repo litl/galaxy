@@ -22,9 +22,8 @@ import (
 )
 
 var (
-	serviceRuntime  *runtime.ServiceRuntime
-	serviceRegistry *gconfig.Store
-	configStore     *gconfig.Store
+	serviceRuntime *runtime.ServiceRuntime
+	configStore    *gconfig.Store
 
 	initOnce     sync.Once
 	buildVersion string
@@ -34,31 +33,15 @@ var config struct {
 	Host string `toml:"host"`
 }
 
-// ensure the registry as a redis host, but only once
-func initRegistry(c *cli.Context) {
-
-	serviceRegistry = gconfig.NewServiceRegistry(
-		uint64(c.Int("ttl")),
-	)
-
-	serviceRegistry.Connect(utils.GalaxyRedisHost(c))
-	initStore(c)
-}
-
-// ensure the registry as a redis host, but only once
 func initStore(c *cli.Context) {
-
-	configStore = gconfig.NewStore(
-		uint64(c.Int("ttl")),
-	)
-
+	configStore = gconfig.NewStore(uint64(c.Int("ttl")))
 	configStore.Connect(utils.GalaxyRedisHost(c))
 }
 
 // ensure the registry as a redis host, but only once
 func initRuntime(c *cli.Context) {
 	serviceRuntime = runtime.NewServiceRuntime(
-		serviceRegistry,
+		configStore,
 		"",
 		"127.0.0.1",
 	)
@@ -100,7 +83,7 @@ func appExists(app, env string) (bool, error) {
 }
 
 func appList(c *cli.Context) {
-	initRegistry(c)
+	initStore(c)
 	err := commander.AppList(configStore, utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: %s", err)
@@ -109,7 +92,7 @@ func appList(c *cli.Context) {
 
 func appCreate(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 
 	app := c.Args().First()
 	if app == "" {
@@ -125,7 +108,7 @@ func appCreate(c *cli.Context) {
 
 func appDelete(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 
 	app := ensureAppParam(c, "app:delete")
 
@@ -137,7 +120,7 @@ func appDelete(c *cli.Context) {
 
 func appDeploy(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	initRuntime(c)
 
 	app := ensureAppParam(c, "app:deploy")
@@ -160,7 +143,7 @@ func appDeploy(c *cli.Context) {
 }
 
 func appRestart(c *cli.Context) {
-	initRegistry(c)
+	initStore(c)
 
 	app := ensureAppParam(c, "app:restart")
 
@@ -172,7 +155,7 @@ func appRestart(c *cli.Context) {
 
 func appRun(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	initRuntime(c)
 
 	app := ensureAppParam(c, "app:run")
@@ -190,7 +173,7 @@ func appRun(c *cli.Context) {
 
 func appShell(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	initRuntime(c)
 
 	app := ensureAppParam(c, "app:shell")
@@ -204,7 +187,7 @@ func appShell(c *cli.Context) {
 
 func configList(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	app := ensureAppParam(c, "config")
 
 	err := commander.ConfigList(configStore, app, utils.GalaxyEnv(c))
@@ -216,7 +199,7 @@ func configList(c *cli.Context) {
 
 func configSet(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	app := ensureAppParam(c, "config:set")
 
 	args := c.Args().Tail()
@@ -230,7 +213,7 @@ func configSet(c *cli.Context) {
 
 func configUnset(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	app := ensureAppParam(c, "config:unset")
 
 	err := commander.ConfigUnset(configStore, app, utils.GalaxyEnv(c), c.Args().Tail())
@@ -242,7 +225,7 @@ func configUnset(c *cli.Context) {
 
 func configGet(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	app := ensureAppParam(c, "config:get")
 
 	err := commander.ConfigGet(configStore, app, utils.GalaxyEnv(c), c.Args().Tail())
@@ -274,7 +257,7 @@ func cfgDir() string {
 func poolAssign(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
-	initRegistry(c)
+	initStore(c)
 
 	app := ensureAppParam(c, "pool:assign")
 
@@ -287,7 +270,7 @@ func poolAssign(c *cli.Context) {
 func poolUnassign(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
-	initRegistry(c)
+	initStore(c)
 
 	app := c.Args().First()
 	if app == "" {
@@ -304,7 +287,7 @@ func poolUnassign(c *cli.Context) {
 func poolCreate(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
-	initRegistry(c)
+	initStore(c)
 	created, err := configStore.CreatePool(utils.GalaxyPool(c), utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not create pool: %s", err)
@@ -336,7 +319,7 @@ func poolUpdate(c *cli.Context) {
 }
 
 func poolList(c *cli.Context) {
-	initRegistry(c)
+	initStore(c)
 
 	envs := []string{utils.GalaxyEnv(c)}
 	if utils.GalaxyEnv(c) == "" {
@@ -385,7 +368,7 @@ func poolList(c *cli.Context) {
 func poolDelete(c *cli.Context) {
 	ensureEnvArg(c)
 	ensurePoolArg(c)
-	initRegistry(c)
+	initStore(c)
 	empty, err := configStore.DeletePool(utils.GalaxyPool(c), utils.GalaxyEnv(c))
 	if err != nil {
 		log.Fatalf("ERROR: Could not delete pool: %s", err)
@@ -417,7 +400,7 @@ func loadConfig() {
 
 func pgPsql(c *cli.Context) {
 	ensureEnvArg(c)
-	initRegistry(c)
+	initStore(c)
 	app := ensureAppParam(c, "pg:psql")
 
 	appCfg, err := configStore.GetApp(app, utils.GalaxyEnv(c))
