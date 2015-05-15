@@ -28,7 +28,7 @@ type appCfg struct {
 
 // Backup app config to a file or STDOUT
 func appBackup(c *cli.Context) {
-	initRegistry(c)
+	initStore(c)
 
 	env := utils.GalaxyEnv(c)
 	if env == "" {
@@ -106,7 +106,7 @@ func getAppBackup(app, env string) (*appCfg, error) {
 
 // restore an app's config from backup
 func appRestore(c *cli.Context) {
-	initRegistry(c)
+	initStore(c)
 
 	var err error
 	var rawBackup []byte

@@ -40,14 +40,6 @@ func NewStore(ttl uint64) *Store {
 
 }
 
-func NewServiceRegistry(ttl uint64) *Store {
-	return &Store{
-		TTL:    ttl,
-		pollCh: make(chan bool),
-	}
-
-}
-
 // Build the Redis Pool
 func (s *Store) Connect(registryURL string) {
 

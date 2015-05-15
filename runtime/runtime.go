@@ -20,11 +20,11 @@ import (
 var blacklistedContainerId = make(map[string]bool)
 
 type ServiceRuntime struct {
-	dockerClient    *docker.Client
-	dns             string
-	serviceRegistry *config.Store
-	dockerIP        string
-	hostIP          string
+	dockerClient *docker.Client
+	dns          string
+	configStore  *config.Store
+	dockerIP     string
+	hostIP       string
 }
 
 type ContainerEvent struct {
@@ -33,17 +33,17 @@ type ContainerEvent struct {
 	ServiceRegistration *config.ServiceRegistration
 }
 
-func NewServiceRuntime(serviceRegistry *config.Store, dns, hostIP string) *ServiceRuntime {
+func NewServiceRuntime(configStore *config.Store, dns, hostIP string) *ServiceRuntime {
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
 	}
 
 	return &ServiceRuntime{
-		dns:             dns,
-		serviceRegistry: serviceRegistry,
-		hostIP:          hostIP,
-		dockerIP:        dockerZero,
+		dns:         dns,
+		configStore: configStore,
+		hostIP:      hostIP,
+		dockerIP:    dockerZero,
 	}
 }
 
@@ -812,7 +812,7 @@ func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.Servic
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
-		registration, err := s.serviceRegistry.RegisterService(env, pool, hostIP, container)
+		registration, err := s.configStore.RegisterService(env, pool, hostIP, container)
 		if err != nil {
 			log.Printf("ERROR: Could not register %s: %s\n", name, err)
 			continue
@@ -835,7 +835,7 @@ func (s *ServiceRuntime) UnRegisterAll(env, pool, hostIP string) ([]*docker.Cont
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
-		_, err = s.serviceRegistry.UnRegisterService(env, pool, hostIP, container)
+		_, err = s.configStore.UnRegisterService(env, pool, hostIP, container)
 		if err != nil {
 			log.Printf("ERROR: Could not unregister %s: %s\n", name, err)
 			return removed, err
@@ -896,7 +896,7 @@ func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan 
 
 					name := s.EnvFor(container)["GALAXY_APP"]
 					if name != "" {
-						registration, err := s.serviceRegistry.GetServiceRegistration(env, pool, hostIP, container)
+						registration, err := s.configStore.GetServiceRegistration(env, pool, hostIP, container)
 						if err != nil {
 							log.Printf("WARN: Could not find service registration for %s/%s: %s", name, container.ID[:12], err)
 							continue

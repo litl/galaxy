@@ -14,7 +14,7 @@ import (
 	shuttle "github.com/litl/shuttle/client"
 )
 
-func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store, env, pool, hostIP string) error {
+func Status(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store, env, pool, hostIP string) error {
 
 	containers, err := serviceRuntime.ManagedContainers()
 	if err != nil {
@@ -26,7 +26,7 @@ func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Stor
 
 	for _, container := range containers {
 		name := serviceRuntime.EnvFor(container)["GALAXY_APP"]
-		registered, err := serviceRegistry.GetServiceRegistration(
+		registered, err := configStore.GetServiceRegistration(
 			env, pool, hostIP, container)
 		if err != nil {
 			return err
@@ -66,14 +66,14 @@ func Status(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Stor
 	return nil
 }
 
-func Unregister(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store,
+func Unregister(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store,
 	env, pool, hostIP, shuttleAddr string) {
-	unregisterShuttle(serviceRegistry, env, hostIP, shuttleAddr)
+	unregisterShuttle(configStore, env, hostIP, shuttleAddr)
 	serviceRuntime.UnRegisterAll(env, pool, hostIP)
 	os.Exit(0)
 }
 
-func RegisterAll(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store, env, pool, hostIP, shuttleAddr string, loggedOnce bool) {
+func RegisterAll(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store, env, pool, hostIP, shuttleAddr string, loggedOnce bool) {
 	columns := []string{"CONTAINER ID | IMAGE | EXTERNAL | INTERNAL | CREATED | EXPIRES"}
 
 	registrations, err := serviceRuntime.RegisterAll(env, pool, hostIP)
@@ -104,17 +104,15 @@ func RegisterAll(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config
 
 	}
 
-	registerShuttle(serviceRegistry, env, shuttleAddr)
+	registerShuttle(configStore, env, shuttleAddr)
 }
 
-func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.Store, configStore *config.Store,
-	env, pool, hostIP, shuttleAddr string) {
-
+func Register(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store, env, pool, hostIP, shuttleAddr string) {
 	if shuttleAddr != "" {
 		client = shuttle.NewClient(shuttleAddr)
 	}
 
-	RegisterAll(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr, false)
+	RegisterAll(serviceRuntime, configStore, env, pool, hostIP, shuttleAddr, false)
 
 	containerEvents := make(chan runtime.ContainerEvent)
 	err := serviceRuntime.RegisterEvents(env, pool, hostIP, containerEvents)
@@ -128,7 +126,7 @@ func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.St
 		case ce := <-containerEvents:
 			switch ce.Status {
 			case "start":
-				reg, err := serviceRegistry.RegisterService(env, pool, hostIP, ce.Container)
+				reg, err := configStore.RegisterService(env, pool, hostIP, ce.Container)
 				if err != nil {
 					log.Errorf("ERROR: Unable to register container: %s", err)
 					continue
@@ -136,9 +134,9 @@ func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.St
 
 				log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
 					reg.ContainerID[0:12], reg.Name, locationAt(reg))
-				registerShuttle(serviceRegistry, env, shuttleAddr)
+				registerShuttle(configStore, env, shuttleAddr)
 			case "die", "stop":
-				reg, err := serviceRegistry.UnRegisterService(env, pool, hostIP, ce.Container)
+				reg, err := configStore.UnRegisterService(env, pool, hostIP, ce.Container)
 				if err != nil {
 					log.Errorf("ERROR: Unable to unregister container: %s", err)
 					continue
@@ -148,13 +146,13 @@ func Register(serviceRuntime *runtime.ServiceRuntime, serviceRegistry *config.St
 					log.Printf("Unregistered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
 						reg.ContainerID[0:12], reg.Name, locationAt(reg))
 				}
-				RegisterAll(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr, true)
-				pruneShuttleBackends(configStore, serviceRegistry, env, shuttleAddr)
+				RegisterAll(serviceRuntime, configStore, env, pool, hostIP, shuttleAddr, true)
+				pruneShuttleBackends(configStore, env, shuttleAddr)
 			}
 
 		case <-time.After(10 * time.Second):
-			RegisterAll(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr, true)
-			pruneShuttleBackends(configStore, serviceRegistry, env, shuttleAddr)
+			RegisterAll(serviceRuntime, configStore, env, pool, hostIP, shuttleAddr, true)
+			pruneShuttleBackends(configStore, env, shuttleAddr)
 		}
 	}
 }

@@ -24,25 +24,24 @@ import (
 )
 
 var (
-	stopCutoff      int64
-	apps            []string
-	env             string
-	pool            string
-	registryURL     string
-	loop            bool
-	hostIP          string
-	dns             string
-	shuttleAddr     string
-	debug           bool
-	runOnce         bool
-	version         bool
-	buildVersion    string
-	serviceRegistry *config.Store
-	configStore     *config.Store
-	serviceRuntime  *runtime.ServiceRuntime
-	workerChans     map[string]chan string
-	wg              sync.WaitGroup
-	signalsChan     chan os.Signal
+	stopCutoff     int64
+	apps           []string
+	env            string
+	pool           string
+	registryURL    string
+	loop           bool
+	hostIP         string
+	dns            string
+	shuttleAddr    string
+	debug          bool
+	runOnce        bool
+	version        bool
+	buildVersion   string
+	configStore    *config.Store
+	serviceRuntime *runtime.ServiceRuntime
+	workerChans    map[string]chan string
+	wg             sync.WaitGroup
+	signalsChan    chan os.Signal
 )
 
 func initOrDie() {
@@ -51,18 +50,10 @@ func initOrDie() {
 		log.Fatalf("ERROR: Registry URL not specified. Use '-registry redis://127.0.0.1:6379' or set 'GALAXY_REGISTRY_URL'")
 	}
 
-	serviceRegistry = config.NewServiceRegistry(
-		config.DefaultTTL,
-	)
-	serviceRegistry.Connect(registryURL)
-
-	configStore = config.NewStore(
-		config.DefaultTTL,
-	)
-
+	configStore = config.NewStore(config.DefaultTTL)
 	configStore.Connect(registryURL)
 
-	serviceRuntime = runtime.NewServiceRuntime(serviceRegistry, dns, hostIP)
+	serviceRuntime = runtime.NewServiceRuntime(configStore, dns, hostIP)
 
 	apps, err := configStore.ListAssignments(env, pool)
 	if err != nil {
@@ -214,7 +205,7 @@ func deregisterHost(signals chan os.Signal) {
 	configStore.DeleteHost(env, pool, config.HostInfo{
 		HostIP: hostIP,
 	})
-	discovery.Unregister(serviceRuntime, serviceRegistry, env, pool, hostIP, shuttleAddr)
+	discovery.Unregister(serviceRuntime, configStore, env, pool, hostIP, shuttleAddr)
 	os.Exit(0)
 }
 
@@ -689,7 +680,7 @@ func main() {
 		ensureEnv()
 		ensurePool()
 
-		err := discovery.Status(serviceRuntime, serviceRegistry, env, pool, hostIP)
+		err := discovery.Status(serviceRuntime, configStore, env, pool, hostIP)
 		if err != nil {
 			log.Fatalf("ERROR: Unable to list app status: %s", err)
 		}
@@ -1067,7 +1058,7 @@ func main() {
 		wg.Add(1)
 		go heartbeatHost()
 
-		go discovery.Register(serviceRuntime, serviceRegistry, configStore, env, pool, hostIP, shuttleAddr)
+		go discovery.Register(serviceRuntime, configStore, env, pool, hostIP, shuttleAddr)
 		cancelChan := make(chan struct{})
 		// do we need to cancel ever?
 
