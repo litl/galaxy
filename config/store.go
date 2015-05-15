@@ -24,26 +24,17 @@ type HostInfo struct {
 }
 
 type Store struct {
-	Backend      Backend
-	Hostname     string
-	TTL          uint64
-	OutputBuffer *utils.OutputBuffer
-	pollCh       chan bool
-	registryURL  string
+	Backend Backend
+	TTL     uint64
+	pollCh  chan bool
 }
 
-func NewStore(ttl uint64) *Store {
-	return &Store{
+func NewStore(ttl uint64, registryURL string) *Store {
+	s := &Store{
 		TTL:    ttl,
 		pollCh: make(chan bool),
 	}
 
-}
-
-// Build the Redis Pool
-func (s *Store) Connect(registryURL string) {
-
-	s.registryURL = registryURL
 	u, err := url.Parse(registryURL)
 	if err != nil {
 		log.Fatalf("ERROR: Unable to parse %s", err)
@@ -53,10 +44,12 @@ func (s *Store) Connect(registryURL string) {
 		s.Backend = &RedisBackend{
 			RedisHost: u.Host,
 		}
-		s.Backend.Connect()
+		s.Backend.connect()
 	} else {
 		log.Fatalf("ERROR: Unsupported registry backend: %s", u)
 	}
+
+	return s
 }
 
 func (s *Store) PoolExists(env, pool string) (bool, error) {

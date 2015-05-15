@@ -327,7 +327,7 @@ func (r *RedisBackend) testOnBorrow(c redis.Conn, t time.Time) error {
 	return err
 }
 
-func (r *RedisBackend) Connect() {
+func (r *RedisBackend) connect() {
 	r.redisPool = redis.Pool{
 		MaxIdle:      1,
 		IdleTimeout:  120 * time.Second,
@@ -336,10 +336,8 @@ func (r *RedisBackend) Connect() {
 	}
 }
 
-func (r *RedisBackend) Reconnect() {
-	r.redisPool.Close()
-	r.Connect()
-}
+// not needed with a redis.Pool
+func (r *RedisBackend) reconnect() {}
 
 func (r *RedisBackend) Keys(key string) ([]string, error) {
 	conn := r.redisPool.Get()
