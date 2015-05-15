@@ -449,8 +449,10 @@ func (s *Store) EnvFor(container *docker.Container) map[string]string {
 	env := map[string]string{}
 	for _, item := range container.Config.Env {
 		sep := strings.Index(item, "=")
-		k := item[0:sep]
-		v := item[sep+1:]
+		if sep < 0 {
+			continue
+		}
+		k, v := item[0:sep], item[sep+1:]
 		env[k] = v
 	}
 	return env
