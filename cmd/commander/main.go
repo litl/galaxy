@@ -666,6 +666,7 @@ func main() {
 		}
 		break
 	case "app:status":
+		// FIXME: undocumented
 
 		statusFs := flag.NewFlagSet("app:status", flag.ExitOnError)
 		statusFs.Usage = func() {

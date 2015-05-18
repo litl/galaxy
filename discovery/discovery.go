@@ -21,6 +21,7 @@ func Status(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store, e
 		panic(err)
 	}
 
+	//FIXME: addresses, port, and expires missing in output
 	columns := []string{
 		"APP | CONTAINER ID | IMAGE | EXTERNAL | INTERNAL | PORT | CREATED | EXPIRES"}
 
