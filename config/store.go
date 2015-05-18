@@ -23,15 +23,17 @@ type HostInfo struct {
 }
 
 type Store struct {
-	Backend Backend
-	TTL     uint64
-	pollCh  chan bool
+	Backend     Backend
+	TTL         uint64
+	pollCh      chan bool
+	restartChan chan *ConfigChange
 }
 
 func NewStore(ttl uint64, registryURL string) *Store {
 	s := &Store{
-		TTL:    ttl,
-		pollCh: make(chan bool),
+		TTL:         ttl,
+		pollCh:      make(chan bool),
+		restartChan: make(chan *ConfigChange, 10),
 	}
 
 	u, err := url.Parse(registryURL)

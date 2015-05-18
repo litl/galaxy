@@ -13,18 +13,16 @@ type ConfigChange struct {
 	Error     error
 }
 
-var restartChan chan *ConfigChange
-
-func (r *Store) CheckForChangesNow() {
-	r.pollCh <- true
+func (s *Store) CheckForChangesNow() {
+	s.pollCh <- true
 }
 
-func (r *Store) checkForChanges(env string) {
+func (s *Store) checkForChanges(env string) {
 	lastVersion := make(map[string]int64)
 	for {
-		appCfg, err := r.ListApps(env)
+		appCfg, err := s.ListApps(env)
 		if err != nil {
-			restartChan <- &ConfigChange{
+			s.restartChan <- &ConfigChange{
 				Error: err,
 			}
 			time.Sleep(5 * time.Second)
@@ -39,10 +37,10 @@ func (r *Store) checkForChanges(env string) {
 	}
 
 	for {
-		<-r.pollCh
-		appCfg, err := r.ListApps(env)
+		<-s.pollCh
+		appCfg, err := s.ListApps(env)
 		if err != nil {
-			restartChan <- &ConfigChange{
+			s.restartChan <- &ConfigChange{
 				Error: err,
 			}
 			continue
@@ -53,7 +51,7 @@ func (r *Store) checkForChanges(env string) {
 				log.Printf("%s changed from %d to %d", changedConfig.Name,
 					lastVersion[changedConfig.Name()], changedConfig.ID())
 				lastVersion[changedConfig.Name()] = changedConfig.ID()
-				restartChan <- &ConfigChange{
+				s.restartChan <- &ConfigChange{
 					AppConfig: changeCopy,
 				}
 			}
@@ -61,7 +59,7 @@ func (r *Store) checkForChanges(env string) {
 	}
 }
 
-func (r *Store) checkForChangePeriodically(stop chan struct{}) {
+func (s *Store) checkForChangePeriodically(stop chan struct{}) {
 	// TODO: default polling interval
 	ticker := time.NewTicker(10 * time.Second)
 	for {
@@ -70,66 +68,65 @@ func (r *Store) checkForChangePeriodically(stop chan struct{}) {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			r.CheckForChangesNow()
+			s.CheckForChangesNow()
 		}
 	}
 }
 
-func (r *Store) restartApp(app, env string) {
-	appCfg, err := r.GetApp(app, env)
+func (s *Store) restartApp(app, env string) {
+	appCfg, err := s.GetApp(app, env)
 	if err != nil {
-		restartChan <- &ConfigChange{
+		s.restartChan <- &ConfigChange{
 			Error: err,
 		}
 		return
 	}
 
-	restartChan <- &ConfigChange{
+	s.restartChan <- &ConfigChange{
 		Restart:   true,
 		AppConfig: appCfg,
 	}
 }
 
-func (r *Store) NotifyRestart(app, env string) error {
+func (s *Store) NotifyRestart(app, env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.Backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
+	_, err := s.Backend.Notify(fmt.Sprintf("galaxy-%s", env), fmt.Sprintf("restart %s", app))
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *Store) NotifyEnvChanged(env string) error {
+func (s *Store) NotifyEnvChanged(env string) error {
 	// TODO: received count ignored, use it somehow?
-	_, err := r.Backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
+	_, err := s.Backend.Notify(fmt.Sprintf("galaxy-%s", env), "config")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *Store) subscribeChanges(env string) {
+func (s *Store) subscribeChanges(env string) {
 
-	msgs := r.Backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
+	msgs := s.Backend.Subscribe(fmt.Sprintf("galaxy-%s", env))
 	for {
 
 		msg := <-msgs
 		if msg == "config" {
-			r.CheckForChangesNow()
+			s.CheckForChangesNow()
 		} else if strings.HasPrefix(msg, "restart") {
 			parts := strings.Split(msg, " ")
 			app := parts[1]
-			r.restartApp(app, env)
+			s.restartApp(app, env)
 		} else {
 			log.Printf("Ignoring notification: %s\n", msg)
 		}
 	}
 }
 
-func (r *Store) Watch(env string, stop chan struct{}) chan *ConfigChange {
-	restartChan = make(chan *ConfigChange, 10)
-	go r.checkForChanges(env)
-	go r.checkForChangePeriodically(stop)
-	go r.subscribeChanges(env)
-	return restartChan
+func (s *Store) Watch(env string, stop chan struct{}) chan *ConfigChange {
+	go s.checkForChanges(env)
+	go s.checkForChangePeriodically(stop)
+	go s.subscribeChanges(env)
+	return s.restartChan
 }
