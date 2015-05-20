@@ -34,8 +34,7 @@ var config struct {
 }
 
 func initStore(c *cli.Context) {
-	configStore = gconfig.NewStore(uint64(c.Int("ttl")))
-	configStore.Connect(utils.GalaxyRedisHost(c))
+	configStore = gconfig.NewStore(uint64(c.Int("ttl")), utils.GalaxyRedisHost(c))
 }
 
 // ensure the registry as a redis host, but only once

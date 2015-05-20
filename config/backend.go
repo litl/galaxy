@@ -29,9 +29,6 @@ type Backend interface {
 	Subscribe(key string) chan string
 	Notify(key, value string) (int, error)
 
-	Connect()
-	Reconnect()
-
 	// TODO: still merging these backends
 	// these are brought in from the RegistryBackend
 	// Keys
@@ -43,4 +40,7 @@ type Backend interface {
 	// Maps
 	Set(key, field string, value string) (string, error)
 	Get(key, field string) (string, error)
+
+	connect()
+	reconnect()
 }

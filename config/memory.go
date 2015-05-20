@@ -199,10 +199,10 @@ func (r *MemoryBackend) ListEnvs() ([]string, error) {
 	return p, nil
 }
 
-func (r *MemoryBackend) Connect() {
+func (r *MemoryBackend) connect() {
 }
 
-func (r *MemoryBackend) Reconnect() {
+func (r *MemoryBackend) reconnect() {
 }
 
 func (r *MemoryBackend) Keys(key string) ([]string, error) {

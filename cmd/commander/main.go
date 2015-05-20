@@ -50,8 +50,7 @@ func initOrDie() {
 		log.Fatalf("ERROR: Registry URL not specified. Use '-registry redis://127.0.0.1:6379' or set 'GALAXY_REGISTRY_URL'")
 	}
 
-	configStore = config.NewStore(config.DefaultTTL)
-	configStore.Connect(registryURL)
+	configStore = config.NewStore(config.DefaultTTL, registryURL)
 
 	serviceRuntime = runtime.NewServiceRuntime(configStore, dns, hostIP)
 
@@ -667,6 +666,7 @@ func main() {
 		}
 		break
 	case "app:status":
+		// FIXME: undocumented
 
 		statusFs := flag.NewFlagSet("app:status", flag.ExitOnError)
 		statusFs.Usage = func() {

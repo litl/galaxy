@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"sort"
 	"strings"
 	"time"
 
@@ -24,26 +23,19 @@ type HostInfo struct {
 }
 
 type Store struct {
-	Backend      Backend
-	Hostname     string
-	TTL          uint64
-	OutputBuffer *utils.OutputBuffer
-	pollCh       chan bool
-	registryURL  string
+	Backend     Backend
+	TTL         uint64
+	pollCh      chan bool
+	restartChan chan *ConfigChange
 }
 
-func NewStore(ttl uint64) *Store {
-	return &Store{
-		TTL:    ttl,
-		pollCh: make(chan bool),
+func NewStore(ttl uint64, registryURL string) *Store {
+	s := &Store{
+		TTL:         ttl,
+		pollCh:      make(chan bool),
+		restartChan: make(chan *ConfigChange, 10),
 	}
 
-}
-
-// Build the Redis Pool
-func (s *Store) Connect(registryURL string) {
-
-	s.registryURL = registryURL
 	u, err := url.Parse(registryURL)
 	if err != nil {
 		log.Fatalf("ERROR: Unable to parse %s", err)
@@ -53,10 +45,12 @@ func (s *Store) Connect(registryURL string) {
 		s.Backend = &RedisBackend{
 			RedisHost: u.Host,
 		}
-		s.Backend.Connect()
+		s.Backend.connect()
 	} else {
 		log.Fatalf("ERROR: Unsupported registry backend: %s", u)
 	}
+
+	return s
 }
 
 func (s *Store) PoolExists(env, pool string) (bool, error) {
@@ -243,51 +237,6 @@ func (s *Store) DeleteHost(env, pool string, host HostInfo) error {
 	return s.Backend.DeleteHost(env, pool, host)
 }
 
-func (s *Store) newServiceRegistration(container *docker.Container, hostIP, galaxyPort string) *ServiceRegistration {
-	//FIXME: We're using the first found port and assuming it's tcp.
-	//How should we handle a service that exposes multiple ports
-	//as well as tcp vs udp ports.
-	var externalPort, internalPort string
-
-	// sort the port bindings by internal port number so multiple ports are assigned deterministically
-	// (docker.Port is a string with a Port method)
-	cPorts := container.NetworkSettings.Ports
-	allPorts := []string{}
-	for p, _ := range cPorts {
-		allPorts = append(allPorts, string(p))
-	}
-	sort.Strings(allPorts)
-
-	for _, k := range allPorts {
-		v := cPorts[docker.Port(k)]
-		if len(v) > 0 {
-			externalPort = v[0].HostPort
-			internalPort = docker.Port(k).Port()
-			// Look for a match to GALAXY_PORT if we have multiple ports to
-			// choose from. (don't require this, or we may break existing services)
-			if len(allPorts) > 1 && internalPort == galaxyPort {
-				break
-			}
-		}
-	}
-
-	serviceRegistration := ServiceRegistration{
-		ContainerName: container.Name,
-		ContainerID:   container.ID,
-		StartedAt:     container.Created,
-		Image:         container.Config.Image,
-		Port:          galaxyPort,
-	}
-
-	if externalPort != "" && internalPort != "" {
-		serviceRegistration.ExternalIP = hostIP
-		serviceRegistration.InternalIP = container.NetworkSettings.IPAddress
-		serviceRegistration.ExternalPort = externalPort
-		serviceRegistration.InternalPort = internalPort
-	}
-	return &serviceRegistration
-}
-
 func (s *Store) RegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
 	environment := s.EnvFor(container)
 
@@ -298,7 +247,7 @@ func (s *Store) RegisterService(env, pool, hostIP string, container *docker.Cont
 
 	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
-	serviceRegistration := s.newServiceRegistration(container, hostIP, environment["GALAXY_PORT"])
+	serviceRegistration := newServiceRegistration(container, hostIP, environment["GALAXY_PORT"])
 	serviceRegistration.Name = name
 	serviceRegistration.ImageId = container.Config.Image
 
@@ -456,49 +405,11 @@ func (s *Store) EnvFor(container *docker.Container) map[string]string {
 	env := map[string]string{}
 	for _, item := range container.Config.Env {
 		sep := strings.Index(item, "=")
-		k := item[0:sep]
-		v := item[sep+1:]
+		if sep < 0 {
+			continue
+		}
+		k, v := item[0:sep], item[sep+1:]
 		env[k] = v
 	}
 	return env
-}
-
-type ServiceRegistration struct {
-	Name          string            `json:"NAME,omitempty"`
-	ExternalIP    string            `json:"EXTERNAL_IP,omitempty"`
-	ExternalPort  string            `json:"EXTERNAL_PORT,omitempty"`
-	InternalIP    string            `json:"INTERNAL_IP,omitempty"`
-	InternalPort  string            `json:"INTERNAL_PORT,omitempty"`
-	ContainerID   string            `json:"CONTAINER_ID"`
-	ContainerName string            `json:"CONTAINER_NAME"`
-	Image         string            `json:"IMAGE,omitempty"`
-	ImageId       string            `json:"IMAGE_ID,omitempty"`
-	StartedAt     time.Time         `json:"STARTED_AT"`
-	Expires       time.Time         `json:"-"`
-	Path          string            `json:"-"`
-	VirtualHosts  []string          `json:"VIRTUAL_HOSTS"`
-	Port          string            `json:"PORT"`
-	ErrorPages    map[string]string `json:"ERROR_PAGES,omitempty"`
-}
-
-func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
-	return s.ExternalIP == other.ExternalIP &&
-		s.ExternalPort == other.ExternalPort &&
-		s.InternalIP == other.InternalIP &&
-		s.InternalPort == other.InternalPort
-}
-
-func (s *ServiceRegistration) addr(ip, port string) string {
-	if ip != "" && port != "" {
-		return fmt.Sprint(ip, ":", port)
-	}
-	return ""
-
-}
-func (s *ServiceRegistration) ExternalAddr() string {
-	return s.addr(s.ExternalIP, s.ExternalPort)
-}
-
-func (s *ServiceRegistration) InternalAddr() string {
-	return s.addr(s.InternalIP, s.InternalPort)
 }
