@@ -132,10 +132,12 @@ func AppDeploy(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime
 	svcCfg.SetVersion(version)
 	svcCfg.SetVersionID(image.ID)
 
+	/* TODO: Remove Ports: we dont' seem to use these, so remove this if it works
 	svcCfg.ClearPorts()
 	for k, _ := range image.Config.ExposedPorts {
 		svcCfg.AddPort(k.Port(), k.Proto())
 	}
+	*/
 
 	updated, err := configStore.UpdateApp(svcCfg, env)
 	if err != nil {
