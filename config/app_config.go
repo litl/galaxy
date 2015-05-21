@@ -19,9 +19,6 @@ type App interface {
 	SetVersion(version string)
 	VersionID() string
 	SetVersionID(versionID string)
-	Ports() map[string]string
-	ClearPorts()
-	AddPort(port, portType string)
 	ID() int64
 	ContainerName() string
 	SetProcesses(pool string, count int)
@@ -31,6 +28,13 @@ type App interface {
 	GetMemory(pool string) string
 	SetCPUShares(pool string, cpu string)
 	GetCPUShares(pool string) string
+
+	/* TODO: Remove Ports: they don't seem to be used
+	Ports() map[string]string
+	ClearPorts()
+	AddPort(port, portType string)
+	*/
+
 }
 
 type AppConfig struct {
