@@ -9,7 +9,8 @@ import (
 // in the galaxy environment.
 type AppDefinition struct {
 	// Version of this structure in the config storage as of the last operation
-	// In consul, this would correspond to `ModifyIndex`
+	// In consul, this would correspond to `ModifyIndex`/. The value stored
+	// would be the previous index, and over-written upon retrieval.
 	ConfigIndex int64
 
 	// ("Name" is taken by the interface getter)
@@ -21,6 +22,8 @@ type AppDefinition struct {
 	// Docker Image ID
 	// If "Image" does not contain a tag, or uses "latest", we need a way to
 	// know what version we're running.
+	// TODO: how can we handle this case and not have pull every image on the
+	//       host that runs app:deploy?
 	ImageID string
 
 	// PortMappings defines how ports are mapped from the host to the docker
@@ -106,9 +109,6 @@ type AppAssignment struct {
 //
 // Below are all methods to make an AppDefinition implement the existing App interface
 
-// FIXME: We may need to save after every operation for now, since things may
-//        depend on the ID() updating automatically, which was tied to the
-//        underlying VMap of the redis config.
 func (a *AppDefinition) Name() string {
 	return a.AppName
 }
@@ -146,7 +146,7 @@ func (a *AppDefinition) ID() int64 {
 }
 
 func (a *AppDefinition) ContainerName() string {
-	return fmt.Sprintf("%s_%s", a.Name(), a.ID())
+	return fmt.Sprintf("%s_%d", a.Name(), a.ID())
 }
 
 func (a *AppDefinition) SetProcesses(pool string, count int) {
@@ -199,6 +199,8 @@ func (a *AppDefinition) assignment(pool string) int {
 			return i
 		}
 	}
-	a.Assignments = append(a.Assignments, AppAssignment{Pool: pool})
+
+	// FIXME: Instances is hard-coded at -1 to match old behavior
+	a.Assignments = append(a.Assignments, AppAssignment{Pool: pool, Instances: -1})
 	return len(a.Assignments) - 1
 }

@@ -55,37 +55,6 @@ func TestSetEnv(t *testing.T) {
 	}
 }
 
-/* TODO: Remove Ports
-func TestPorts(t *testing.T) {
-	sc := NewAppConfig("foo", "")
-
-	if len(sc.Ports()) != 0 {
-		t.Fail()
-	}
-
-	sc.AddPort("8000", "tcp")
-	if len(sc.Ports()) != 1 {
-		t.Fail()
-	}
-	if sc.Ports()["8000"] != "tcp" {
-		t.Fail()
-	}
-
-	sc.AddPort("9000", "udp")
-	if len(sc.Ports()) != 2 {
-		t.Fail()
-	}
-	if sc.Ports()["9000"] != "udp" {
-		t.Fail()
-	}
-
-	sc.ClearPorts()
-	if len(sc.Ports()) != 0 {
-		t.Fail()
-	}
-}
-*/
-
 func TestID(t *testing.T) {
 	sc := NewAppConfig("foo", "")
 	id := sc.ID()
@@ -98,14 +67,6 @@ func TestID(t *testing.T) {
 		t.Fail()
 	}
 	id = sc.ID()
-
-	/* TODO: Remove Ports
-	sc.EnvSet("FOO", "")
-	if sc.ID() < id {
-		t.Fail()
-	}
-	id = sc.ID()
-	*/
 
 	sc.EnvSet("foo", "bar")
 	if sc.ID() < id {

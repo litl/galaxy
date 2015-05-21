@@ -39,16 +39,46 @@ func NewStore(ttl uint64, registryURL string) *Store {
 		log.Fatalf("ERROR: Unable to parse %s", err)
 	}
 
-	if strings.ToLower(u.Scheme) == "redis" {
+	switch strings.ToLower(u.Scheme) {
+	case "redis":
 		s.Backend = &RedisBackend{
 			RedisHost: u.Host,
 		}
 		s.Backend.connect()
-	} else {
+	case "consul":
+		s.Backend = NewConsulBackend()
+	default:
 		log.Fatalf("ERROR: Unsupported registry backend: %s", u)
 	}
 
 	return s
+}
+
+// FIXME: We still have a function that returns just an *AppConfig for the
+//        RedisBackend. Unify these somehow, and preferebly decouple this from
+//        config.Store.
+func (s *Store) NewAppConfig(app, version string) App {
+	var appCfg App
+	switch s.Backend.(type) {
+	case *RedisBackend:
+		appCfg = &AppConfig{
+			name:            app,
+			versionVMap:     utils.NewVersionedMap(),
+			environmentVMap: utils.NewVersionedMap(),
+			portsVMap:       utils.NewVersionedMap(),
+			runtimeVMap:     utils.NewVersionedMap(),
+		}
+	case *ConsulBackend:
+		appCfg = &AppDefinition{
+			AppName:     app,
+			Environment: make(map[string]string),
+		}
+	default:
+		panic("unknown backend")
+	}
+
+	appCfg.SetVersion(version)
+	return appCfg
 }
 
 func (s *Store) PoolExists(env, pool string) (bool, error) {

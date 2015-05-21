@@ -814,7 +814,7 @@ func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.Servic
 		name := s.EnvFor(container)["GALAXY_APP"]
 		registration, err := s.configStore.RegisterService(env, pool, hostIP, container)
 		if err != nil {
-			log.Printf("ERROR: Could not register %s: %s\n", name, err)
+			log.Printf("ERROR: Could not register %s: %s\n", name, err.Error())
 			continue
 		}
 		registrations = append(registrations, registration)

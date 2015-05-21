@@ -148,6 +148,7 @@ func pruneShuttleBackends(configStore *config.Store, env, shuttleAddr string) {
 		return
 	}
 
+	// FIXME: THERE SHOULD HAVE BEEN AN ERROR IF `len(registrations) == 0` IS WRONG!
 	if len(registrations) == 0 {
 		// If there are no registrations, skip pruning it because we might be in a bad state and
 		// don't want to inadvertently unregister everything.  Shuttle will handle the down
