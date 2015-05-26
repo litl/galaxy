@@ -29,17 +29,11 @@ type Backend interface {
 	Subscribe(key string) chan string
 	Notify(key, value string) (int, error)
 
-	// TODO: still merging these backends
-	// these are brought in from the RegistryBackend
-	// Keys
-	Keys(key string) ([]string, error)
-	Delete(key string) (int, error)
-	Expire(key string, ttl uint64) (int, error)
-	TTL(key string) (int, error)
-
-	// Maps
-	Set(key, field string, value string) (string, error)
-	Get(key, field string) (string, error)
+	// Registration
+	RegisterService(env, pool string, reg *ServiceRegistration) error
+	UnregisterService(env, pool, hostIP, name, containerID string) (*ServiceRegistration, error)
+	GetServiceRegistration(env, pool, hostIP, name, containerID string) (*ServiceRegistration, error)
+	ListRegistrations(env string) ([]ServiceRegistration, error)
 
 	connect()
 	reconnect()

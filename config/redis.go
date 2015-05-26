@@ -1,14 +1,15 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
-	"log"
 	"path"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
+	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 )
 
@@ -616,4 +617,107 @@ func (r *RedisBackend) ListHosts(env, pool string) ([]HostInfo, error) {
 		})
 	}
 	return hosts, nil
+}
+
+func (r *RedisBackend) RegisterService(env, pool string, reg *ServiceRegistration) error {
+	registrationPath := path.Join(env, pool, "hosts", reg.ExternalIP, reg.Name, reg.ContainerID[0:12])
+
+	jsonReg, err := json.Marshal(reg)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.Set(registrationPath, "location", string(jsonReg))
+	if err != nil {
+		return err
+	}
+
+	_, err = r.Expire(registrationPath, DefaultTTL)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *RedisBackend) UnregisterService(env, pool, hostIP, name, containerID string) (*ServiceRegistration, error) {
+	registrationPath := path.Join(env, pool, "hosts", hostIP, name, containerID[0:12])
+
+	registration, err := r.GetServiceRegistration(env, pool, hostIP, name, containerID)
+	if err != nil || registration == nil {
+		return registration, err
+	}
+
+	if registration.ContainerID != containerID {
+		return nil, nil
+	}
+
+	_, err = r.Delete(registrationPath)
+	if err != nil {
+		return registration, err
+	}
+
+	return registration, nil
+}
+
+func (r *RedisBackend) GetServiceRegistration(env, pool, hostIP, name, containerID string) (*ServiceRegistration, error) {
+	regPath := path.Join(env, pool, "hosts", hostIP, name, containerID[0:12])
+
+	existingRegistration := ServiceRegistration{
+		Path: regPath,
+	}
+
+	location, err := r.Get(regPath, "location")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if location == "" {
+		return nil, nil
+	}
+
+	err = json.Unmarshal([]byte(location), &existingRegistration)
+	if err != nil {
+		return nil, err
+	}
+
+	expires, err := r.TTL(regPath)
+	if err != nil {
+		return nil, err
+	}
+	existingRegistration.Expires = time.Now().UTC().Add(time.Duration(expires) * time.Second)
+	return &existingRegistration, nil
+}
+
+func (r *RedisBackend) ListRegistrations(env string) ([]ServiceRegistration, error) {
+	keys, err := r.Keys(path.Join(env, "*", "hosts", "*", "*", "*"))
+	if err != nil {
+		return nil, err
+	}
+
+	var regList []ServiceRegistration
+	for _, key := range keys {
+
+		val, err := r.Get(key, "location")
+		if err != nil {
+			log.Warnf("WARN: Unable to get location for %s: %s", key, err)
+			continue
+		}
+
+		svcReg := ServiceRegistration{
+			Name: path.Base(key),
+		}
+		err = json.Unmarshal([]byte(val), &svcReg)
+		if err != nil {
+			log.Warnf("WARN: Unable to unmarshal JSON for %s: %s", key, err)
+			continue
+		}
+
+		svcReg.Path = key
+
+		regList = append(regList, svcReg)
+	}
+
+	return regList, nil
 }
