@@ -28,7 +28,7 @@ type AppDefinition struct {
 
 	// PortMappings defines how ports are mapped from the host to the docker
 	// container.
-	PortMappings map[string]PortMapping
+	PortMappings []PortMapping
 
 	// Hosts entries to insert into /etc/hosts inside the container
 	Hosts []HostsEntry
