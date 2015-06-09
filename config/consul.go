@@ -240,7 +240,7 @@ func (c *ConsulBackend) AssignApp(app, env, pool string) (bool, error) {
 		}
 	}
 
-	// FIXME: we have to hardcode -1 here to match old behavior
+	// FIXME: we have to hard-code -1 here to match old behavior
 	a := AppAssignment{Pool: pool, Instances: -1}
 	ad.Assignments = append(ad.Assignments, a)
 	return c.UpdateApp(ad, env)
@@ -551,7 +551,7 @@ func (c *ConsulBackend) GetServiceRegistration(env, pool, hostIP, name, containe
 	}
 
 	if kvp == nil {
-		return nil, fmt.Errorf("unknown service %s", key)
+		return nil, nil
 	}
 
 	err = json.Unmarshal(kvp.Value, &existingRegistration)
