@@ -757,12 +757,13 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 		Tag:          tag,
 		OutputStream: log.DefaultLogger}
 
-	auths, err := docker.NewAuthConfigurationsFromDockerCfg()
-	if err != nil {
-		panic(err)
-	}
+	// Ignore the error. If .dockercfg doesn't exist, maybe we don't need auth
+	auths, _ := docker.NewAuthConfigurationsFromDockerCfg()
 
-	dockerAuth := auths.Configs[registry]
+	dockerAuth := docker.AuthConfiguration{}
+	if auths != nil && auths.Configs != nil {
+		dockerAuth = auths.Configs[registry]
+	}
 
 	if registry != "" {
 		pullOpts.Repository = registry + "/" + repository
