@@ -236,6 +236,8 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	log.Printf("Stopped %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
 
 	return nil
+	// TODO: why is this commented out?
+	//       Should we verify that containers are actually removed somehow?
 	/*	return s.dockerClient.RemoveContainer(docker.RemoveContainerOptions{
 		ID:            container.ID,
 		RemoveVolumes: true,
@@ -325,6 +327,8 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(appCfg config.App) error {
 	return nil
 }
 
+// TODO: these aren't called from anywhere. Are they useful?
+/*
 func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) error {
 	containers, err := s.ManagedContainers()
 	if err != nil {
@@ -362,6 +366,32 @@ func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 		s.StopAllButLatestService(s.EnvFor(c)["GALAXY_APP"], stopCutoff)
 	}
 
+	return nil
+}
+*/
+
+// Stop any running galaxy containers that are not assigned to us
+// TODO: We call ManagedContainers a lot, repeatedly listing and inspecting all containers.
+func (s *ServiceRuntime) StopUnassigned(env, pool string) error {
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return err
+	}
+
+	for _, container := range containers {
+		name := s.EnvFor(container)["GALAXY_APP"]
+
+		pools, err := s.configStore.ListAssignedPools(env, name)
+		if err != nil {
+			log.Errorf("ERROR: Unable to list pool assignments for %s: %s", container.Name, err)
+			continue
+		}
+
+		if len(pools) == 0 || !utils.StringInSlice(pool, pools) {
+			log.Warnf("galaxy container %s not assigned to %s/%s", container.Name, env, pool)
+			s.stopContainer(container)
+		}
+	}
 	return nil
 }
 
@@ -698,7 +728,8 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 	return container, err
 }
 
-// NOTE: UNUSED
+// TODO: not called, is this needed?
+/*
 func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg config.App) (bool, *docker.Container, error) {
 
 	containers, err := s.ManagedContainers()
@@ -737,6 +768,7 @@ func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg config.App) 
 	container, err := s.Start(env, pool, appCfg)
 	return true, container, err
 }
+*/
 
 func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	image, err := s.InspectImage(version)
@@ -798,6 +830,11 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 }
 
 func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.ServiceRegistration, error) {
+	// make sure any old containers that shouldn't be running are gone
+	// FIXME: I don't like how a "Register" function has the possible side
+	//        effect of stopping containers
+	s.StopUnassigned(env, pool)
+
 	containers, err := s.ManagedContainers()
 	if err != nil {
 		return nil, err
@@ -807,6 +844,7 @@ func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.Servic
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
+
 		registration, err := s.configStore.RegisterService(env, pool, hostIP, container)
 		if err != nil {
 			log.Printf("ERROR: Could not register %s: %s\n", name, err.Error())
