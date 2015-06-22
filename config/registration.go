@@ -69,6 +69,8 @@ type ServiceRegistration struct {
 	VirtualHosts  []string          `json:"VIRTUAL_HOSTS"`
 	Port          string            `json:"PORT"`
 	ErrorPages    map[string]string `json:"ERROR_PAGES,omitempty"`
+	// pool is inserted only for commander dump and restore
+	Pool string
 }
 
 func (s *ServiceRegistration) Equals(other ServiceRegistration) bool {
