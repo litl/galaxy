@@ -34,16 +34,37 @@ type ContainerEvent struct {
 }
 
 func NewServiceRuntime(configStore *config.Store, dns, hostIP string) *ServiceRuntime {
+	var err error
+	var client *docker.Client
+
 	dockerZero, err := dockerBridgeIp()
 	if err != nil {
 		log.Fatalf("ERROR: Unable to find docker0 bridge: %s", err)
 	}
 
+	endpoint := GetEndpoint()
+
+	if certPath := os.Getenv("DOCKER_CERT_PATH"); certPath != "" {
+		cert := certPath + "/cert.pem"
+		key := certPath + "/key.pem"
+		ca := certPath + "/ca.pem"
+		client, err = docker.NewTLSClient(endpoint, cert, key, ca)
+	} else {
+		client, err = docker.NewClient(endpoint)
+	}
+
+	if err != nil {
+		log.Fatalf("ERROR: Unable to initialize docker client: %s: %s", err, endpoint)
+	}
+
+	client.HTTPClient.Timeout = 60 * time.Second
+
 	return &ServiceRuntime{
-		dns:         dns,
-		configStore: configStore,
-		hostIP:      hostIP,
-		dockerIP:    dockerZero,
+		dns:          dns,
+		configStore:  configStore,
+		hostIP:       hostIP,
+		dockerIP:     dockerZero,
+		dockerClient: client,
 	}
 }
 
@@ -142,43 +163,16 @@ func dockerBridgeIp() (string, error) {
 	return "", errors.New("unable to find docker0 interface")
 }
 
-func (s *ServiceRuntime) ensureDockerClient() *docker.Client {
-	if s.dockerClient == nil {
-		endpoint := GetEndpoint()
-
-		var client *docker.Client
-		var err error
-
-		if certPath := os.Getenv("DOCKER_CERT_PATH"); certPath != "" {
-			cert := certPath + "/cert.pem"
-			key := certPath + "/key.pem"
-			ca := certPath + "/ca.pem"
-			client, err = docker.NewTLSClient(endpoint, cert, key, ca)
-		} else {
-			client, err = docker.NewClient(endpoint)
-		}
-
-		if err != nil {
-			log.Fatalf("ERROR: Unable to connect to docker: %s: %s", err, endpoint)
-		}
-
-		client.HTTPClient.Timeout = 60 * time.Second
-		s.dockerClient = client
-
-	}
-	return s.dockerClient
-}
-
 func (s *ServiceRuntime) Ping() error {
-	return s.ensureDockerClient().Ping()
+	return s.dockerClient.Ping()
 }
 
 func (s *ServiceRuntime) InspectImage(image string) (*docker.Image, error) {
-	return s.ensureDockerClient().InspectImage(image)
+	return s.dockerClient.InspectImage(image)
 }
 
 func (s *ServiceRuntime) InspectContainer(id string) (*docker.Container, error) {
-	return s.ensureDockerClient().InspectContainer(id)
+	return s.dockerClient.InspectContainer(id)
 }
 
 func (s *ServiceRuntime) StopAllMatching(name string) error {
@@ -227,7 +221,7 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	log.Printf("Stopping %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
 
 	c := make(chan error, 1)
-	go func() { c <- s.ensureDockerClient().StopContainer(container.ID, 10) }()
+	go func() { c <- s.dockerClient.StopContainer(container.ID, 10) }()
 	select {
 	case err := <-c:
 		if err != nil {
@@ -242,7 +236,9 @@ func (s *ServiceRuntime) stopContainer(container *docker.Container) error {
 	log.Printf("Stopped %s container %s\n", strings.TrimPrefix(container.Name, "/"), container.ID[0:12])
 
 	return nil
-	/*	return s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+	// TODO: why is this commented out?
+	//       Should we verify that containers are actually removed somehow?
+	/*	return s.dockerClient.RemoveContainer(docker.RemoveContainerOptions{
 		ID:            container.ID,
 		RemoveVolumes: true,
 	})*/
@@ -331,6 +327,8 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(appCfg config.App) error {
 	return nil
 }
 
+// TODO: these aren't called from anywhere. Are they useful?
+/*
 func (s *ServiceRuntime) StopAllButLatestService(name string, stopCutoff int64) error {
 	containers, err := s.ManagedContainers()
 	if err != nil {
@@ -370,6 +368,32 @@ func (s *ServiceRuntime) StopAllButLatest(env string, stopCutoff int64) error {
 
 	return nil
 }
+*/
+
+// Stop any running galaxy containers that are not assigned to us
+// TODO: We call ManagedContainers a lot, repeatedly listing and inspecting all containers.
+func (s *ServiceRuntime) StopUnassigned(env, pool string) error {
+	containers, err := s.ManagedContainers()
+	if err != nil {
+		return err
+	}
+
+	for _, container := range containers {
+		name := s.EnvFor(container)["GALAXY_APP"]
+
+		pools, err := s.configStore.ListAssignedPools(env, name)
+		if err != nil {
+			log.Errorf("ERROR: Unable to list pool assignments for %s: %s", container.Name, err)
+			continue
+		}
+
+		if len(pools) == 0 || !utils.StringInSlice(pool, pools) {
+			log.Warnf("galaxy container %s not assigned to %s/%s", container.Name, env, pool)
+			s.stopContainer(container)
+		}
+	}
+	return nil
+}
 
 func (s *ServiceRuntime) StopAll(env string) error {
 
@@ -386,7 +410,7 @@ func (s *ServiceRuntime) StopAll(env string) error {
 }
 
 func (s *ServiceRuntime) GetImageByName(img string) (*docker.APIImages, error) {
-	imgs, err := s.ensureDockerClient().ListImages(docker.ListImagesOptions{All: true})
+	imgs, err := s.dockerClient.ListImages(docker.ListImagesOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
@@ -428,7 +452,7 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 
 	runCmd := []string{"/bin/bash", "-c", strings.Join(cmd, " ")}
 
-	container, err := s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
+	container, err := s.dockerClient.CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
 			Image:        appCfg.Version(),
 			Env:          envVars,
@@ -448,11 +472,11 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 	go func(s *ServiceRuntime, containerId string) {
 		<-c
 		log.Println("Stopping container...")
-		err := s.ensureDockerClient().StopContainer(containerId, 3)
+		err := s.dockerClient.StopContainer(containerId, 3)
 		if err != nil {
 			log.Printf("ERROR: Unable to stop container: %s", err)
 		}
-		err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+		err = s.dockerClient.RemoveContainer(docker.RemoveContainerOptions{
 			ID: containerId,
 		})
 		if err != nil {
@@ -461,14 +485,14 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 
 	}(s, container.ID)
 
-	defer s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+	defer s.dockerClient.RemoveContainer(docker.RemoveContainerOptions{
 		ID: container.ID,
 	})
 	config := &docker.HostConfig{}
 	if s.dns != "" {
 		config.DNS = []string{s.dns}
 	}
-	err = s.ensureDockerClient().StartContainer(container.ID, config)
+	err = s.dockerClient.StartContainer(container.ID, config)
 
 	if err != nil {
 		return container, err
@@ -480,7 +504,7 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 	// what's going on.
 	time.Sleep(1 * time.Second)
 
-	err = s.ensureDockerClient().AttachToContainer(docker.AttachToContainerOptions{
+	err = s.dockerClient.AttachToContainer(docker.AttachToContainerOptions{
 		Container:    container.ID,
 		OutputStream: os.Stdout,
 		ErrorStream:  os.Stderr,
@@ -494,7 +518,7 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 		log.Printf("ERROR: Unable to attach to running container: %s", err.Error())
 	}
 
-	s.ensureDockerClient().WaitContainer(container.ID)
+	s.dockerClient.WaitContainer(container.ID)
 
 	return container, err
 }
@@ -626,7 +650,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 	envVars = append(envVars, fmt.Sprintf("PUBLIC_HOSTNAME=%s", publicDns))
 
 	containerName := appCfg.ContainerName() + "." + strconv.FormatInt(int64(instanceId), 10)
-	container, err := s.ensureDockerClient().InspectContainer(containerName)
+	container, err := s.dockerClient.InspectContainer(containerName)
 	_, ok := err.(*docker.NoSuchContainer)
 	if err != nil && !ok {
 		return nil, err
@@ -637,14 +661,14 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 	if container != nil && container.Image != image.ID {
 		if container.State.Running || container.State.Restarting || container.State.Paused {
 			log.Printf("Stopping %s version %s running as %s", appCfg.Name(), appCfg.Version(), container.ID[0:12])
-			err := s.ensureDockerClient().StopContainer(container.ID, 10)
+			err := s.dockerClient.StopContainer(container.ID, 10)
 			if err != nil {
 				return nil, err
 			}
 		}
 
 		log.Printf("Removing %s version %s running as %s", appCfg.Name(), appCfg.Version(), container.ID[0:12])
-		err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+		err = s.dockerClient.RemoveContainer(docker.RemoveContainerOptions{
 			ID: container.ID,
 		})
 		if err != nil {
@@ -677,7 +701,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 		}
 
 		log.Printf("Creating %s version %s", appCfg.Name(), appCfg.Version())
-		container, err = s.ensureDockerClient().CreateContainer(docker.CreateContainerOptions{
+		container, err = s.dockerClient.CreateContainer(docker.CreateContainerOptions{
 			Name:   containerName,
 			Config: config,
 		})
@@ -699,12 +723,13 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 	if s.dns != "" {
 		config.DNS = []string{s.dns}
 	}
-	err = s.ensureDockerClient().StartContainer(container.ID, config)
+	err = s.dockerClient.StartContainer(container.ID, config)
 
 	return container, err
 }
 
-// NOTE: UNUSED
+// TODO: not called, is this needed?
+/*
 func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg config.App) (bool, *docker.Container, error) {
 
 	containers, err := s.ManagedContainers()
@@ -732,7 +757,7 @@ func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg config.App) 
 		return false, running, nil
 	}
 
-	err = s.ensureDockerClient().RemoveContainer(docker.RemoveContainerOptions{
+	err = s.dockerClient.RemoveContainer(docker.RemoveContainerOptions{
 		ID: appCfg.ContainerName(),
 	})
 	_, ok := err.(*docker.NoSuchContainer)
@@ -743,6 +768,7 @@ func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg config.App) 
 	container, err := s.Start(env, pool, appCfg)
 	return true, container, err
 }
+*/
 
 func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	image, err := s.InspectImage(version)
@@ -763,12 +789,13 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 		Tag:          tag,
 		OutputStream: log.DefaultLogger}
 
-	auths, err := docker.NewAuthConfigurationsFromDockerCfg()
-	if err != nil {
-		panic(err)
-	}
+	// Ignore the error. If .dockercfg doesn't exist, maybe we don't need auth
+	auths, _ := docker.NewAuthConfigurationsFromDockerCfg()
 
-	dockerAuth := auths.Configs[registry]
+	dockerAuth := docker.AuthConfiguration{}
+	if auths != nil && auths.Configs != nil {
+		dockerAuth = auths.Configs[registry]
+	}
 
 	if registry != "" {
 		pullOpts.Repository = registry + "/" + repository
@@ -781,7 +808,7 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	retries := 0
 	for {
 		retries += 1
-		err = s.ensureDockerClient().PullImage(pullOpts, dockerAuth)
+		err = s.dockerClient.PullImage(pullOpts, dockerAuth)
 		if err != nil {
 
 			// Don't retry 404, they'll never succeed
@@ -803,6 +830,11 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 }
 
 func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.ServiceRegistration, error) {
+	// make sure any old containers that shouldn't be running are gone
+	// FIXME: I don't like how a "Register" function has the possible side
+	//        effect of stopping containers
+	s.StopUnassigned(env, pool)
+
 	containers, err := s.ManagedContainers()
 	if err != nil {
 		return nil, err
@@ -812,9 +844,10 @@ func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.Servic
 
 	for _, container := range containers {
 		name := s.EnvFor(container)["GALAXY_APP"]
+
 		registration, err := s.configStore.RegisterService(env, pool, hostIP, container)
 		if err != nil {
-			log.Printf("ERROR: Could not register %s: %s\n", name, err)
+			log.Printf("ERROR: Could not register %s: %s\n", name, err.Error())
 			continue
 		}
 		registrations = append(registrations, registration)
@@ -861,7 +894,7 @@ func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan 
 			if err != nil {
 				log.Errorf("ERROR: Unable to ping docker daemaon: %s", err)
 				if watching {
-					s.ensureDockerClient().RemoveEventListener(c)
+					s.dockerClient.RemoveEventListener(c)
 					watching = false
 				}
 				time.Sleep(10 * time.Second)
@@ -870,7 +903,7 @@ func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan 
 			}
 
 			if !watching {
-				err = s.ensureDockerClient().AddEventListener(c)
+				err = s.dockerClient.AddEventListener(c)
 				if err != nil && err != docker.ErrListenerAlreadyExists {
 					log.Printf("ERROR: Error registering docker event listener: %s", err)
 					time.Sleep(10 * time.Second)
@@ -941,7 +974,7 @@ func (s *ServiceRuntime) EnvFor(container *docker.Container) map[string]string {
 
 func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 	apps := []*docker.Container{}
-	containers, err := s.ensureDockerClient().ListContainers(docker.ListContainersOptions{
+	containers, err := s.dockerClient.ListContainers(docker.ListContainersOptions{
 		All: true,
 	})
 	if err != nil {
@@ -949,7 +982,7 @@ func (s *ServiceRuntime) ManagedContainers() ([]*docker.Container, error) {
 	}
 
 	for _, c := range containers {
-		container, err := s.ensureDockerClient().InspectContainer(c.ID)
+		container, err := s.dockerClient.InspectContainer(c.ID)
 		if err != nil {
 			log.Printf("ERROR: Unable to inspect container: %s\n", c.ID)
 			continue

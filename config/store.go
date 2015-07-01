@@ -1,11 +1,9 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 
@@ -41,16 +39,46 @@ func NewStore(ttl uint64, registryURL string) *Store {
 		log.Fatalf("ERROR: Unable to parse %s", err)
 	}
 
-	if strings.ToLower(u.Scheme) == "redis" {
+	switch strings.ToLower(u.Scheme) {
+	case "redis":
 		s.Backend = &RedisBackend{
 			RedisHost: u.Host,
 		}
 		s.Backend.connect()
-	} else {
+	case "consul":
+		s.Backend = NewConsulBackend()
+	default:
 		log.Fatalf("ERROR: Unsupported registry backend: %s", u)
 	}
 
 	return s
+}
+
+// FIXME: We still have a function that returns just an *AppConfig for the
+//        RedisBackend. Unify these somehow, and preferebly decouple this from
+//        config.Store.
+func (s *Store) NewAppConfig(app, version string) App {
+	var appCfg App
+	switch s.Backend.(type) {
+	case *RedisBackend:
+		appCfg = &AppConfig{
+			name:            app,
+			versionVMap:     utils.NewVersionedMap(),
+			environmentVMap: utils.NewVersionedMap(),
+			portsVMap:       utils.NewVersionedMap(),
+			runtimeVMap:     utils.NewVersionedMap(),
+		}
+	case *ConsulBackend:
+		appCfg = &AppDefinition{
+			AppName:     app,
+			Environment: make(map[string]string),
+		}
+	default:
+		panic("unknown backend")
+	}
+
+	appCfg.SetVersion(version)
+	return appCfg
 }
 
 func (s *Store) PoolExists(env, pool string) (bool, error) {
@@ -238,14 +266,13 @@ func (s *Store) DeleteHost(env, pool string, host HostInfo) error {
 }
 
 func (s *Store) RegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
+
 	environment := s.EnvFor(container)
 
 	name := environment["GALAXY_APP"]
 	if name == "" {
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
-
-	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
 
 	serviceRegistration := newServiceRegistration(container, hostIP, environment["GALAXY_PORT"])
 	serviceRegistration.Name = name
@@ -274,24 +301,10 @@ func (s *Store) RegisterService(env, pool, hostIP string, container *docker.Cont
 		serviceRegistration.ErrorPages = errorPages
 	}
 
-	jsonReg, err := json.Marshal(serviceRegistration)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: use a compare-and-swap SCRIPT
-	_, err = s.Backend.Set(registrationPath, "location", string(jsonReg))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = s.Backend.Expire(registrationPath, s.TTL)
-	if err != nil {
-		return nil, err
-	}
 	serviceRegistration.Expires = time.Now().UTC().Add(time.Duration(s.TTL) * time.Second)
 
-	return serviceRegistration, nil
+	err := s.Backend.RegisterService(env, pool, serviceRegistration)
+	return serviceRegistration, err
 }
 
 func (s *Store) UnRegisterService(env, pool, hostIP string, container *docker.Container) (*ServiceRegistration, error) {
@@ -303,19 +316,8 @@ func (s *Store) UnRegisterService(env, pool, hostIP string, container *docker.Co
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	registrationPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
-
-	registration, err := s.GetServiceRegistration(env, pool, hostIP, container)
+	registration, err := s.Backend.UnregisterService(env, pool, hostIP, name, container.ID)
 	if err != nil || registration == nil {
-		return registration, err
-	}
-
-	if registration.ContainerID != container.ID {
-		return nil, nil
-	}
-
-	_, err = s.Backend.Delete(registrationPath)
-	if err != nil {
 		return registration, err
 	}
 
@@ -331,33 +333,11 @@ func (s *Store) GetServiceRegistration(env, pool, hostIP string, container *dock
 		return nil, fmt.Errorf("GALAXY_APP not set on container %s", container.ID[0:12])
 	}
 
-	regPath := path.Join(env, pool, "hosts", hostIP, name, container.ID[0:12])
-
-	existingRegistration := ServiceRegistration{
-		Path: regPath,
-	}
-
-	location, err := s.Backend.Get(regPath, "location")
-
+	serviceReg, err := s.Backend.GetServiceRegistration(env, pool, hostIP, name, container.ID)
 	if err != nil {
 		return nil, err
 	}
-
-	if location != "" {
-		err = json.Unmarshal([]byte(location), &existingRegistration)
-		if err != nil {
-			return nil, err
-		}
-
-		expires, err := s.Backend.TTL(regPath)
-		if err != nil {
-			return nil, err
-		}
-		existingRegistration.Expires = time.Now().UTC().Add(time.Duration(expires) * time.Second)
-		return &existingRegistration, nil
-	}
-
-	return nil, nil
+	return serviceReg, nil
 }
 
 func (s *Store) IsRegistered(env, pool, hostIP string, container *docker.Container) (bool, error) {
@@ -366,39 +346,8 @@ func (s *Store) IsRegistered(env, pool, hostIP string, container *docker.Contain
 	return reg != nil, err
 }
 
-// TODO: get all ServiceRegistrations
 func (s *Store) ListRegistrations(env string) ([]ServiceRegistration, error) {
-
-	// TODO: convert to scan
-	keys, err := s.Backend.Keys(path.Join(env, "*", "hosts", "*", "*", "*"))
-	if err != nil {
-		return nil, err
-	}
-
-	var regList []ServiceRegistration
-	for _, key := range keys {
-
-		val, err := s.Backend.Get(key, "location")
-		if err != nil {
-			log.Warnf("WARN: Unable to get location for %s: %s", key, err)
-			continue
-		}
-
-		svcReg := ServiceRegistration{
-			Name: path.Base(key),
-		}
-		err = json.Unmarshal([]byte(val), &svcReg)
-		if err != nil {
-			log.Warnf("WARN: Unable to unmarshal JSON for %s: %s", key, err)
-			continue
-		}
-
-		svcReg.Path = key
-
-		regList = append(regList, svcReg)
-	}
-
-	return regList, nil
+	return s.Backend.ListRegistrations(env)
 }
 
 func (s *Store) EnvFor(container *docker.Container) map[string]string {

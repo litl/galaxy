@@ -99,8 +99,6 @@ func getAppBackup(app, env string) (*appCfg, error) {
 		Name:    app,
 		Version: svcCfg.Version(),
 		Env:     svcCfg.Env(),
-		// TODO: Remove Ports and related
-		//Ports:   svcCfg.Ports(),
 	}
 	return backup, nil
 }
@@ -205,14 +203,8 @@ func restoreApp(bkup *appCfg, env string) error {
 	}
 
 	if svcCfg == nil {
-		svcCfg = gconfig.NewAppConfig(bkup.Name, bkup.Version)
+		svcCfg = configStore.NewAppConfig(bkup.Name, bkup.Version)
 	}
-
-	/* TODO: Remove Ports and related
-	for port, net := range bkup.Ports {
-		svcCfg.AddPort(port, net)
-	}
-	*/
 
 	for k, v := range bkup.Env {
 		svcCfg.EnvSet(k, v)

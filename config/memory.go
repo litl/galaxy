@@ -339,3 +339,19 @@ func (r *MemoryBackend) ListHosts(env, pool string) ([]HostInfo, error) {
 func (r *MemoryBackend) DeleteHost(env, pool string, host HostInfo) error {
 	panic("not implemented")
 }
+
+func (r *MemoryBackend) RegisterService(env, pool string, reg *ServiceRegistration) error {
+	panic("not implemented")
+}
+
+func (r *MemoryBackend) UnregisterService(env, pool, hostIP, name, containerID string) (*ServiceRegistration, error) {
+	panic("not implemented")
+}
+
+func (r *MemoryBackend) GetServiceRegistration(env, pool, hostIP, name, containerID string) (*ServiceRegistration, error) {
+	panic("not implemented")
+}
+
+func (r *MemoryBackend) ListRegistrations(env string) ([]ServiceRegistration, error) {
+	panic("not implemented")
+}

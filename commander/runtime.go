@@ -88,7 +88,12 @@ func RuntimeSet(configStore *config.Store, app, env, pool string, options Runtim
 		cfg.SetMemory(pool, options.Memory)
 	}
 
-	vhosts := strings.Split(cfg.Env()["VIRTUAL_HOST"], ",")
+	vhosts := []string{}
+	vhostsFromEnv := cfg.Env()["VIRTUAL_HOST"]
+	if vhostsFromEnv != "" {
+		vhosts = strings.Split(cfg.Env()["VIRTUAL_HOST"], ",")
+	}
+
 	if options.VirtualHost != "" && !utils.StringInSlice(options.VirtualHost, vhosts) {
 		vhosts = append(vhosts, options.VirtualHost)
 		cfg.EnvSet("VIRTUAL_HOST", strings.Join(vhosts, ","))

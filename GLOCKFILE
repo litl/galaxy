@@ -6,5 +6,6 @@ github.com/fatih/color 95b468b5f34882796c597b718955603a584a9bd4
 github.com/fsouza/go-dockerclient 4a43f0ee9fe0c8f6cb7672b41b11122b40bb531a
 github.com/garyburd/redigo 535138d7bcd717d6531c701ef5933d98b1866257
 github.com/goamz/goamz a1da1b724496ac803aabd4898e15e74535d68ee0
+github.com/hashicorp/consul a02ba028156e7b4db52a1e090394568aa4a3def8
 github.com/litl/shuttle f2398ad6626694603accb6d34183aedee79336df
 github.com/ryanuber/columnize fef4ee9c9ecfb000e86ca19ac9cea7d58200d5b6

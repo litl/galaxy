@@ -61,7 +61,7 @@ func ConfigSet(configStore *config.Store, app, env string, envVars []string) err
 	}
 
 	if svcCfg == nil {
-		svcCfg = config.NewAppConfig(app, "")
+		svcCfg = configStore.NewAppConfig(app, "")
 	}
 
 	updated := false

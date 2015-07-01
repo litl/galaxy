@@ -28,13 +28,6 @@ type App interface {
 	GetMemory(pool string) string
 	SetCPUShares(pool string, cpu string)
 	GetCPUShares(pool string) string
-
-	/* TODO: Remove Ports: they don't seem to be used
-	Ports() map[string]string
-	ClearPorts()
-	AddPort(port, portType string)
-	*/
-
 }
 
 type AppConfig struct {
@@ -60,6 +53,7 @@ func NewAppConfig(app, version string) App {
 	return svcCfg
 }
 
+// TODO: this isn't used anyhere
 func NewAppConfigWithEnv(app, version string, env map[string]string) App {
 	svcCfg := NewAppConfig(app, version).(*AppConfig)
 
