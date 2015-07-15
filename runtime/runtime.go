@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,6 +19,9 @@ import (
 )
 
 var blacklistedContainerId = make(map[string]bool)
+
+// the deafult docker index server
+var defaultIndexServer = "https://index.docker.io/v1/"
 
 type ServiceRuntime struct {
 	dockerClient *docker.Client
@@ -770,6 +774,38 @@ func (s *ServiceRuntime) StartIfNotRunning(env, pool string, appCfg config.App) 
 }
 */
 
+// Find a best match for docker authentication
+// Docker's config is a bunch of special-cases, try to cover most of them here.
+// TODO: This may not work at all when we switch to a private V2 registry
+func findAuth(registry string) docker.AuthConfiguration {
+	// Ignore the error. If .dockercfg doesn't exist, maybe we don't need auth
+	auths, _ := docker.NewAuthConfigurationsFromDockerCfg()
+	if auths == nil || auths.Configs == nil {
+		return docker.AuthConfiguration{}
+	}
+
+	auth, ok := auths.Configs[registry]
+	if ok {
+		return auth
+	}
+	// no exact match, so let's try harder
+
+	// Docker only uses the hostname for private indexes
+	for reg, auth := range auths.Configs {
+		// extract the hostname if the key is a url
+		if u, e := url.Parse(reg); e == nil && u.Host != "" {
+			reg = u.Host
+		}
+		if registry == reg {
+			return auth
+		}
+	}
+
+	// Still no match
+	// Try the default docker index server
+	return auths.Configs[defaultIndexServer]
+}
+
 func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	image, err := s.InspectImage(version)
 
@@ -789,13 +825,7 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 		Tag:          tag,
 		OutputStream: log.DefaultLogger}
 
-	// Ignore the error. If .dockercfg doesn't exist, maybe we don't need auth
-	auths, _ := docker.NewAuthConfigurationsFromDockerCfg()
-
-	dockerAuth := docker.AuthConfiguration{}
-	if auths != nil && auths.Configs != nil {
-		dockerAuth = auths.Configs[registry]
-	}
+	dockerAuth := findAuth(registry)
 
 	if registry != "" {
 		pullOpts.Repository = registry + "/" + repository
