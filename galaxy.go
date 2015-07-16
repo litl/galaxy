@@ -360,7 +360,7 @@ func poolList(c *cli.Context) {
 		}
 
 	}
-	output, _ := columnize.SimpleFormat(columns)
+	output := columnize.SimpleFormat(columns)
 	log.Println(output)
 }
 

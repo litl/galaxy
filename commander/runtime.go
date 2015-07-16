@@ -67,7 +67,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 			}
 		}
 	}
-	output, _ := columnize.SimpleFormat(columns)
+	output := columnize.SimpleFormat(columns)
 	log.Println(output)
 	return nil
 

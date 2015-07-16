@@ -57,7 +57,7 @@ func HostsList(configStore *config.Store, env, pool string) error {
 			}
 		}
 	}
-	output, _ := columnize.SimpleFormat(columns)
+	output := columnize.SimpleFormat(columns)
 	log.Println(output)
 	return nil
 
