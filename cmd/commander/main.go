@@ -450,6 +450,22 @@ func main() {
 	initOrDie()
 
 	switch flag.Args()[0] {
+	case "dump":
+		if flag.NArg() < 2 {
+			fmt.Println("Usage: commander dump ENV")
+			os.Exit(1)
+		}
+		dump(flag.Arg(1))
+		return
+
+	case "restore":
+		if flag.NArg() < 2 {
+			fmt.Println("Usage: commander dump ENV FILE")
+			os.Exit(1)
+		}
+		restore(flag.Arg(1))
+		return
+
 	case "agent":
 		log.DefaultLogger.SetFlags(golog.LstdFlags)
 		loop = true

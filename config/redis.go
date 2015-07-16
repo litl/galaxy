@@ -699,6 +699,8 @@ func (r *RedisBackend) ListRegistrations(env string) ([]ServiceRegistration, err
 	var regList []ServiceRegistration
 	for _, key := range keys {
 
+		pool := strings.Split(key, "/")[1]
+
 		val, err := r.Get(key, "location")
 		if err != nil {
 			log.Warnf("WARN: Unable to get location for %s: %s", key, err)
@@ -707,6 +709,7 @@ func (r *RedisBackend) ListRegistrations(env string) ([]ServiceRegistration, err
 
 		svcReg := ServiceRegistration{
 			Name: path.Base(key),
+			Pool: pool,
 		}
 		err = json.Unmarshal([]byte(val), &svcReg)
 		if err != nil {

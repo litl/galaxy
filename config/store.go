@@ -18,6 +18,8 @@ const (
 
 type HostInfo struct {
 	HostIP string
+	// The Pool field is currently only used for commander dump and restore
+	Pool string
 }
 
 type Store struct {
