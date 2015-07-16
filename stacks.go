@@ -839,7 +839,7 @@ func stackList(c *cli.Context) {
 		stacks = append(stacks, s)
 	}
 
-	output, _ := columnize.SimpleFormat(stacks)
+	output := columnize.SimpleFormat(stacks)
 	log.Println(output)
 }
 
@@ -880,6 +880,6 @@ func stackListEvents(c *cli.Context) {
 		lines = append(lines, line)
 	}
 
-	output, _ := columnize.SimpleFormat(lines)
+	output := columnize.SimpleFormat(lines)
 	log.Println(output)
 }

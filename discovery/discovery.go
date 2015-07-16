@@ -62,7 +62,7 @@ func Status(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store, e
 
 	}
 
-	result, _ := columnize.SimpleFormat(columns)
+	result := columnize.SimpleFormat(columns)
 	log.Println(result)
 	return nil
 }
