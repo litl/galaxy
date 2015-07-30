@@ -454,7 +454,7 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 	envVars = append(envVars, "GALAXY_VERSION="+strconv.FormatInt(appCfg.ID(), 10))
 	envVars = append(envVars, fmt.Sprintf("GALAXY_INSTANCE=%s", strconv.FormatInt(int64(instanceId), 10)))
 
-	runCmd := []string{"/bin/bash", "-c", strings.Join(cmd, " ")}
+	runCmd := []string{"/bin/sh", "-c", strings.Join(cmd, " ")}
 
 	container, err := s.dockerClient.CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
@@ -590,7 +590,7 @@ func (s *ServiceRuntime) StartInteractive(env, pool string, appCfg config.App) e
 		args = append(args, cpu)
 	}
 
-	args = append(args, []string{"-t", appCfg.Version(), "/bin/bash"}...)
+	args = append(args, []string{"-t", appCfg.Version(), "/bin/sh"}...)
 	// shell out to docker run to get signal forwarded and terminal setup correctly
 	//cmd := exec.Command("docker", "run", "-rm", "-i", "-t", appCfg.Version(), "/bin/bash")
 	cmd := exec.Command("docker", args...)
