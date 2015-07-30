@@ -412,7 +412,7 @@ func main() {
 		println("   app:delete      Delete an app")
 		println("   app:restart     Restart an app")
 		println("   app:run         Run a command within an app on this host")
-		println("   app:shell       Run a bash shell within an app on this host")
+		println("   app:shell       Run a shell within an app on this host")
 		println("   app:start       Starts one or more apps")
 		println("   app:stop        Stops one or more apps")
 		println("   app:unassign    Unassign an app from a pool")
@@ -638,7 +638,7 @@ func main() {
 		appFs := flag.NewFlagSet("app:shell", flag.ExitOnError)
 		appFs.Usage = func() {
 			println("Usage: commander app:shell <app>\n")
-			println("    Run a bash shell for an app\n")
+			println("    Run a shell for an app\n")
 			println("Options:\n")
 			appFs.PrintDefaults()
 		}
