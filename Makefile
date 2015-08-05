@@ -54,12 +54,7 @@ dist-darwin-amd64:
 	export GOARCH="amd64"; \
 	$(MAKE) dist-build
 
-dist-darwin-386:
-	export GOOS="darwin"; \
-	export GOARCH="386"; \
-	$(MAKE) dist-build
-
-dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64 dist-darwin-386
+dist: dist-clean dist-init dist-linux-amd64 dist-linux-386 dist-darwin-amd64
 
 release-tarball:
 	echo "Building $$GOOS-$$GOARCH-$(TAG).tar.gz"
@@ -80,20 +75,13 @@ release-darwin-amd64:
 	export GOARCH="amd64"; \
 	$(MAKE) release-tarball
 
-release-darwin-386:
-	export GOOS="darwin"; \
-	export GOARCH="386"; \
-	$(MAKE) release-tarball
-
-release: deps dist release-linux-amd64 release-linux-386 release-darwin-amd64 release-darwin-386
+release: deps dist release-linux-amd64 release-linux-386 release-darwin-amd64
 
 upload-release:
 	aws s3 cp galaxy-darwin-amd64-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-darwin-amd64-$(TAG).tar.gz --acl public-read
-	aws s3 cp galaxy-darwin-386-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-darwin-386-$(TAG).tar.gz --acl public-read
 	aws s3 cp galaxy-linux-amd64-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-linux-amd64-$(TAG).tar.gz --acl public-read
 	aws s3 cp galaxy-linux-386-$(TAG).tar.gz s3://litl-package-repo/galaxy/galaxy-linux-386-$(TAG).tar.gz --acl public-read
 	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-darwin-amd64-$(TAG).tar.gz
-	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-darwin-386-$(TAG).tar.gz
 	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-linux-amd64-$(TAG).tar.gz
 	echo https://s3.amazonaws.com/litl-package-repo/galaxy/galaxy-linux-386-$(TAG).tar.gz
 
