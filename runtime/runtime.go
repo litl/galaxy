@@ -502,18 +502,12 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 		return container, err
 	}
 
-	// FIXME: Hack to work around the race of attaching to a container before it's
-	// actually running.  Tried polling the container and then attaching but the
-	// output gets lost sometimes if the command executes very quickly. Not sure
-	// what's going on.
-	time.Sleep(1 * time.Second)
-
 	err = s.dockerClient.AttachToContainer(docker.AttachToContainerOptions{
 		Container:    container.ID,
 		OutputStream: os.Stdout,
 		ErrorStream:  os.Stderr,
 		Logs:         true,
-		Stream:       false,
+		Stream:       true,
 		Stdout:       true,
 		Stderr:       true,
 	})
