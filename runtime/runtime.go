@@ -513,7 +513,7 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 		OutputStream: os.Stdout,
 		ErrorStream:  os.Stderr,
 		Logs:         true,
-		Stream:       false,
+		Stream:       true,
 		Stdout:       true,
 		Stderr:       true,
 	})
