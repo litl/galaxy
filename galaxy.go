@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -419,6 +420,32 @@ func pgPsql(c *cli.Context) {
 		return
 	}
 
+	if c.Bool("ro") {
+		dbURL, err := url.Parse(database_url)
+		if err != nil {
+			log.Printf("Invalid DATABASE_URL: %s", database_url)
+			return
+		}
+
+		qp, err := url.ParseQuery(dbURL.RawQuery)
+		if err != nil {
+			log.Printf("Invalid DATABASE_URL: %s", database_url)
+			return
+		}
+
+		options := qp.Get("options")
+		if options != "" {
+			options += " "
+		}
+		options += fmt.Sprintf("-c default_transaction_read_only=true")
+		qp.Set("options", options)
+
+		dbURL.RawQuery = strings.Replace(qp.Encode(), "+", "%20", -1)
+
+		database_url = dbURL.String()
+		fmt.Println(database_url)
+	}
+
 	cmd := exec.Command("psql", database_url)
 
 	cmd.Stdin = os.Stdin
@@ -652,6 +679,9 @@ func main() {
 			Usage:       "connect to database using psql",
 			Action:      pgPsql,
 			Description: "pg:psql <app>",
+			Flags: []cli.Flag{
+				cli.BoolFlag{Name: "ro", Usage: "read-only connection"},
+			},
 		},
 		{
 			Name:        "stack:template",
