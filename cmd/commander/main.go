@@ -1043,6 +1043,64 @@ func main() {
 		}
 		return
 
+	case "pool":
+
+		err := commander.ListPools(configStore, env)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+
+	case "pool:create":
+		appFs := flag.NewFlagSet("pool:create", flag.ExitOnError)
+		appFs.Usage = func() {
+			println("Usage: commander -env <env> pool:create <pool>\n")
+			println("    Create a pool in <env>\n")
+			appFs.PrintDefaults()
+		}
+		appFs.Parse(flag.Args()[1:])
+
+		ensureEnv()
+
+		if pool == "" && appFs.NArg() > 0 {
+			pool = appFs.Arg(0)
+		} else {
+			ensurePool()
+		}
+
+		err := commander.PoolCreate(configStore, env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: Could not create pool: %s", err)
+		}
+		fmt.Println("created pool:", pool)
+		return
+
+	case "pool:delete":
+		appFs := flag.NewFlagSet("pool:delete", flag.ExitOnError)
+		appFs.Usage = func() {
+			println("Usage: commander -env <env> pool:delete <pool>\n")
+			println("    Delete a pool from <env>\n")
+			appFs.PrintDefaults()
+		}
+		appFs.Parse(flag.Args()[1:])
+
+		ensureEnv()
+
+		if pool == "" && flag.NArg() > 1 {
+			pool = flag.Arg(1)
+		} else {
+			ensurePool()
+		}
+
+		err := commander.PoolDelete(configStore, env, pool)
+		if err != nil {
+			log.Fatalf("ERROR: Could not delete pool: %s", err)
+			return
+		}
+
+		fmt.Println("deleted pool:", pool)
+		return
+
 	default:
 		fmt.Println("Unknown command")
 		flag.Usage()
@@ -1084,5 +1142,4 @@ func main() {
 
 	// TODO: do we still need a WaitGroup?
 	wg.Wait()
-
 }

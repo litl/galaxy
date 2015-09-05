@@ -1,10 +1,10 @@
 package commander
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/litl/galaxy/config"
-	"github.com/litl/galaxy/log"
 	"github.com/ryanuber/columnize"
 )
 
@@ -58,7 +58,6 @@ func HostsList(configStore *config.Store, env, pool string) error {
 		}
 	}
 	output := columnize.SimpleFormat(columns)
-	log.Println(output)
+	fmt.Println(output)
 	return nil
-
 }

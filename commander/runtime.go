@@ -1,11 +1,11 @@
 package commander
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/litl/galaxy/config"
-	"github.com/litl/galaxy/log"
 	"github.com/litl/galaxy/utils"
 	"github.com/ryanuber/columnize"
 )
@@ -68,7 +68,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 		}
 	}
 	output := columnize.SimpleFormat(columns)
-	log.Println(output)
+	fmt.Println(output)
 	return nil
 
 }
