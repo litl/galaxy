@@ -34,7 +34,7 @@ func ConfigList(configStore *config.Store, app, env string) error {
 			log.Printf("%s=%s\n", k, env)
 			continue
 		}
-		log.Printf("%s=%s\n", k, cfg.Env()[k])
+		fmt.Printf("%s=%s\n", k, cfg.Env()[k])
 	}
 
 	return nil

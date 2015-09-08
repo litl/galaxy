@@ -68,7 +68,7 @@ func AppList(configStore *config.Store, env string) error {
 		}
 	}
 	output := columnize.SimpleFormat(columns)
-	log.Println(output)
+	fmt.Println(output)
 	return nil
 }
 
