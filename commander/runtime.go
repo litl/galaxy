@@ -11,11 +11,12 @@ import (
 )
 
 type RuntimeOptions struct {
-	Ps          int
-	Memory      string
-	CPUShares   string
-	VirtualHost string
-	Port        string
+	Ps              int
+	Memory          string
+	CPUShares       string
+	VirtualHost     string
+	Port            string
+	MaintenanceMode string
 }
 
 func RuntimeList(configStore *config.Store, app, env, pool string) error {
@@ -30,7 +31,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 		}
 	}
 
-	columns := []string{"ENV | NAME | POOL | PS | MEM | VHOSTS | PORT"}
+	columns := []string{"ENV | NAME | POOL | PS | MEM | VHOSTS | PORT | MAINT"}
 
 	for _, env := range envs {
 
@@ -63,6 +64,7 @@ func RuntimeList(configStore *config.Store, app, env, pool string) error {
 					mem,
 					appCfg.Env()["VIRTUAL_HOST"],
 					appCfg.Env()["GALAXY_PORT"],
+					fmt.Sprint(appCfg.GetMaintenanceMode(p)),
 				}, " | "))
 			}
 		}
@@ -101,6 +103,15 @@ func RuntimeSet(configStore *config.Store, app, env, pool string, options Runtim
 
 	if options.Port != "" {
 		cfg.EnvSet("GALAXY_PORT", options.Port)
+	}
+
+	if options.MaintenanceMode != "" {
+		b, err := strconv.ParseBool(options.MaintenanceMode)
+		if err != nil {
+			return false, err
+		}
+
+		cfg.SetMaintenanceMode(pool, b)
 	}
 
 	return configStore.UpdateApp(cfg, env)

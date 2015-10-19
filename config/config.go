@@ -104,6 +104,9 @@ type AppAssignment struct {
 	// Minimum number of instances to keep running during a deploy or restart.
 	// Default is 1 if Instances is > 1, else 0.
 	MinInstances int
+
+	// Whether this app is in maintenance mode
+	MaintenanceMode bool
 }
 
 //
@@ -185,6 +188,16 @@ func (a *AppDefinition) SetCPUShares(pool string, cpu string) {
 func (a *AppDefinition) GetCPUShares(pool string) string {
 	i := a.assignment(pool)
 	return strconv.Itoa(a.Assignments[i].CPU)
+}
+
+func (a *AppDefinition) SetMaintenanceMode(pool string, maint bool) {
+	i := a.assignment(pool)
+	a.Assignments[i].MaintenanceMode = maint
+}
+
+func (a *AppDefinition) GetMaintenanceMode(pool string) bool {
+	i := a.assignment(pool)
+	return a.Assignments[i].MaintenanceMode
 }
 
 // TODO: This is to make it easier to refactor in this new config.

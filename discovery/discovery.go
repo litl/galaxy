@@ -105,7 +105,7 @@ func RegisterAll(serviceRuntime *runtime.ServiceRuntime, configStore *config.Sto
 
 	}
 
-	registerShuttle(configStore, env, shuttleAddr)
+	registerShuttle(configStore, env, pool, shuttleAddr)
 }
 
 func Register(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store, env, pool, hostIP, shuttleAddr string) {
@@ -135,7 +135,7 @@ func Register(serviceRuntime *runtime.ServiceRuntime, configStore *config.Store,
 
 				log.Printf("Registered %s running as %s for %s%s", strings.TrimPrefix(reg.ContainerName, "/"),
 					reg.ContainerID[0:12], reg.Name, locationAt(reg))
-				registerShuttle(configStore, env, shuttleAddr)
+				registerShuttle(configStore, env, pool, shuttleAddr)
 			case "die", "stop":
 				reg, err := configStore.UnRegisterService(env, pool, hostIP, ce.Container)
 				if err != nil {
