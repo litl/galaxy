@@ -13,7 +13,7 @@ var (
 	client *shuttle.Client
 )
 
-func registerShuttle(configStore *config.Store, env, shuttleAddr string) {
+func registerShuttle(configStore *config.Store, env, pool, shuttleAddr string) {
 	if client == nil {
 		return
 	}
@@ -66,6 +66,14 @@ func registerShuttle(configStore *config.Store, env, shuttleAddr string) {
 		if len(errorPages) > 0 {
 			service.ErrorPages = errorPages
 		}
+
+		app, err := configStore.GetApp(service.Name, env)
+		if err != nil {
+			log.Errorf("ERROR: Unable to get app for service %s: %s", service.Name, err)
+			continue
+		}
+
+		service.MaintenanceMode = app.GetMaintenanceMode(pool)
 	}
 
 	for _, service := range backends {

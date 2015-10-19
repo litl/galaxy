@@ -914,15 +914,17 @@ func main() {
 		var c string
 		var vhost string
 		var port string
+		var maint string
 		runtimeFs := flag.NewFlagSet("runtime:set", flag.ExitOnError)
 		runtimeFs.IntVar(&ps, "ps", 0, "Number of instances to run across all hosts")
 		runtimeFs.StringVar(&m, "m", "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
 		runtimeFs.StringVar(&c, "c", "", "CPU shares (relative weight)")
 		runtimeFs.StringVar(&vhost, "vhost", "", "Virtual host for HTTP routing")
 		runtimeFs.StringVar(&port, "port", "", "Service port for service discovery")
+		runtimeFs.StringVar(&maint, "maint", "", "Enable or disable maintenance mode")
 
 		runtimeFs.Usage = func() {
-			println("Usage: commander runtime:set [-ps 1] [-m 100m] [-c 512] [-vhost x.y.z] [-port 8000] <app>\n")
+			println("Usage: commander runtime:set [-ps 1] [-m 100m] [-c 512] [-vhost x.y.z] [-port 8000] [-maint false] <app>\n")
 			println("    Set container runtime policies\n")
 			println("Options:\n")
 			runtimeFs.PrintDefaults()
@@ -952,11 +954,12 @@ func main() {
 		}
 
 		updated, err := commander.RuntimeSet(configStore, app, env, pool, commander.RuntimeOptions{
-			Ps:          ps,
-			Memory:      m,
-			CPUShares:   c,
-			VirtualHost: vhost,
-			Port:        port,
+			Ps:              ps,
+			Memory:          m,
+			CPUShares:       c,
+			VirtualHost:     vhost,
+			Port:            port,
+			MaintenanceMode: maint,
 		})
 		if err != nil {
 			log.Fatalf("ERROR: %s", err)

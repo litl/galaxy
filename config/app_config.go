@@ -28,6 +28,8 @@ type App interface {
 	GetMemory(pool string) string
 	SetCPUShares(pool string, cpu string)
 	GetCPUShares(pool string) string
+	SetMaintenanceMode(pool string, maint bool)
+	GetMaintenanceMode(pool string) bool
 }
 
 type AppConfig struct {
@@ -194,4 +196,15 @@ func (s *AppConfig) SetCPUShares(pool string, cpu string) {
 func (s *AppConfig) GetCPUShares(pool string) string {
 	key := fmt.Sprintf("%s-cpu", pool)
 	return s.runtimeVMap.Get(key)
+}
+
+func (s *AppConfig) SetMaintenanceMode(pool string, maint bool) {
+	key := fmt.Sprintf("%s-maint", pool)
+	s.runtimeVMap.SetVersion(key, fmt.Sprint(maint), s.nextID())
+}
+
+func (s *AppConfig) GetMaintenanceMode(pool string) bool {
+	key := fmt.Sprintf("%s-maint", pool)
+	maint, _ := strconv.ParseBool(s.runtimeVMap.Get(key))
+	return maint
 }
