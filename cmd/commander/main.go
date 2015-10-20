@@ -937,7 +937,7 @@ func main() {
 
 		ensureEnv()
 
-		if ps != 0 || m != "" || c != "" {
+		if ps != 0 || m != "" || c != "" || maint != "" {
 			ensurePool()
 		}
 
