@@ -716,6 +716,10 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 			Name:              "on-failure",
 			MaximumRetryCount: 16,
 		},
+		LogConfig: docker.LogConfig{
+			Type:   "syslog",
+			Config: map[string]string{"syslog-tag": appCfg.Version()},
+		},
 	}
 
 	if s.dns != "" {
