@@ -718,7 +718,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 		},
 		LogConfig: docker.LogConfig{
 			Type:   "syslog",
-			Config: map[string]string{"syslog-tag": appCfg.Version()},
+			Config: map[string]string{"syslog-tag": containerName},
 		},
 	}
 
