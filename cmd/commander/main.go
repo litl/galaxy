@@ -107,27 +107,13 @@ func pullImageAsync(appCfg config.App, errChan chan error) {
 }
 
 func pullImage(appCfg config.App) (*docker.Image, error) {
-
-	image, err := serviceRuntime.InspectImage(appCfg.Version())
-	if image != nil && image.ID == appCfg.VersionID() || appCfg.VersionID() == "" {
-		return image, nil
-	}
-
-	log.Printf("Pulling %s version %s\n", appCfg.Name(), appCfg.Version())
-	image, err = serviceRuntime.PullImage(appCfg.Version(),
-		appCfg.VersionID())
+	image, err := serviceRuntime.PullImage(appCfg.Version(), appCfg.VersionID())
 	if image == nil || err != nil {
-		log.Errorf("ERROR: Could not pull image %s: %s",
-			appCfg.Version(), err)
+		log.Errorf("ERROR: Could not pull image %s: %s", appCfg.Version(), err)
 		return nil, err
 	}
 
-	if image.ID != appCfg.VersionID() && len(appCfg.VersionID()) > 12 {
-		log.Errorf("WARNING: Pulled image for %s does not match expected ID. Expected: %s: Got: %s",
-			appCfg.Version(), image.ID[0:12], appCfg.VersionID()[0:12])
-	}
-
-	log.Printf("Pulled %s\n", appCfg.Version())
+	log.Printf("Pulled %s version %s\n", appCfg.Name(), appCfg.Version())
 	return image, nil
 }
 
@@ -173,11 +159,13 @@ func startService(appCfg config.App, logStatus bool) {
 		}
 	}
 
-	err = serviceRuntime.StopAllButCurrentVersion(appCfg)
+	err = serviceRuntime.StopOldVersion(appCfg, -1)
 	if err != nil {
 		log.Errorf("ERROR: Could not stop old containers: %s", err)
 	}
 
+	// check the image version, and log any inconsistencies
+	inspectImage(appCfg)
 }
 
 func heartbeatHost() {
@@ -215,6 +203,21 @@ func appAssigned(app string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// inspectImage checks that the running image matches the config.
+// We only use this to print warnings, since we likely need to deploy a new
+// config version to fix the inconsistency.
+func inspectImage(appCfg config.App) {
+	image, err := serviceRuntime.InspectImage(appCfg.Version())
+	if err != nil {
+		log.Println("error inspecting image", appCfg.Version)
+		return
+	}
+
+	if utils.StripSHA(image.ID) != appCfg.VersionID() {
+		log.Printf("warning: %s image ID does not match config", appCfg.Name())
+	}
 }
 
 func restartContainers(app string, cmdChan chan string) {
@@ -314,14 +317,6 @@ func restartContainers(app string, cmdChan chan string) {
 				continue
 			}
 
-			_, err = pullImage(appCfg)
-			if err != nil {
-				if !loop {
-					return
-				}
-				log.Errorf("ERROR: Could not pull images: %s", err)
-				continue
-			}
 			startService(appCfg, logOnce)
 		}
 

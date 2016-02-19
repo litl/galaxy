@@ -172,3 +172,8 @@ func ParseMemory(mem string) (int64, error) {
 	}
 	return i * multiplier, nil
 }
+
+// strip the leading sha256: from content adressable images
+func StripSHA(s string) string {
+	return strings.TrimPrefix(s, "sha256:")
+}
