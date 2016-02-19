@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	golog "log"
@@ -124,10 +123,8 @@ func pullImage(appCfg config.App) (*docker.Image, error) {
 	}
 
 	if image.ID != appCfg.VersionID() && len(appCfg.VersionID()) > 12 {
-		log.Errorf("ERROR: Pulled image for %s does not match expected ID. Expected: %s: Got: %s",
-			appCfg.Version(),
-			image.ID[0:12], appCfg.VersionID()[0:12])
-		return nil, errors.New(fmt.Sprintf("failed to pull image ID %s", appCfg.VersionID()[0:12]))
+		log.Errorf("WARNING: Pulled image for %s does not match expected ID. Expected: %s: Got: %s",
+			appCfg.Version(), image.ID[0:12], appCfg.VersionID()[0:12])
 	}
 
 	log.Printf("Pulled %s\n", appCfg.Version())
