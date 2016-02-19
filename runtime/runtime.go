@@ -207,9 +207,7 @@ func (s *ServiceRuntime) Stop(appCfg config.App) error {
 
 	for _, container := range containers {
 		cenv := s.EnvFor(container)
-		if cenv["GALAXY_APP"] == appCfg.Name() &&
-			cenv["GALAXY_VERSION"] == strconv.FormatInt(appCfg.ID(), 10) &&
-			appCfg.VersionID() == container.Image {
+		if cenv["GALAXY_APP"] == appCfg.Name() && cenv["GALAXY_VERSION"] == strconv.FormatInt(appCfg.ID(), 10) {
 			return s.stopContainer(container)
 		}
 	}
