@@ -280,7 +280,12 @@ func (s *ServiceRuntime) StopOldVersion(appCfg config.App, limit int) error {
 
 		version := env["GALAXY_VERSION"]
 
-		imageDiffers := image.ID != appCfg.VersionID() && appCfg.VersionID() != ""
+		// imageDiffers := image.ID != appCfg.VersionID() && appCfg.VersionID() != ""
+		// FIXME ContainerID: Check for a name mismatch rather than an ID mismatch.
+		//        While upgrading docker we may have images that run with
+		//        different IDs than when they're pulled.
+		imageDiffers := appCfg.ContainerName() != container.Name
+
 		versionDiffers := version != strconv.FormatInt(appCfg.ID(), 10) && version != ""
 
 		if imageDiffers || versionDiffers {
@@ -319,7 +324,11 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(appCfg config.App) error {
 
 		version := env["GALAXY_VERSION"]
 
-		imageDiffers := image.ID != appCfg.VersionID() && appCfg.VersionID() != ""
+		// imageDiffers := image.ID != appCfg.VersionID() && appCfg.VersionID() != ""
+		// FIXME ContainerID: Check for a name mismatch rather than an ID mismatch.
+		//        While upgrading docker we may have images that run with
+		//        different IDs than when they're pulled.
+		imageDiffers := appCfg.ContainerName() != container.Name
 		versionDiffers := version != strconv.FormatInt(appCfg.ID(), 10) && version != ""
 
 		if imageDiffers || versionDiffers {
@@ -608,14 +617,19 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 	img := appCfg.Version()
 
 	imgIdRef := appCfg.Version()
-	if appCfg.VersionID() != "" {
-		imgIdRef = appCfg.VersionID()
-	}
-	// see if we have the image locally
+
+	// FIXME ContainerID: always pull, since we can't trust the VersionID
+	//if appCfg.VersionID() != "" {
+	//	imgIdRef = appCfg.VersionID()
+	//}
+
 	image, err := s.PullImage(img, imgIdRef)
 	if err != nil {
 		return nil, err
 	}
+
+	//FIXME: while we work on the image ID mismatches
+	_ = image
 
 	// setup env vars from etcd
 	var envVars []string
@@ -654,7 +668,10 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 
 	// Existing container is running or stopped.  If the image has changed, stop
 	// and re-create it.
-	if container != nil && container.Image != image.ID {
+	// FIXME ContainerID: using container.Name to check for old containers while ID's are in flux
+	//
+	// if container != nil && container.Image != image.ID {
+	if container != nil && container.Name != appCfg.ContainerName() {
 		if container.State.Running || container.State.Restarting || container.State.Paused {
 			log.Printf("Stopping %s version %s running as %s", appCfg.Name(), appCfg.Version(), container.ID[0:12])
 			err := s.dockerClient.StopContainer(container.ID, 10)
