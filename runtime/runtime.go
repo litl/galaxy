@@ -280,17 +280,21 @@ func (s *ServiceRuntime) StopOldVersion(appCfg config.App, limit int) error {
 
 		version := env["GALAXY_VERSION"]
 
-		imageDiffers := image.ID != appCfg.VersionID() && appCfg.VersionID() != ""
-		versionDiffers := version != strconv.FormatInt(appCfg.ID(), 10) && version != ""
+		if version == "" {
+			log.Printf("WARNING: %s missing GALAXY_VERSION", appCfg.ContainerName())
+		}
 
-		if imageDiffers || versionDiffers {
+		if version != strconv.FormatInt(appCfg.ID(), 10) && version != "" {
 			s.stopContainer(container)
 			stopped = stopped + 1
 		}
 	}
+
 	return nil
 }
 
+/*
+FIXME: using StopOldVersion(cfg, -1) for now
 func (s *ServiceRuntime) StopAllButCurrentVersion(appCfg config.App) error {
 	containers, err := s.ManagedContainers()
 	if err != nil {
@@ -328,6 +332,7 @@ func (s *ServiceRuntime) StopAllButCurrentVersion(appCfg config.App) error {
 	}
 	return nil
 }
+*/
 
 // TODO: these aren't called from anywhere. Are they useful?
 /*
@@ -607,14 +612,13 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 
 	img := appCfg.Version()
 
-	imgIdRef := appCfg.Version()
-	if appCfg.VersionID() != "" {
-		imgIdRef = appCfg.VersionID()
-	}
-	// see if we have the image locally
-	image, err := s.PullImage(img, imgIdRef)
+	image, err := s.PullImage(img, appCfg.VersionID())
 	if err != nil {
 		return nil, err
+	}
+
+	if utils.StripSHA(image.ID) != appCfg.VersionID() {
+		log.Warnf("warning: ID for image %s doesn't match configuration", img)
 	}
 
 	// setup env vars from etcd
@@ -802,6 +806,9 @@ func findAuth(registry string) docker.AuthConfiguration {
 	return auths.Configs[defaultIndexServer]
 }
 
+// Pull a docker image.
+// If we have an image matching the tag, and the given id matches the current
+// image, don't fetch a new one from the registry.
 func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	image, err := s.InspectImage(version)
 
@@ -809,13 +816,13 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 		return nil, err
 	}
 
-	if image != nil && image.ID == id {
+	if image != nil && utils.StripSHA(image.ID) == id {
 		return image, nil
 	}
 
 	registry, repository, tag := utils.SplitDockerImage(version)
 
-	// No, pull it down locally
+	// pull it down locally
 	pullOpts := docker.PullImageOptions{
 		Repository:   repository,
 		Tag:          tag,
@@ -837,11 +844,6 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 		err = s.dockerClient.PullImage(pullOpts, dockerAuth)
 		if err != nil {
 
-			// Don't retry 404, they'll never succeed
-			if err.Error() == "HTTP code: 404" {
-				return image, nil
-			}
-
 			if retries > 3 {
 				return image, err
 			}
@@ -852,7 +854,6 @@ func (s *ServiceRuntime) PullImage(version, id string) (*docker.Image, error) {
 	}
 
 	return s.InspectImage(version)
-
 }
 
 func (s *ServiceRuntime) RegisterAll(env, pool, hostIP string) ([]*config.ServiceRegistration, error) {
@@ -967,6 +968,9 @@ func (s *ServiceRuntime) RegisterEvents(env, pool, hostIP string, listener chan 
 
 						// if a container is restarting, don't continue re-registering the app
 						if container.State.Restarting {
+							if e.Status == "die" {
+								log.Println("WARN: restarting", container.Name)
+							}
 							continue
 						}
 

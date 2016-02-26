@@ -130,7 +130,7 @@ func AppDeploy(configStore *config.Store, serviceRuntime *runtime.ServiceRuntime
 	}
 
 	svcCfg.SetVersion(version)
-	svcCfg.SetVersionID(image.ID)
+	svcCfg.SetVersionID(utils.StripSHA(image.ID))
 
 	updated, err := configStore.UpdateApp(svcCfg, env)
 	if err != nil {
