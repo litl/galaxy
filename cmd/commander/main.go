@@ -211,7 +211,7 @@ func appAssigned(app string) (bool, error) {
 func inspectImage(appCfg config.App) {
 	image, err := serviceRuntime.InspectImage(appCfg.Version())
 	if err != nil {
-		log.Println("error inspecting image", appCfg.Version)
+		log.Println("error inspecting image", appCfg.Version())
 		return
 	}
 
