@@ -459,6 +459,11 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 
 	runCmd := []string{"/bin/sh", "-c", strings.Join(cmd, " ")}
 
+	hostConfig := &docker.HostConfig{}
+	if s.dns != "" {
+		hostConfig.DNS = []string{s.dns}
+	}
+
 	container, err := s.dockerClient.CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
 			Image:        appCfg.Version(),
@@ -468,6 +473,7 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 			Cmd:          runCmd,
 			OpenStdin:    false,
 		},
+		HostConfig: hostConfig,
 	})
 
 	if err != nil {
@@ -495,11 +501,7 @@ func (s *ServiceRuntime) RunCommand(env string, appCfg config.App, cmd []string)
 	defer s.dockerClient.RemoveContainer(docker.RemoveContainerOptions{
 		ID: container.ID,
 	})
-	config := &docker.HostConfig{}
-	if s.dns != "" {
-		config.DNS = []string{s.dns}
-	}
-	err = s.dockerClient.StartContainer(container.ID, config)
+	err = s.dockerClient.StartContainer(container.ID, nil)
 
 	if err != nil {
 		return container, err
@@ -656,9 +658,8 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 		return nil, err
 	}
 
-	// Existing container is running or stopped.  If the image has changed, stop
-	// and re-create it.
-	if container != nil && container.Image != image.ID {
+	// If there's an existing container, stop it if it's running and re-create it.
+	if container != nil {
 		if container.State.Running || container.State.Restarting || container.State.Paused {
 			log.Printf("Stopping %s version %s running as %s", appCfg.Name(), appCfg.Version(), container.ID[0:12])
 			err := s.dockerClient.StopContainer(container.ID, 10)
@@ -700,10 +701,27 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 			}
 		}
 
+		hostConfig := &docker.HostConfig{
+			PublishAllPorts: true,
+			RestartPolicy: docker.RestartPolicy{
+				Name:              "on-failure",
+				MaximumRetryCount: 16,
+			},
+			LogConfig: docker.LogConfig{
+				Type:   "syslog",
+				Config: map[string]string{"tag": containerName},
+			},
+		}
+
+		if s.dns != "" {
+			hostConfig.DNS = []string{s.dns}
+		}
+
 		log.Printf("Creating %s version %s", appCfg.Name(), appCfg.Version())
 		container, err = s.dockerClient.CreateContainer(docker.CreateContainerOptions{
-			Name:   containerName,
-			Config: config,
+			Name:       containerName,
+			Config:     config,
+			HostConfig: hostConfig,
 		})
 		if err != nil {
 			return nil, err
@@ -712,22 +730,7 @@ func (s *ServiceRuntime) Start(env, pool string, appCfg config.App) (*docker.Con
 
 	log.Printf("Starting %s version %s running as %s", appCfg.Name(), appCfg.Version(), container.ID[0:12])
 
-	config := &docker.HostConfig{
-		PublishAllPorts: true,
-		RestartPolicy: docker.RestartPolicy{
-			Name:              "on-failure",
-			MaximumRetryCount: 16,
-		},
-		LogConfig: docker.LogConfig{
-			Type:   "syslog",
-			Config: map[string]string{"syslog-tag": containerName},
-		},
-	}
-
-	if s.dns != "" {
-		config.DNS = []string{s.dns}
-	}
-	err = s.dockerClient.StartContainer(container.ID, config)
+	err = s.dockerClient.StartContainer(container.ID, nil)
 
 	return container, err
 }
