@@ -443,7 +443,6 @@ func pgPsql(c *cli.Context) {
 		dbURL.RawQuery = strings.Replace(qp.Encode(), "+", "%20", -1)
 
 		database_url = dbURL.String()
-		fmt.Println(database_url)
 	}
 
 	cmd := exec.Command("psql", database_url)
