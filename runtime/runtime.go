@@ -268,7 +268,7 @@ func (s *ServiceRuntime) StopOldVersion(appCfg config.App, limit int) error {
 
 		image, err := s.InspectImage(container.Image)
 		if err != nil {
-			log.Errorf("ERROR: Unable to inspect image: %s", container.Image)
+			log.Errorf("ERROR: Unable to inspect image %s: %s", container.Image, err)
 			continue
 		}
 
